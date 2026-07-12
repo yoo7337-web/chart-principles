@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주식차트분석 — 귀납적 차트 원칙</title>
+<link rel="stylesheet" href="css/style.css?v=23">
+<script src="firebase-config.js?v=23"></script>
+<script src="js/auth.js?v=23"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header>
+  <h1>📈 주식차트분석 <span class="sub">— 데이터로 검증한 차트 원칙</span></h1>
+  <p id="meta" class="meta"></p>
+</header>
+
+<nav class="groups">
+  <button class="group active" data-group="research">📐 원칙 연구</button>
+  <button class="group" data-group="discover">🔍 투자 발굴</button>
+  <button class="group" data-group="market">📡 마켓 현황</button>
+</nav>
+
+<nav class="tabs" data-group-tabs="research">
+  <button class="tab active" data-tab="rank">원칙 순위표</button>
+  <button class="tab" data-tab="chart">사례 차트</button>
+  <button class="tab" data-tab="apply">2026 적용</button>
+  <button class="tab" data-tab="regime">국면별 원칙</button>
+  <button class="tab" data-tab="sim">시뮬레이션</button>
+</nav>
+<nav class="tabs" data-group-tabs="discover" style="display:none">
+  <button class="tab" data-tab="today">오늘의 신호</button>
+  <button class="tab" data-tab="lookup">종목 조회</button>
+  <button class="tab" data-tab="value">내재가치</button>
+</nav>
+<nav class="tabs" data-group-tabs="market" style="display:none">
+  <button class="tab" data-tab="heatmap">섹터 히트맵</button>
+  <button class="tab" data-tab="internals">시장 내부</button>
+  <button class="tab" data-tab="rotation">섹터 로테이션</button>
+  <button class="tab" data-tab="macro">매크로·지표</button>
+  <button class="tab" data-tab="news">뉴스·속보</button>
+  <button class="tab" data-tab="deals">딜 레이더</button>
+  <button class="tab" data-tab="gurus">투자 대가</button>
+</nav>
+
+<main>
+  <section id="tab-rank" class="panel active">
+    <div class="criteria" id="criteria"></div>
+    <h2 class="side-title buy">🟢 최종 매수 원칙</h2>
+    <div id="buy-cards" class="cards"></div>
+    <h2 class="side-title sell">🔴 최종 매도 원칙</h2>
+    <div id="sell-cards" class="cards"></div>
+
+    <details>
+      <summary>✅ 검증 통과했으나 상위권 밖</summary>
+      <div class="tablewrap"><table id="passed-table"></table></div>
+    </details>
+    <details>
+      <summary>⚪ 검증 결과 근거 없음 (탈락 원칙)</summary>
+      <div class="tablewrap"><table id="rejected-table"></table></div>
+    </details>
+  </section>
+
+  <section id="tab-chart" class="panel">
+    <div class="controls">
+      <label>원칙 <select id="sel-rule"></select></label>
+      <label>사례 <select id="sel-example"></select></label>
+    </div>
+    <div id="rule-info" class="rule-info"></div>
+    <div id="chart" class="chart"></div>
+    <div id="vol-chart" class="chart vol"></div>
+    <p class="legend">─ <span style="color:#f39c12">MA20</span> · <span style="color:#8e44ad">MA60</span> ·
+      <span style="color:#95a5a6">볼린저밴드(20,2σ)</span> · ▲/▼ 신호 발생일</p>
+  </section>
+
+  <section id="tab-apply" class="panel">
+    <div class="criteria" id="apply-context"></div>
+    <h2>원칙별 2026년 성적표 <span class="sub-note">(최근 거래대금 상위 한/미 각 10종목 대상)</span></h2>
+    <div class="tablewrap card-flat"><table id="apply-rule-table"></table></div>
+    <div id="apply-commentary" class="commentary"></div>
+    <h2 style="margin-top:26px">종목별 신호 상세 <span class="sub-note">(✅ 성공 · ❌ 실패 · ⏳ 20일 미경과=현재까지 수익률)</span></h2>
+    <div id="apply-stocks"></div>
+  </section>
+
+  <section id="tab-regime" class="panel">
+    <div class="criteria" id="regime-def"></div>
+    <div id="regime-timeline" class="timeline"></div>
+
+    <h2>일반 원칙 재검증 <span class="sub-note">(10년 검증 원칙의 국면별 프로파일 — edge는 같은 국면 베이스라인 대비)</span></h2>
+    <div class="tablewrap card-flat"><table id="regime-general-table"></table></div>
+
+    <h2 style="margin-top:26px">🚀 급등장 원칙</h2>
+    <div id="regime-bull" class="cards"></div>
+    <h2 style="margin-top:26px">🐻 하락장 원칙</h2>
+    <div id="regime-bear" class="cards"></div>
+
+    <div id="regime-commentary" class="commentary"></div>
+  </section>
+
+  <section id="tab-today" class="panel">
+    <div class="criteria" id="today-context"></div>
+    <details class="card-flat" style="margin-bottom:14px">
+      <summary>현 국면의 원칙 on/off 패널</summary>
+      <div class="tablewrap"><table id="today-rules"></table></div>
+    </details>
+    <div class="controls">
+      <label>시장 <select id="today-mk"><option value="">전체</option><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label>
+      <label>방향 <select id="today-side"><option value="">전체</option><option value="buy">🟢 매수</option><option value="sell">🔴 매도</option></select></label>
+      <label><input type="checkbox" id="today-active-only" checked> 국면상 유효한 신호만</label>
+    </div>
+    <div class="tablewrap card-flat"><table id="today-table"></table></div>
+  </section>
+
+  <section id="tab-lookup" class="panel">
+    <div class="controls">
+      <label>종목 검색 <input type="text" id="lookup-q" placeholder="이름 또는 티커 (예: 현대차, NVDA)" list="lookup-list" autocomplete="off">
+      <datalist id="lookup-list"></datalist></label>
+      <label id="lookup-rule-wrap" style="display:none">원칙 <select id="lookup-rule"></select></label>
+    </div>
+    <div id="lookup-info" class="rule-info" style="display:none"></div>
+    <div id="lookup-tv" class="card-flat lookup-tv" style="display:none"></div>
+    <div id="lookup-links" class="ext-links" style="display:none"></div>
+    <div class="lookup-two" id="lookup-two" style="display:none">
+      <div id="lookup-fund" class="card-flat"></div>
+      <div id="lookup-profile" class="card-flat"></div>
+    </div>
+    <div id="lookup-story" class="commentary" style="display:none"></div>
+    <div class="controls" id="lookup-filter" style="display:none">
+      <label><input type="radio" name="sigfilter" value="all" checked> 전체 신호</label>
+      <label><input type="radio" name="sigfilter" value="on"> ✅ 현 국면 적용 원칙만</label>
+      <label><input type="radio" name="sigfilter" value="off"> ⛔ 미적용 원칙만</label>
+      <span id="lookup-chips" class="sig-chips"></span>
+    </div>
+    <div id="lookup-chart" class="chart" style="display:none"></div>
+    <div id="lookup-ind" class="chart vol" style="display:none"></div>
+    <p class="legend" id="lookup-legend" style="display:none"></p>
+    <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
+    <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
+    <p class="legend" id="lookup-supply-legend" style="display:none"></p>
+    <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙별 10년 성적</h2>
+    <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none"><table id="lookup-stats"></table></div>
+  </section>
+
+  <section id="tab-sim" class="panel">
+    <div class="criteria" id="sim-method"></div>
+    <div class="controls" id="sim-toggle"></div>
+    <div id="sim-chart" class="chart"></div>
+    <div class="tablewrap card-flat"><table id="sim-stats"></table></div>
+  </section>
+
+  <section id="tab-heatmap" class="panel">
+    <!-- 자체 데이터 기반 지수 티커 (사이트 데이터와 일치, 30분 갱신) -->
+    <div id="macro-ticker" class="macro-ticker"></div>
+    <div class="asof" id="hm-asof"></div>
+    <div class="criteria" id="hm-context"></div>
+    <div class="controls hm-bar">
+      <label>시장 <select id="hm-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label>
+      <span id="hm-legend" class="hm-legend"></span>
+      <span class="sub-note">타일=시가총액 · 클릭=종목 조회</span>
+    </div>
+    <div id="hm-tree" class="treemap"></div>
+  </section>
+
+  <section id="tab-internals" class="panel">
+    <div id="int-brief" class="commentary" style="display:none"></div>
+    <div class="criteria" id="int-context"></div>
+    <div id="risk-gauge" class="card-flat risk-box"></div>
+    <div class="controls"><label>시장 <select id="int-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label></div>
+    <h2>ADR (20일 등락비율) <span class="sub-note">100↑ 상승 종목 우위 · 지수 상승+ADR 하락 = 소수 주도 장세(경고)</span></h2>
+    <div id="int-adr" class="chart" style="height:200px"></div>
+    <h2 style="margin-top:18px">신고가−신저가 누적 지수 <span class="sub-note">우상향=시장 체력 확장, 지수 신고가인데 꺾이면 다이버전스</span></h2>
+    <div id="int-nhnl" class="chart" style="height:200px"></div>
+    <h2 style="margin-top:18px">MA50/MA200 상회 종목 비율(%) <span class="sub-note">추세 참여도 — 50% 아래는 절반이 하락추세</span></h2>
+    <div id="int-ma" class="chart" style="height:200px"></div>
+  </section>
+
+  <section id="tab-rotation" class="panel">
+    <div class="criteria" id="rot-context"></div>
+    <div class="controls"><label>시장 <select id="rot-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label></div>
+    <div class="tablewrap card-flat"><table id="rot-table"></table></div>
+  </section>
+
+  <section id="tab-macro" class="panel">
+    <div class="criteria" id="macro-context"></div>
+    <div id="macro-cards" class="cards macro"></div>
+    <h2 style="margin-top:24px">📅 경제 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
+    <div class="card-flat" style="height:450px;padding:0;overflow:hidden">
+      <div class="tradingview-widget-container" style="height:100%">
+        <div class="tradingview-widget-container__widget" style="height:100%"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
+        {"colorTheme":"light","isTransparent":true,"width":"100%","height":"100%","locale":"kr",
+         "importanceFilter":"0,1","countryFilter":"kr,us,cn,jp,eu"}
+        </script>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-news" class="panel">
+    <div class="criteria" id="news-context"></div>
+    <div class="hist-bar"><label id="news-hist-wrap" style="display:none">🕑 브리핑 시점 <select id="news-hist"></select></label></div>
+    <div id="news-brief-box" class="commentary" style="display:none"></div>
+    <div class="controls"><label><input type="radio" name="newsview" value="latest" checked> 최근 24시간</label>
+      <label><input type="radio" name="newsview" value="archive"> 30일 누적</label></div>
+    <h2>📌 보유종목 속보</h2>
+    <div id="news-holdings" class="news-list card-flat"></div>
+    <h2 style="margin-top:22px" id="news-market-h">📰 시장 뉴스</h2>
+    <div id="news-market" class="news-list card-flat"></div>
+  </section>
+
+  <section id="tab-deals" class="panel">
+    <div class="criteria" id="deals-context"></div>
+    <div class="hist-bar"><label id="deals-hist-wrap" style="display:none">🕑 브리핑 시점 <select id="deals-hist"></select></label></div>
+    <div id="deals-brief" class="commentary" style="display:none"></div>
+    <div class="controls"><label><input type="radio" name="dealsview" value="latest" checked> 최근 24시간</label>
+      <label><input type="radio" name="dealsview" value="archive"> 30일 누적</label></div>
+    <div id="deals-latest">
+      <h2>⭐ 더벨 · 딜사이트</h2>
+      <div id="deals-premium" class="news-list card-flat"></div>
+      <h2 style="margin-top:22px">🇰🇷 국내 M&A·자본거래</h2>
+      <div id="deals-kr" class="news-list card-flat"></div>
+      <h2 style="margin-top:22px">🌐 글로벌</h2>
+      <div id="deals-global" class="news-list card-flat"></div>
+    </div>
+    <div id="deals-archive-list" style="display:none"></div>
+  </section>
+
+  <section id="tab-gurus" class="panel">
+    <div class="criteria" id="gurus-context"></div>
+    <div id="gurus-list"></div>
+  </section>
+
+  <section id="tab-value" class="panel">
+    <div class="criteria" id="val-context"></div>
+    <div class="controls">
+      <label>종목 검색 <input type="text" id="val-q" placeholder="이름 또는 티커" list="lookup-list" autocomplete="off"></label>
+      <label id="val-model-wrap" style="display:none">모델 <select id="val-model"></select></label>
+    </div>
+    <div id="val-body" style="display:none">
+      <div class="card-flat val-sliders" id="val-sliders"></div>
+      <div class="val-result-row">
+        <div class="card-flat val-result" id="val-result"></div>
+        <div class="card-flat val-sens" id="val-sens"></div>
+      </div>
+      <details class="card-flat" id="val-detail-wrap" style="margin-top:12px" open>
+        <summary>📋 산출 내역 자세히 (주요 변수 · 단계별 계산)</summary>
+        <div id="val-detail"></div>
+      </details>
+      <div class="criteria" id="val-notes" style="margin-top:12px"></div>
+    </div>
+    <p id="val-empty" class="mini-note" style="display:none">이 종목은 필요한 재무 데이터가 부족해 산출할 수 없습니다.</p>
+  </section>
+</main>
+
+<footer>
+  <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
+</footer>
+
+<script src="js/app.js?v=23"></script>
+</body>
+</html>
