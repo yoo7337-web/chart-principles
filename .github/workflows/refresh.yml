@@ -1,12 +1,12 @@
-name: Cloud Refresh (macro/heatmap/breadth/news)
+name: Cloud Refresh (macro/heatmap/breadth/news/deals)
 # 노트북이 꺼져 있어도 24시간 사이트를 최신으로 유지하는 클라우드 갱신.
-#  - engine/(분석 코드) 체크아웃 상태 그대로 실행 → 코어 유니버스(KR300+KOSDAQ150+US) 파이프라인
-#  - 히트맵/시장폭/섹터로테이션/매크로/뉴스 재생성 → data/*.json 커밋 + Pages 배포
-#  - parquet 캐시(actions/cache)로 2회차부터 증분(~2분). deals(딜레이더)는 로컬 의존이라 노트북 유지.
+#  - engine/(분석 코드 + vendored deal_radar) 체크아웃 상태 그대로 실행 → 코어 유니버스(KR300+KOSDAQ150+US) 파이프라인
+#  - 히트맵/시장폭/섹터로테이션/매크로/뉴스/딜 재생성 → data/*.json 커밋 + Pages 배포
+#  - parquet 캐시(actions/cache)로 2회차부터 증분(~2분).
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '25 * * * *'   # 매시 25분(UTC). KST 장중·미국장 모두 커버, 캐시로 저비용
+    - cron: '*/30 * * * *'   # 30분 간격(UTC). KST 장중·미국장 모두 커버, 캐시로 저비용
 
 permissions:
   contents: write
@@ -59,10 +59,11 @@ jobs:
           python analysis/market_dash.py
           python analysis/market_news.py
           python analysis/market_pro.py
+          python analysis/deal_news.py || echo "deal_news 실패(무시)"
 
       - name: Copy cloud-owned outputs back to site data
         run: |
-          for f in market market_pro news news_archive news_briefings; do
+          for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings; do
             [ -f "engine/app/data/$f.json" ] && cp -f "engine/app/data/$f.json" "data/$f.json" || true
           done
 
@@ -70,7 +71,7 @@ jobs:
         run: |
           git config user.name "chart-cloud-bot"
           git config user.email "actions@github.com"
-          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json || true
+          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json || true
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"
           else

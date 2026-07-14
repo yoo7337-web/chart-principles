@@ -1,0 +1,67 @@
+# Deal Radar 뉴스 소스 정의
+# - type: google_news  -> Google News RSS 검색 피드(쿼리 기반, 무료/안정적)
+# - type: rss          -> 일반 RSS/Atom 피드 직접 지정
+#
+# region: KR | GLOBAL  (다이제스트에서 섹션 구분용)
+# 여기 항목은 자유롭게 추가/삭제하세요. 새 소스를 넣어도 코드 수정 불필요합니다.
+
+sources:
+  # ───────────────────────── 국내 (KR) ─────────────────────────
+  - name: "Google News · 국내 M&A/인수합병"
+    type: google_news
+    region: KR
+    query: "인수합병 OR M&A OR 경영권 OR 지분매각"
+    when: "1d"        # 최근 1일
+    lang: ko
+    country: KR
+
+  - name: "Google News · 국내 자본/금융거래"
+    type: google_news
+    region: KR
+    query: "유상증자 OR 회사채 OR 전환사채 OR 상장 OR IPO OR 투자유치 OR 출자"
+    when: "1d"
+    lang: ko
+    country: KR
+
+  - name: "연합뉴스 경제"
+    type: rss
+    region: KR
+    url: "https://www.yna.co.kr/rss/economy.xml"
+
+  # 더벨 / 딜사이트 — 자체 RSS·본문이 유료/로그인 기반이라 직접 수집 불가.
+  # Google News 사이트 색인을 RSS로 활용해 헤드라인+링크를 수집한다.
+  # (전문 열람은 구독이 필요할 수 있으나, 본 파이프라인은 헤드라인/링크만 사용)
+  - name: "더벨(thebell) · M&A/자본시장"
+    type: google_news
+    region: KR
+    priority: true       # 전용 섹션(⭐ 더벨·딜사이트)으로 분리
+    query: "site:thebell.co.kr"
+    when: "1d"
+    lang: ko
+    country: KR
+
+  - name: "딜사이트(dealsite) · 기업금융"
+    type: google_news
+    region: KR
+    priority: true       # 전용 섹션(⭐ 더벨·딜사이트)으로 분리
+    query: "site:dealsite.co.kr"
+    when: "1d"
+    lang: ko
+    country: KR
+
+  # ──────────────────────── 해외 (GLOBAL) ────────────────────────
+  - name: "Google News · Global M&A"
+    type: google_news
+    region: GLOBAL
+    query: "mergers AND acquisitions OR takeover OR buyout OR \"private equity deal\""
+    when: "1d"
+    lang: en-US
+    country: US
+
+  - name: "Google News · Global Capital Markets"
+    type: google_news
+    region: GLOBAL
+    query: "IPO OR \"equity offering\" OR \"bond issuance\" OR \"capital raise\" OR divestiture"
+    when: "1d"
+    lang: en-US
+    country: US

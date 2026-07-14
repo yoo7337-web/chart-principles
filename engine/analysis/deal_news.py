@@ -16,7 +16,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, r"C:\Users\yoo73\deal-radar")  # deal_radar 패키지 재사용
+# deal_radar 패키지 재사용: 노트북=원본 C:\deal-radar / 클라우드=engine\deal_radar vendor
+_LOCAL_DR = Path(r"C:\Users\yoo73\deal-radar")
+if _LOCAL_DR.exists():
+    sys.path.insert(0, str(_LOCAL_DR))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # engine/ (vendored deal_radar)
 
 from common import APP_DATA
 

@@ -17,6 +17,12 @@ APP = Path(__file__).resolve().parent.parent / "app"
 SITE = Path.home() / "chart-principles-site"
 REMOTE = "https://github.com/yoo7337-web/chart-principles.git"
 
+# 클라우드(refresh.yml)가 24시간 갱신하는 파일 — 노트북 배포는 이들을 덮어쓰지 않고 원격본 보존
+CLOUD_OWNED = [
+    "data/market.json", "data/market_pro.json", "data/news.json",
+    "data/news_archive.json", "data/news_briefings.json",
+]
+
 
 def git(*args, check=True):
     return subprocess.run(["git", *args], cwd=SITE, capture_output=True, text=True, check=check)
@@ -67,9 +73,10 @@ def main():
         git("remote", "add", "origin", REMOTE)
         print(f"배포 repo 초기화: {SITE}")
 
-    # --- app\ → site 동기화 (삭제 반영, .git·.github 보존) ---
+    # --- app\ → site 동기화 (삭제 반영, .git·.github·engine 보존) ---
+    #  engine/ = 클라우드 갱신 엔진(refresh.yml이 돌리는 분석 코드) — 노트북 배포가 지우면 안 됨
     for item in SITE.iterdir():
-        if item.name in (".git", ".github"):  # .github=Actions 배포 워크플로 보존
+        if item.name in (".git", ".github", "engine"):
             continue
         shutil.rmtree(item) if item.is_dir() else item.unlink()
     for item in APP.iterdir():
@@ -77,6 +84,15 @@ def main():
         shutil.copytree(item, dst) if item.is_dir() else shutil.copy2(item, dst)
     (SITE / ".nojekyll").write_text("")
     _ensure_workflow()
+
+    # --- 클라우드 소유 파일은 원격(클라우드가 방금 갱신한 최신)을 우선 보존 ---
+    #  노트북 로컬본이 오래됐어도 이 파일들은 클라우드가 24시간 갱신 → 덮어쓰지 않음.
+    #  (macro/heatmap/breadth=market.json, market_pro, news 계열. 나머지는 노트북 소유.)
+    git("fetch", "origin", "main", check=False)
+    for f in CLOUD_OWNED:
+        r = git("checkout", "origin/main", "--", f, check=False)  # 원격에 있으면 그 버전으로
+        if r.returncode == 0:
+            print(f"  클라우드 소유 보존: {f}")
 
     # --- 일반 커밋 + rebase push (클라우드 cron 커밋과 공존, force-push 안 함) ---
     git("add", "-A")
