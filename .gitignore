@@ -1,6 +1,0 @@
-# 클라우드 갱신 엔진의 캐시/산출물은 커밋 제외 (actions/cache가 관리, 코드만 커밋)
-engine/data/
-engine/app/data/
-engine/**/__pycache__/
-__pycache__/
-*.pyc
