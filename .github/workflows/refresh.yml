@@ -5,8 +5,10 @@ name: Cloud Refresh (macro/heatmap/breadth/news/deals)
 #  - parquet 캐시(actions/cache)로 2회차부터 증분(~2분).
 on:
   workflow_dispatch: {}
+  repository_dispatch:        # 외부 cron 서비스(cron-job.org 등)가 30분마다 POST → 정시 보장
+    types: [refresh]
   schedule:
-    - cron: '*/30 * * * *'   # 30분 간격(UTC). KST 장중·미국장 모두 커버, 캐시로 저비용
+    - cron: '*/30 * * * *'   # GitHub best-effort(실측 ~1.5~2h 지연). 정시는 repository_dispatch로 보강
 
 permissions:
   contents: write
