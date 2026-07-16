@@ -739,19 +739,28 @@ function loadLookup(key) {
     if (!st) return;
     LOOKUP_ST = st;
     ["lookup-info", "lookup-chart", "lookup-legend", "lookup-stats-title", "lookup-stats-wrap",
-     "lookup-rule-wrap", "lookup-two", "lookup-filter"]
+     "lookup-rule-wrap", "lookup-two", "lookup-filter", "lookup-profile"]
       .forEach((id) => { document.getElementById(id).style.display = ""; });
     $("#lookup-rule-wrap").style.display = "inline";
     $("#lookup-two").style.display = "grid";
     $("#lookup-filter").style.display = "flex";
     $("#lookup-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
-    mountLookupTv(st.market, st.ticker);       // TradingView 실시간 시세 위젯
-    renderLookupFund(st.market, st.ticker, st.series);  // 기업 개요·재무 카드
+    renderLookupFund(st.market, st.ticker, st.series);  // 재무 스냅샷 카드
     renderLookupLinks(st);                     // 외부 심층 정보 링크
     renderLookupProfile(st);                   // 종목 프로파일(자체 계산)+참고 내재가치
     renderLookupStory(st);                     // 원칙 내러티브
     drawSupply(st);                            // 수급(외국인·기관 누적 순매수)
     buildSigChips(st);                         // 원칙별 신호수 칩
+    // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
+    renderLookupHead(st);
+    loadExtras().then(() => {
+      if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
+      renderLookupHead(st);
+      renderLookupOverview(st);
+      renderLookupCons(st);
+      renderLookupFin(st);
+      renderLookupFeed(st);
+    });
     document.querySelectorAll('input[name="sigfilter"]').forEach((r) => { r.onchange = drawLookupChart; });
 
     // 원칙 드롭다운: 전체 + 이 종목에 신호가 있는 원칙만
@@ -1490,11 +1499,24 @@ function renderLookupLinks(st) {
 function renderLookupProfile(st) {
   const host = $("#lookup-profile");
   const p = st.profile || {};
-  const relCell = (v) => v == null ? "-" :
-    `<b class="${v >= 0 ? "pos" : "neg"}">${pct(v, 1)}</b>`;
+  // 수익률 미니 막대: 0 중심 좌(-)/우(+), ±30%에서 만폭
+  const perfBar = (label, v) => {
+    if (v == null) return "";
+    const w = Math.min(48, Math.abs(v) * 100 / 30 * 48);
+    const up = v >= 0;
+    return `<div class="perf-row"><span class="perf-lab">${label}</span>
+      <span class="perf-track"><span class="perf-fill ${up ? "pos-bg" : "neg-bg"}"
+        style="width:${w}%;${up ? "left:50%" : "right:50%"}"></span></span>
+      <b class="${up ? "pos" : "neg"}">${pct(v, 1)}</b></div>`;
+  };
+  const perfViz =
+    `<div class="perf-two">
+      <div><div class="perf-h">시장 대비 초과성과</div>
+        ${perfBar("1주", p.rel_w1)}${perfBar("1개월", p.rel_m1)}${perfBar("3개월", p.rel_m3)}${perfBar("1년", p.rel_y1)}</div>
+      <div><div class="perf-h">절대 수익률</div>
+        ${perfBar("1개월", p.ret_m1)}${perfBar("3개월", p.ret_m3)}${perfBar("1년", p.ret_y1)}</div>
+    </div>`;
   const rows = [
-    ["시장 대비 성과", `1주 ${relCell(p.rel_w1)} · 1개월 ${relCell(p.rel_m1)} · 3개월 ${relCell(p.rel_m3)} · 1년 ${relCell(p.rel_y1)}`],
-    ["절대 수익률", `1개월 ${relCell(p.ret_m1)} · 3개월 ${relCell(p.ret_m3)} · 1년 ${relCell(p.ret_y1)}`],
     ["베타 (1년, 시장 대비)", p.beta != null ? `<b>${p.beta}</b> ${p.beta > 1.3 ? "(시장보다 크게 움직임)" : p.beta < 0.7 ? "(방어적)" : ""}` : "-"],
     ["변동성 (20일, 연율)", p.vol20 != null ? `<b>${p.vol20}%</b> ${p.vol20 > 60 ? "⚠ 고변동" : ""}` : "-"],
     ["거래대금 (20일 평균)", p.val20 != null ? `<b>${st.market === "kr" ? (p.val20 / 1e8).toFixed(0) + "억원" : "$" + (p.val20 / 1e6).toFixed(0) + "M"}</b>` : "-"],
@@ -1535,7 +1557,8 @@ function renderLookupProfile(st) {
     }
   }
   host.innerHTML = `<div class="fund-head">종목 프로파일 <span class="sub-note">(자체 계산 · 시장=유니버스 동일가중)</span></div>
-    <div class="prof-grid">${rows.map(([k, v]) => `<div class="prof-row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
+    ${perfViz}
+    <div class="prof-grid wide">${rows.map(([k, v]) => `<div class="prof-row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
     ${valLine}`;
   const gv = document.getElementById("goto-value");
   if (gv) gv.addEventListener("click", (e) => {
@@ -1648,17 +1671,154 @@ function tvSymbol(mk, tk) {
   return mk === "kr" ? `KRX:${tk}` : tk;
 }
 
-function mountLookupTv(mk, tk) {
-  const host = $("#lookup-tv");
+// 종목조회 심화 데이터 (company.json 주1 + feed.json 일1) — 최초 조회 시 1회 lazy 로드
+let EXTRAS = { company: null, feed: null, loading: null };
+function loadExtras() {
+  if (EXTRAS.loading) return EXTRAS.loading;
+  EXTRAS.loading = Promise.all([
+    fetch("data/company.json" + _cb).then((r) => (r.ok ? r.json() : null)),
+    fetch("data/feed.json" + _cb).then((r) => (r.ok ? r.json() : null)),
+  ]).then(([c, f]) => { EXTRAS.company = c; EXTRAS.feed = f; });
+  return EXTRAS.loading;
+}
+
+// 헤더: 로고 + 종목명 + 현재가/등락
+function renderLookupHead(st) {
+  const host = $("#lookup-head");
   host.style.display = "";
-  host.innerHTML = `<div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div></div>`;
-  const s = document.createElement("script");
-  s.src = "https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js";
-  s.async = true;
-  s.textContent = JSON.stringify({
-    symbol: tvSymbol(mk, tk), colorTheme: "light", isTransparent: true, locale: "kr", width: "100%",
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
+  const s = st.series;
+  const cur = s[s.length - 1]?.c, prev = s[s.length - 2]?.c;
+  const chg = cur != null && prev ? cur / prev - 1 : null;
+  const up = (chg ?? 0) >= 0;
+  host.innerHTML = `
+    ${co.logo ? `<img class="lk-logo" src="${co.logo}" alt="" onerror="this.style.display='none'">` : ""}
+    <div class="lk-title">
+      <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span></div>
+      <div class="lk-price">${fmtPrice(cur, st.market)}
+        ${chg != null ? `<span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(chg, 2)}</span>` : ""}
+        <span class="sub-note">종가 기준 ${st.asof}</span></div>
+    </div>`;
+}
+
+// 기업개요 카드
+function renderLookupOverview(st) {
+  const host = $("#lookup-overview");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const f = FUND?.map?.[`${st.market}_${st.ticker}`];
+  if (!co?.overview) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const ind = co.industry || f?.industry;
+  host.innerHTML = `<h3 class="lk-h3">🏢 기업 개요 ${ind ? `<span class="badge dim">${ind}</span>` : ""}
+      ${co.website ? `<a class="ext-link" href="${co.website}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}</h3>
+    <p class="lk-ov-text">${co.overview}</p>
+    <p class="sub-note">출처: ${st.market === "kr" ? "네이버·와이즈리포트" : "Yahoo Finance"} (주 1회 갱신)</p>`;
+}
+
+// 증권가 컨센서스 카드: 목표주가 vs 현재가 + 투자의견
+const US_RECO = { strong_buy: "적극 매수", buy: "매수", hold: "중립", underperform: "매도우위", sell: "매도" };
+function renderLookupCons(st) {
+  const host = $("#lookup-cons");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const cons = co?.cons;
+  if (!cons?.target) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const cur = st.series[st.series.length - 1]?.c;
+  const upside = cur ? cons.target / cur - 1 : null;
+  let opLabel = "-", opDesc = "";
+  if (st.market === "kr" && cons.opinion != null) {
+    const v = cons.opinion;
+    opLabel = v >= 4.2 ? "적극 매수" : v >= 3.5 ? "매수" : v >= 2.5 ? "중립" : "매도";
+    opDesc = `${v.toFixed(2)} / 5.0`;
+  } else if (cons.opinion_key) {
+    opLabel = US_RECO[cons.opinion_key] || cons.opinion_key;
+    opDesc = cons.n ? `애널리스트 ${cons.n}명` : "";
+  }
+  // 현재가→목표가 위치 바 (0%=현재가-30%, 100%=목표가+10% 구간)
+  const barPos = upside != null ? Math.max(4, Math.min(96, 70 / (1 + Math.max(0, upside)) )) : 50;
+  host.innerHTML = `<div class="fund-head">증권가 컨센서스
+      <span class="sub-note">(${st.market === "kr" ? "네이버 집계" : "Yahoo 집계"}${cons.at ? " · " + cons.at : ""})</span></div>
+    <div class="cons-grid">
+      <div class="cons-item"><span>목표주가 평균</span><b>${fmtPrice(cons.target, st.market)}</b></div>
+      <div class="cons-item"><span>현재가 대비</span>
+        <b class="${(upside ?? 0) >= 0 ? "pos" : "neg"}">${upside != null ? pct(upside, 1) : "-"}</b></div>
+      <div class="cons-item"><span>투자의견</span><b>${opLabel}</b> <span class="sub-note">${opDesc}</span></div>
+    </div>
+    ${upside != null ? `<div class="cons-bar"><div class="cons-bar-fill" style="width:${barPos}%"></div>
+      <span class="cons-cur" style="left:${barPos}%">현재가</span></div>
+    <div class="cons-bar-lab"><span>&nbsp;</span><span>목표가 ${fmtPrice(cons.target, st.market)}</span></div>` : ""}
+    <p class="sub-note" style="margin-top:6px">컨센서스는 증권사 추정 평균 — 매수·매도 판단이 아닌 참고 지표</p>`;
+}
+
+// 연간 재무 차트: 매출·영업이익 막대 + 영업이익률 라인 (SVG)
+function finFmt(v, unit) {
+  if (v == null) return "-";
+  if (unit === "억원") return Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억";
+  return Math.abs(v) >= 1000 ? "$" + (v / 1000).toFixed(1) + "B" : "$" + Math.round(v) + "M";
+}
+function renderLookupFin(st) {
+  const host = $("#lookup-fin");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const fin = co?.fin;
+  if (!fin?.length) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const W = 640, H = 210, padL = 8, padB = 34, padT = 26;
+  const n = fin.length, gw = (W - padL * 2) / n;
+  const maxV = Math.max(...fin.map((r) => Math.max(r.rev || 0, r.op || 0)), 1);
+  const minOp = Math.min(0, ...fin.map((r) => r.op ?? 0));
+  const y0 = padT + (H - padT - padB) * (maxV / (maxV - minOp));  // 0선
+  const yScale = (v) => padT + (maxV - v) / (maxV - minOp) * (H - padT - padB);
+  const opms = fin.filter((r) => r.opm != null).map((r) => r.opm);
+  const opmMin = Math.min(...opms, 0), opmMax = Math.max(...opms, 1);
+  const opmY = (v) => padT + 4 + (opmMax - v) / (opmMax - opmMin || 1) * 52;  // 상단 60px 대역
+  let bars = "", line = "", labels = "";
+  const pts = [];
+  fin.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2;
+    const bw = Math.min(34, gw / 3);
+    if (r.rev != null) {
+      const y = yScale(r.rev);
+      bars += `<rect x="${cx - bw - 2}" y="${y}" width="${bw}" height="${Math.max(1, y0 - y)}" fill="${r.est ? "#c7d7f5" : "#7ba6e8"}" rx="2"/>
+        <text x="${cx - bw / 2 - 2}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#4b5563">${finFmt(r.rev, co.fin_unit)}</text>`;
+    }
+    if (r.op != null) {
+      const y = yScale(Math.max(0, r.op)), y2 = yScale(Math.min(0, r.op));
+      bars += `<rect x="${cx + 2}" y="${r.op >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.op >= 0 ? y : y2)))}" fill="${r.op >= 0 ? (r.est ? "#f6c8ad" : "#f0955a") : "#dc2626"}" rx="2"/>
+        <text x="${cx + bw / 2 + 2}" y="${(r.op >= 0 ? y : y2) - 4}" font-size="9" text-anchor="middle" fill="#92400e">${finFmt(r.op, co.fin_unit)}</text>`;
+    }
+    if (r.opm != null) pts.push([cx, opmY(r.opm), r.opm]);
+    labels += `<text x="${cx}" y="${H - 14}" font-size="10" text-anchor="middle" fill="#6b7280">${r.y}${r.est ? "(E)" : ""}</text>`;
   });
-  host.querySelector(".tradingview-widget-container").appendChild(s);
+  if (pts.length > 1) {
+    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#16a34a" stroke-width="2"/>` +
+      pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#16a34a"/>
+        <text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#15803d">${p[2].toFixed(1)}%</text>`).join("");
+  }
+  host.innerHTML = `<h3 class="lk-h3">📊 연간 실적 <span class="sub-note">(단위 ${co.fin_unit === "억원" ? "조/억원" : "USD"} · (E)=컨센서스 추정 · ${st.market === "kr" ? "네이버" : "Yahoo"})</span></h3>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
+      <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>
+      ${bars}${line}${labels}
+    </svg>
+    <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출액 ·
+      <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#16a34a">●─</span> 영업이익률(%)
+      · 옅은색 = 추정치</p>`;
+}
+
+// 공시(6개월)·뉴스(1주일) 피드
+function renderLookupFeed(st) {
+  const wrap = $("#lookup-feed");
+  const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
+  if (!fd || (!fd.disc?.length && !fd.news?.length)) { wrap.style.display = "none"; return; }
+  wrap.style.display = "grid";
+  $("#lookup-disc").innerHTML = fd.disc?.length
+    ? fd.disc.map((d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(5)}</span>
+        ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>` : `<span>${d.title}</span>`}</div>`).join("")
+    : `<p class="mini-note">최근 6개월 공시 없음</p>`;
+  $("#lookup-news").innerHTML = fd.news?.length
+    ? fd.news.map((n) => `<div class="lk-feed-row"><span class="lk-feed-date">${n.t}</span>
+        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
+        ${n.src ? `<span class="sub-note">${n.src}</span>` : ""}</div>`).join("")
+    : `<p class="mini-note">최근 1주일 뉴스 없음</p>`;
 }
 
 const FUND_FIELDS = [
@@ -1690,7 +1850,7 @@ function renderLookupFund(mk, tk, series) {
     items.push(`<div class="fund-item"><span>시가총액</span><b>${fmtMcap(f.mcap, mk)}</b></div>`);
   items.push(`<div class="fund-item"><span>52주 위치</span><b>${pos.toFixed(0)}%</b></div>`);
   if (f.industry) items.push(`<div class="fund-item"><span>업종</span><b>${f.industry}</b></div>`);
-  host.innerHTML = `<div class="fund-head">기업 개요·재무
+  host.innerHTML = `<div class="fund-head">재무 스냅샷
       <span class="sub-note">(주 1회 갱신 · KR=네이버 / US=Yahoo · 52주 위치: 저가 0%~고가 100%)</span></div>
     <div class="fund-grid">${items.join("")}</div>`;
 }
