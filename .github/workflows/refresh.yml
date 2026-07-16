@@ -22,6 +22,8 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Seoul   # naive datetime.now()가 KST로 찍히도록(표기 9시간 지연 방지)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

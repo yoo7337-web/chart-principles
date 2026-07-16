@@ -12,7 +12,7 @@ import re
 import sys
 import time
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from collect import DATA_DIR, load_all
 from common import APP_DATA, ROOT
 from regimes import regime_map
+
+KST = timezone(timedelta(hours=9))  # 클라우드 러너=UTC → naive now()는 9시간 낡아 보임
 
 MACRO_PARQUET = DATA_DIR / "macro.parquet"
 SECTOR_MAP = DATA_DIR / "sector_map.json"
@@ -227,7 +229,7 @@ def main():
     print("[4/4] 저장...")
     asof = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
     payload = {
-        "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "asof": asof, "regime": regime,
         "macro": macro, "breadth": breadth, "hot": hot, "heatmap": heatmap,
     }

@@ -10,7 +10,7 @@ D. AI 마켓 브리핑: Gemini — 매크로+breadth+오늘의 신호+뉴스 헤
 """
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from collect import DATA_DIR, load_all
 from common import APP_DATA, ROOT
+
+KST = timezone(timedelta(hours=9))  # 클라우드 러너=UTC 대응
 
 HIST_DAYS = 120
 
@@ -189,7 +191,7 @@ def main():
         brief = old.get("brief")
         brief_at = old.get("brief_at")
         payload = {
-            "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
             "breadth_hist": breadth, "rotation": rotation, "risk": risk,
             "brief": brief, "brief_at": brief_at,
         }
@@ -213,9 +215,9 @@ def main():
     brief = ai_brief(macro_s, breadth_s, signals_s, heads)
 
     payload = {
-        "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "breadth_hist": breadth, "rotation": rotation, "risk": risk,
-        "brief": brief, "brief_at": datetime.now().strftime("%Y-%m-%d %H:%M") if brief else None,
+        "brief": brief, "brief_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M") if brief else None,
     }
     out_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     print(f"완료: market_pro.json — 리스크점수 {risk.get('score')}, 브리핑 {'OK' if brief else '없음'}")

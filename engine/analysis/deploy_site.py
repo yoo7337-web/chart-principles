@@ -21,6 +21,7 @@ REMOTE = "https://github.com/yoo7337-web/chart-principles.git"
 CLOUD_OWNED = [
     "data/market.json", "data/market_pro.json", "data/news.json",
     "data/news_archive.json", "data/news_briefings.json",
+    "data/deals.json", "data/deals_archive.json", "data/deals_briefings.json",
 ]
 
 
