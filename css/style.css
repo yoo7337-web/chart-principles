@@ -285,3 +285,6 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 섹터 로테이션 */
 #rot-table td { text-align: right; }
 #rot-table td:first-child { text-align: left; }
+
+/* TradingView 실시간 티커 (로딩 실패 시 JS가 숨김) */
+.tv-ticker { margin-bottom: 8px; min-height: 46px; border-radius: 8px; overflow: hidden; }

@@ -955,7 +955,30 @@ function layoutTreemap(items, W, H) {
   return rects;
 }
 
-// 자체 매크로 데이터로 지수 티커 스트립 렌더 (TradingView 대체 — 사이트 데이터와 일치)
+// "YYYY-MM-DD HH:MM"(KST) → "N분 전"/"N시간 전" 상대시간 (신선도 즉시 인지용)
+function relTime(genStr) {
+  if (!genStr) return "";
+  const t = new Date(genStr.replace(" ", "T") + ":00+09:00");
+  if (isNaN(t)) return "";
+  const min = Math.max(0, Math.round((Date.now() - t.getTime()) / 60000));
+  if (min < 60) return `${min}분 전`;
+  if (min < 60 * 24) return `${Math.floor(min / 60)}시간 ${min % 60}분 전`;
+  return `${Math.floor(min / 1440)}일 전`;
+}
+
+// TradingView 티커 로딩 감시 — 6초 내 iframe 미렌더 시 숨기고 자체 티커 유지("!" 재발 방지)
+function watchTvTicker() {
+  const tv = $("#tv-ticker");
+  if (!tv) return;
+  setTimeout(() => {
+    const frame = tv.querySelector("iframe");
+    const ok = frame && frame.clientHeight > 10;
+    if (ok) { const self = $("#macro-ticker"); if (self) self.style.display = "none"; }
+    else tv.style.display = "none";
+  }, 6000);
+}
+
+// 자체 매크로 데이터로 지수 티커 스트립 렌더 (TradingView 로딩 실패 시 폴백 — 사이트 데이터와 일치)
 function renderMacroTicker() {
   const host = $("#macro-ticker");
   if (!host || !MARKET?.macro) return;
@@ -973,10 +996,11 @@ function renderHeatmap() {
   if (!MARKET) { $("#hm-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   heatmapRendered = true;
   renderMacroTicker();
-  $("#hm-asof").textContent = `🕒 데이터 기준: ${MARKET.generated} (장중 30분 간격 자동 갱신)`;
+  watchTvTicker();
+  $("#hm-asof").textContent = `🕒 ${relTime(MARKET.generated)} 갱신 (${MARKET.generated} KST · 클라우드 30분 주기)`;
   const b = MARKET.breadth, r = MARKET.regime;
   $("#hm-context").innerHTML =
-    `<b>기준 시각 ${MARKET.generated}</b> <span class="sub-note">(장중 30분 간격 준실시간 · 확정 종가는 다음날 07:40)</span> ·
+    `<b>기준 시각 ${MARKET.generated}</b> <span class="sub-note">(${relTime(MARKET.generated)} 갱신 · 클라우드 30분 주기 · 확정 종가는 다음날 07:40)</span> ·
      국면 🇰🇷 ${REGIME_KO[r.kr]} · 🇺🇸 ${REGIME_KO[r.us]}<br>
      <b>등락</b> 🇰🇷 ▲${b.kr.up} ▼${b.kr.down} (신고가 ${b.kr.hi52}·신저가 ${b.kr.lo52}) ·
      🇺🇸 ▲${b.us.up} ▼${b.us.down} (신고가 ${b.us.hi52}·신저가 ${b.us.lo52})<br>
@@ -1067,7 +1091,7 @@ function renderMacro() {
   if (!MARKET) { $("#macro-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   macroRendered = true;
   $("#macro-context").innerHTML =
-    `<b>기준 시각 ${MARKET.generated}</b> — <b>장중 30분 간격</b>(KR 09~16시·US 23:30~06시) 갱신<br>
+    `<b>기준 시각 ${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신 (<b>클라우드 30분 주기</b>)<br>
      각 지표 아래 줄 = <b>트레이더 관점 한 줄</b> — 시장 대응 시 왜 보는가`;
   $("#macro-cards").innerHTML = MARKET.macro.map((m) => {
     const up = m.chg >= 0;
@@ -1120,7 +1144,7 @@ function renderNews() {
   if (!NEWS) { $("#news-context").textContent = "news.json 없음 — python analysis\\market_news.py 실행 필요"; return; }
   newsRendered = true;
   $("#news-context").innerHTML =
-    `<b>기사 수집</b> ${NEWS.generated} (<b>장중 30분 간격</b>) · <b>AI 큐레이션</b> ${NEWS.curation_at || "-"} (하루 3회) ·
+    `<b>기사 수집</b> ${NEWS.generated} (${relTime(NEWS.generated)} · <b>클라우드 30분 주기</b>) · <b>AI 큐레이션</b> ${NEWS.curation_at || "-"} ·
      Google News · 30일 누적 보관`;
 
   const drawBrief = (cur) => {
@@ -1177,7 +1201,7 @@ function renderInternals() {
   }
   $("#int-context").innerHTML =
     `시장 내부(internals) — 지수가 아니라 <b>구성 종목 전체의 체력</b>을 봅니다.
-     지표 갱신 ${MPRO.generated} (<b>장중 30분 간격</b>)`;
+     지표 갱신 ${MPRO.generated} (${relTime(MPRO.generated)} · <b>클라우드 30분 주기</b>)`;
 
   const r = MPRO.risk || {};
   const scoreColor = r.score >= 60 ? "#16a34a" : r.score <= 40 ? "#dc2626" : "#f59e0b";
@@ -1232,7 +1256,7 @@ function renderRotation() {
   $("#rot-context").innerHTML =
     `섹터별 <b>시가총액 가중 수익률</b>과 <b>상대강도(RS = 섹터 − 시장 전체)</b>.
      RS가 1주<1개월<3개월로 갈수록 커지면 자금 유입 지속, 1주만 튀면 단기 순환매.
-     갱신 ${MPRO.generated} (<b>장중 30분 간격</b>)`;
+     갱신 ${MPRO.generated} (${relTime(MPRO.generated)} · <b>클라우드 30분 주기</b>)`;
   $("#rot-mk").onchange = drawRotation;
   drawRotation();
 }
@@ -1501,7 +1525,7 @@ function renderDeals() {
   if (!DEALS) { $("#deals-context").textContent = "deals.json 없음 — python analysis\\deal_news.py 실행 필요"; return; }
   dealsRendered = true;
   $("#deals-context").innerHTML =
-    `<b>기사 수집</b> ${DEALS.generated} (장중 30분 간격) · <b>AI 딜 브리핑</b> ${DEALS.brief_at || "-"} (하루 3회) ·
+    `<b>기사 수집</b> ${DEALS.generated} (${relTime(DEALS.generated)} · <b>클라우드 30분 주기</b>) · <b>AI 딜 브리핑</b> ${DEALS.brief_at || "-"} ·
      소스: deal-radar 공유(더벨·딜사이트 site: + 국내외 M&A/자본시장) · 30일 누적 보관`;
 
   const drawBrief = (brief) => {
