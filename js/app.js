@@ -21,6 +21,8 @@ let VAL_CUR = null;  // 현재 선택 종목 {key, rec, mk}
 let heatmapRendered = false;
 let macroRendered = false;
 let newsRendered = false;
+let calRendered = false;
+let CAL = null;
 let internalsRendered = false;
 let rotationRendered = false;
 let intCharts = [];
@@ -60,8 +62,9 @@ function activateTab(tabId) {
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
   if (tabId === "sim" && !simRendered) renderSim();
-  if (tabId === "heatmap" && !heatmapRendered) renderHeatmap();
+  if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "macro" && !macroRendered) renderMacro();
+  if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "internals" && !internalsRendered) renderInternals();
   if (tabId === "rotation" && !rotationRendered) renderRotation();
@@ -895,27 +898,35 @@ function renderSim() {
     </tr>`).join("");
 }
 
-/* ---------- 마켓: 섹터 히트맵 ---------- */
-// 이산 7단계 다이버징 (상승=빨강/하락=파랑, 중립 회색 — 흰 텍스트 4.5:1 검증 완료)
+/* ---------- 마켓: 홈 (히트맵·지수카드·오늘의종목·주요뉴스) ---------- */
+// 이산 7단계 다이버징, 라이트 배경용 (상승=빨강/하락=파랑 국내 관례 유지)
+// light=true 구간은 옅은 배경이라 진회색 글자를 써야 4.5:1 유지
 const HM_STEPS = [
   { min: 3, c: "#d93036", label: "+3%↑" },
-  { min: 2, c: "#a63a44", label: "+2%" },
-  { min: 0.25, c: "#5f434c", label: "+1%" },
-  { min: -0.25, c: "#414554", label: "0" },
-  { min: -2, c: "#3c4863", label: "-1%" },
-  { min: -3, c: "#2b5197", label: "-2%" },
+  { min: 2, c: "#e0575c", label: "+2%" },
+  { min: 0.25, c: "#f2b0b3", label: "+1%", light: true },
+  { min: -0.25, c: "#e8eaef", label: "0", light: true },
+  { min: -2, c: "#adc6f0", label: "-1%", light: true },
+  { min: -3, c: "#4f7de0", label: "-2%" },
   { min: -Infinity, c: "#1e63e0", label: "-3%↓" },
 ];
-function hmColor(chgPct) {
-  if (chgPct >= 3) return HM_STEPS[0].c;
-  if (chgPct >= 2) return HM_STEPS[1].c;
-  if (chgPct >= 0.25) return HM_STEPS[2].c;
-  if (chgPct > -0.25) return HM_STEPS[3].c;
-  if (chgPct > -2) return HM_STEPS[4].c;
-  if (chgPct > -3) return HM_STEPS[5].c;
-  return HM_STEPS[6].c;
+function hmStep(chgPct) {
+  if (chgPct >= 3) return HM_STEPS[0];
+  if (chgPct >= 2) return HM_STEPS[1];
+  if (chgPct >= 0.25) return HM_STEPS[2];
+  if (chgPct > -0.25) return HM_STEPS[3];
+  if (chgPct > -2) return HM_STEPS[4];
+  if (chgPct > -3) return HM_STEPS[5];
+  return HM_STEPS[6];
 }
+function hmColor(chgPct) { return hmStep(chgPct).c; }
+function hmText(chgPct) { return hmStep(chgPct).light ? "#374151" : "#ffffff"; }
 function chgColor(chg) { return hmColor(chg * 100); }  // 섹터 로테이션 테이블 셀에서 재사용
+
+// 홈 탭 상태: 국내/미국 토글(카드·히트맵·오늘의종목 공유) + 섹터 확대 + 무버스 카테고리
+let homeMk = "kr";
+let hmZoomSector = null;
+let moverCat = "value";
 
 // squarify 간이 구현: 남은 영역의 짧은 변을 따라 한 줄씩, worst aspect가 나빠지기 직전까지 채움
 function layoutTreemap(items, W, H) {
@@ -992,25 +1003,119 @@ function renderMacroTicker() {
   }).join("");
 }
 
-function renderHeatmap() {
+function renderHome() {
   if (!MARKET) { $("#hm-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   heatmapRendered = true;
   renderMacroTicker();
   watchTvTicker();
-  $("#hm-asof").textContent = `🕒 ${relTime(MARKET.generated)} 갱신 (${MARKET.generated} KST · 클라우드 30분 주기)`;
+  $("#hm-asof").textContent = `🕒 ${relTime(MARKET.generated)} 갱신 (${MARKET.generated} KST · 30분 주기)`;
   const b = MARKET.breadth, r = MARKET.regime;
   $("#hm-context").innerHTML =
-    `<b>기준 시각 ${MARKET.generated}</b> <span class="sub-note">(${relTime(MARKET.generated)} 갱신 · 클라우드 30분 주기 · 확정 종가는 다음날 07:40)</span> ·
-     국면 🇰🇷 ${REGIME_KO[r.kr]} · 🇺🇸 ${REGIME_KO[r.us]}<br>
+    `국면 🇰🇷 ${REGIME_KO[r.kr]} · 🇺🇸 ${REGIME_KO[r.us]} ·
      <b>등락</b> 🇰🇷 ▲${b.kr.up} ▼${b.kr.down} (신고가 ${b.kr.hi52}·신저가 ${b.kr.lo52}) ·
-     🇺🇸 ▲${b.us.up} ▼${b.us.down} (신고가 ${b.us.hi52}·신저가 ${b.us.lo52})<br>
-     <b>거래대금 급증</b>: ${MARKET.hot.slice(0, 5).map((h) =>
-       `${h.name} ${h.volx}x<span class="${h.chg >= 0 ? "pos" : "neg"}">(${pct(h.chg, 1)})</span>`).join(" · ")}`;
-  // 범례 바
-  $("#hm-legend").innerHTML = [...HM_STEPS].reverse().map((s) =>
-    `<span class="hm-leg" style="background:${s.c}">${s.label}</span>`).join("");
-  $("#hm-mk").onchange = drawTreemap;
+     🇺🇸 ▲${b.us.up} ▼${b.us.down} (신고가 ${b.us.hi52}·신저가 ${b.us.lo52})
+     <span class="sub-note">· 확정 종가는 다음날 07:40</span>`;
+  // 그라데이션 범례: -3% 파랑 → 중립 → +3% 빨강 (국내 관례)
+  $("#hm-legend").innerHTML =
+    `<span class="hm-leg-lab">-3%</span>
+     <span class="hm-grad" style="background:linear-gradient(90deg,#1e63e0,#adc6f0,#e8eaef,#f2b0b3,#d93036)"></span>
+     <span class="hm-leg-lab">+3%</span>`;
+  // 국내/미국 토글 → 카드+히트맵+오늘의종목 동기 재렌더 (rAF 금지 — 동기 실행)
+  $("#home-mk").querySelectorAll("button").forEach((btn) => {
+    btn.onclick = () => {
+      homeMk = btn.dataset.mk;
+      hmZoomSector = null;
+      $("#hm-back").style.display = "none";
+      $("#home-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
+      renderIdxCards(); drawTreemap(); renderMovers();
+    };
+  });
+  $("#hm-back").onclick = () => {
+    hmZoomSector = null;
+    $("#hm-back").style.display = "none";
+    drawTreemap();
+  };
+  $("#home-news-more").onclick = (e) => { e.preventDefault(); activateTab("news"); };
+  renderIdxCards();
   drawTreemap();
+  renderMovers();
+  renderHomeNews();
+}
+
+// 지수 2(macro 재사용) + 시총 대표종목 2(featured) 카드
+function renderIdxCards() {
+  const host = $("#home-cards");
+  if (!host) return;
+  const idxIds = homeMk === "kr" ? ["^KS11", "^KQ11"] : ["^GSPC", "^IXIC"];
+  const byId = Object.fromEntries((MARKET.macro || []).map((m) => [m.id, m]));
+  const cards = [];
+  for (const id of idxIds) {
+    const m = byId[id];
+    if (m) cards.push({ name: m.name, last: m.last, chg: m.chg, spark: m.spark, unit: m.unit });
+  }
+  for (const f of (MARKET.featured?.[homeMk] || [])) {
+    cards.push({ name: f.name, last: f.last, chg: f.chg, spark: f.spark, unit: homeMk === "kr" ? "원" : "$", t: f.t });
+  }
+  host.innerHTML = cards.map((c) => {
+    const up = c.chg >= 0;
+    const val = c.unit === "$" ? `$${c.last.toLocaleString()}` : `${c.last.toLocaleString()}${c.unit || ""}`;
+    return `<div class="idx-card${c.t ? " clickable" : ""}" ${c.t ? `data-t="${c.t}"` : ""}>
+      <div class="idx-name">${c.name}</div>
+      <div class="idx-val">${val}</div>
+      <div class="idx-chg ${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(c.chg, 2)}</div>
+      ${sparkSvg(c.spark, up ? "#dc2626" : "#2563eb")}
+    </div>`;
+  }).join("");
+  host.querySelectorAll(".idx-card.clickable").forEach((el) => {
+    el.onclick = () => {
+      document.querySelector('.group[data-group="research"]').click();
+      activateTab("lookup");
+      if (!lookupRendered) initLookup();
+      loadLookup(`${homeMk}_${el.dataset.t}`);
+    };
+  });
+}
+
+// 오늘의 종목: 거래대금/거래량/급등/급락 칩 + 순위 리스트
+const MV_CATS = [["value", "거래대금"], ["volume", "거래량"], ["gainers", "급등"], ["losers", "급락"]];
+function renderMovers() {
+  const chips = $("#mv-chips"), list = $("#mv-list");
+  if (!chips || !MARKET.movers) return;
+  chips.innerHTML = MV_CATS.map(([k, lab]) =>
+    `<button class="chip${k === moverCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
+  chips.querySelectorAll(".chip").forEach((b) => {
+    b.onclick = () => { moverCat = b.dataset.cat; renderMovers(); };
+  });
+  const rows = MARKET.movers[homeMk]?.[moverCat] || [];
+  list.innerHTML = rows.map((r, i) => {
+    const up = r.chg >= 0;
+    const sub = moverCat === "volume"
+      ? `거래량 ${r.vol.toLocaleString()}주` : `거래대금 ${fmtMcap(r.value, homeMk)}`;
+    return `<div class="mv-row" data-t="${r.t}">
+      <span class="mv-rank">${i + 1}</span>
+      <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span><br>
+        <span class="mv-sub">${sub}</span></span>
+      <span class="mv-price">${fmtPrice(r.last, homeMk)}
+        <span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(r.chg, 1)}</span></span>
+    </div>`;
+  }).join("") || `<p class="mini-note">데이터 없음</p>`;
+  list.querySelectorAll(".mv-row").forEach((el) => {
+    el.onclick = () => {
+      document.querySelector('.group[data-group="research"]').click();
+      activateTab("lookup");
+      if (!lookupRendered) initLookup();
+      loadLookup(`${homeMk}_${el.dataset.t}`);
+    };
+  });
+}
+
+// 주요 뉴스 미리보기 (뉴스 탭 데이터 재사용, 상위 5건)
+function renderHomeNews() {
+  const host = $("#home-news");
+  if (!host) return;
+  host.innerHTML = NEWS?.market?.length
+    ? newsList(NEWS.market.slice(0, 5), false)
+    : `<p class="mini-note">뉴스 데이터 없음</p>`;
 }
 
 function hmTooltip() {
@@ -1024,36 +1129,49 @@ function hmTooltip() {
 }
 
 function drawTreemap() {
-  const mk = $("#hm-mk").value;
+  const mk = homeMk;
   const host = $("#hm-tree");
   const W = host.clientWidth || 800, H = host.clientHeight || 560;
   const tiles = MARKET.heatmap.filter((t) => t.m === mk && t.mcap > 0);
   const bySector = {};
   tiles.forEach((t) => (bySector[t.sector] = bySector[t.sector] || []).push(t));
-  const sectors = Object.entries(bySector)
+  let sectors = Object.entries(bySector)
     .map(([name, arr]) => {
       const w = arr.reduce((s, x) => s + x.mcap, 0);
       const chg = arr.reduce((s, x) => s + x.chg * x.mcap, 0) / w;  // 시총가중 섹터 등락
       return { name, w, chg, items: arr.sort((a, b) => b.mcap - a.mcap) };
     })
     .sort((a, b) => b.w - a.w).slice(0, 14);
+  if (hmZoomSector) {  // 섹터 확대: 해당 섹터만 전체 영역에
+    const one = sectors.filter((s) => s.name === hmZoomSector);
+    if (one.length) sectors = one;
+    else hmZoomSector = null;
+  }
   host.innerHTML = "";
   const tip = hmTooltip();
-  const HDR = 16;  // 섹터 헤더 높이
+  const HDR = 18;  // 섹터 헤더 높이
   const secRects = layoutTreemap(sectors, W, H);
   for (const sr of secRects) {
     const block = document.createElement("div");
     block.className = "hm-sector";
     block.style.cssText = `left:${sr.x}px;top:${sr.y}px;width:${sr.w2}px;height:${sr.h2}px`;
     const secPct = pct(sr.chg, 1);
+    const zoomBtn = hmZoomSector ? "" : `<button class="hm-zoom" title="이 섹터만 크게 보기">⤢</button>`;
     block.innerHTML = `<div class="hm-sec-head"><span class="hm-sec-name">${sr.name}</span>
-      <span class="hm-sec-chg" style="color:${sr.chg >= 0.0025 ? "#ff8a8f" : sr.chg <= -0.0025 ? "#7fb2ff" : "#9aa2b1"}">${secPct}</span></div>`;
+      <span class="hm-sec-chg" style="color:${sr.chg >= 0.0025 ? "#d93036" : sr.chg <= -0.0025 ? "#1e63e0" : "#6b7280"}">${secPct}</span>${zoomBtn}</div>`;
+    const zb = block.querySelector(".hm-zoom");
+    if (zb) zb.onclick = (e) => {
+      e.stopPropagation();
+      hmZoomSector = sr.name;
+      $("#hm-back").style.display = "";
+      drawTreemap();
+    };
     const inner = layoutTreemap(sr.items.map((t) => ({ ...t, w: t.mcap })), sr.w2 - 2, Math.max(4, sr.h2 - HDR - 2));
     for (const t of inner) {
       const d = document.createElement("div");
       d.className = "hm-tile";
-      d.style.cssText = `left:${t.x + 1}px;top:${t.y + HDR + 1}px;width:${Math.max(1, t.w2 - 1)}px;height:${Math.max(1, t.h2 - 1)}px;background:${hmColor(t.chg * 100)}`;
-      const area = t.w2 * t.h2;
+      const chgPct = t.chg * 100;
+      d.style.cssText = `left:${t.x + 1}px;top:${t.y + HDR + 1}px;width:${Math.max(1, t.w2 - 1)}px;height:${Math.max(1, t.h2 - 1)}px;background:${hmColor(chgPct)};color:${hmText(chgPct)}`;
       if (t.w2 > 68 && t.h2 > 38) d.innerHTML = `<b class="big">${t.name}</b><span>${pct(t.chg, 1)}</span>`;
       else if (t.w2 > 44 && t.h2 > 24) d.innerHTML = `<b>${t.name.length > 6 ? (t.t.length <= 6 ? t.t : t.name.slice(0, 5)) : t.name}</b>`;
       d.addEventListener("mousemove", (e) => {
@@ -1104,6 +1222,63 @@ function renderMacro() {
       <div class="desc">${m.note}</div>
     </div>`;
   }).join("");
+}
+
+/* ---------- 마켓: 경제일정 ---------- */
+let calMk = "kr";
+function renderCalendar() {
+  calRendered = true;
+  if (!CAL) {
+    $("#cal-context").textContent = "calendar.json 없음 — python analysis\\calendar_events.py 실행 필요";
+    return;
+  }
+  $("#cal-context").innerHTML =
+    `<b>기준 시각 ${CAL.generated}</b> — ${relTime(CAL.generated)} 갱신 (하루 1회)<br>
+     국내=한국거래소 KIND 기업설명회(IR) 공시 · 미국=yfinance 실적발표 예정일(EPS 컨센서스 병기).
+     일정은 회사 사정에 따라 변경될 수 있음`;
+  $("#cal-mk").querySelectorAll("button").forEach((btn) => {
+    btn.onclick = () => {
+      calMk = btn.dataset.mk;
+      $("#cal-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
+      drawCalList();
+    };
+  });
+  drawCalList();
+}
+
+function drawCalList() {
+  const host = $("#cal-earnings");
+  const rows = CAL?.earnings?.[calMk] || [];
+  $("#cal-src").textContent = calMk === "kr"
+    ? `(KIND 공시 · ${CAL.kr_updated ? relTime(CAL.kr_updated) + " 갱신" : "미수집"})`
+    : `(yfinance · ${CAL.us_updated ? relTime(CAL.us_updated) + " 갱신" : "미수집"})`;
+  if (!rows.length) { host.innerHTML = `<p class="mini-note">예정된 일정 없음</p>`; return; }
+  const byDay = {};
+  rows.forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
+  const today = new Date().toISOString().slice(0, 10);
+  host.innerHTML = Object.entries(byDay).map(([d, items]) => {
+    const dt = new Date(d + "T00:00:00+09:00");
+    const yo = "일월화수목금토"[dt.getDay()];
+    const isToday = d === today;
+    return `<div class="cal-day${isToday ? " today" : ""}">
+      <div class="cal-date">${d.slice(5).replace("-", "/")} (${yo})${isToday ? " · 오늘" : ""}
+        <span class="sub-note">${items.length}건</span></div>
+      ${items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
+        <span class="cal-name"><b>${r.name}</b>${r.t ? `<span class="sub-note"> ${r.t}</span>` : ""}</span>
+        <span class="cal-info">${calMk === "kr"
+          ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
+          : (r.eps_est != null ? `EPS 컨센서스 $${r.eps_est}` : "실적발표 예정")}</span>
+      </div>`).join("")}
+    </div>`;
+  }).join("");
+  host.querySelectorAll(".cal-row.clickable").forEach((el) => {
+    el.onclick = () => {
+      document.querySelector('.group[data-group="research"]').click();
+      activateTab("lookup");
+      if (!lookupRendered) initLookup();
+      loadLookup(`${calMk}_${el.dataset.t}`);
+    };
+  });
 }
 
 /* ---------- 마켓: 뉴스·속보 ---------- */
@@ -1843,11 +2018,12 @@ Promise.all([
   getJSON("deals_briefings.json"),
   getJSON("news_archive.json"),
   getJSON("deals_archive.json"),
+  getJSON("calendar.json"),
 ])
-  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da]) => {
+  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal]) => {
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
-    NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da;
+    NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal;
     renderRank();
   })
   .catch((e) => { $("#meta").textContent = "results.json 로드 실패 — 먼저 python analysis\\report.py 실행: " + e; });

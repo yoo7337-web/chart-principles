@@ -143,36 +143,80 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .tick-chg { font-size: .78rem; font-weight: 600; }
 .asof { font-size: .76rem; color: var(--muted); margin: 2px 0 8px; }
 
-/* 마켓 현황 — 히트맵 (Finviz 스타일 다크 서피스) */
+/* 마켓 홈 — 상단 토글 + 지수 카드 (토스 스타일 라이트) */
+.home-topbar { display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.mk-toggle { display: inline-flex; background: #eef0f4; border-radius: 999px; padding: 3px; }
+.mk-toggle button { border: none; background: transparent; cursor: pointer;
+  font-size: .84rem; font-weight: 600; color: var(--muted); padding: 6px 14px; border-radius: 999px; }
+.mk-toggle button.active { background: #fff; color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.idx-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+@media (max-width: 760px) { .idx-cards { grid-template-columns: repeat(2, 1fr); } }
+.idx-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px 8px; }
+.idx-card.clickable { cursor: pointer; }
+.idx-card.clickable:hover { border-color: var(--accent); }
+.idx-name { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.idx-val { font-size: 1.18rem; font-weight: 800; margin: 2px 0; }
+.idx-chg { font-size: .8rem; font-weight: 700; margin-bottom: 4px; }
+.home-h { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 8px; font-size: 1.05rem; }
+.home-more { font-size: .78rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* 마켓 홈 — 히트맵 (토스 스타일 라이트 서피스, 상승=빨강/하락=파랑) */
 .tv-tape { padding: 4px 8px; margin-bottom: 12px; min-height: 46px; }
 .hm-bar { align-items: center; }
-.hm-legend { display: inline-flex; border-radius: 4px; overflow: hidden; }
-.hm-leg { color: #fafafa; font-size: .68rem; font-weight: 600; padding: 3px 7px; min-width: 34px; text-align: center; }
+.hm-legend-grad { display: inline-flex; align-items: center; gap: 6px; font-size: .7rem;
+  color: var(--muted); font-weight: 600; }
+.hm-grad { display: inline-block; width: 180px; height: 10px; border-radius: 5px; }
+.hm-back { border: 1px solid var(--line); background: #fff; border-radius: 6px;
+  font-size: .74rem; font-weight: 600; color: var(--ink); cursor: pointer; padding: 3px 10px; }
+.hm-back:hover { border-color: var(--accent); color: var(--accent); }
 .treemap { position: relative; width: 100%; height: 620px; margin-top: 10px;
-  border-radius: 8px; overflow: hidden; background: #14161b; padding: 2px; box-sizing: border-box; }
+  border-radius: 10px; overflow: hidden; background: #fff; border: 1px solid var(--line);
+  padding: 2px; box-sizing: border-box; }
 .hm-sector { position: absolute; box-sizing: border-box; overflow: hidden;
-  border: 1px solid #14161b; background: #1c1e24; }
-.hm-sec-head { position: absolute; top: 0; left: 0; right: 0; height: 16px; z-index: 2;
-  display: flex; justify-content: space-between; align-items: center; padding: 0 5px;
-  background: #262933; overflow: hidden; }
-.hm-sec-name { font-size: .66rem; font-weight: 700; color: #c8cdd8; letter-spacing: .02em;
-  white-space: nowrap; text-transform: uppercase; }
-.hm-sec-chg { font-size: .64rem; font-weight: 700; white-space: nowrap; }
-.hm-tile { position: absolute; box-sizing: border-box; border: 1px solid #14161b;
+  border: 1px solid #fff; background: #fafbfc; }
+.hm-sec-head { position: absolute; top: 0; left: 0; right: 0; height: 18px; z-index: 2;
+  display: flex; align-items: center; gap: 6px; padding: 0 5px;
+  background: #f3f4f6; overflow: hidden; }
+.hm-sec-name { font-size: .66rem; font-weight: 700; color: var(--muted); letter-spacing: .02em;
+  white-space: nowrap; }
+.hm-sec-chg { font-size: .64rem; font-weight: 700; white-space: nowrap; margin-left: auto; }
+.hm-zoom { border: none; background: transparent; cursor: pointer; font-size: .72rem;
+  color: var(--muted); padding: 0 2px; line-height: 1; }
+.hm-zoom:hover { color: var(--accent); }
+.hm-tile { position: absolute; box-sizing: border-box; border: 1px solid #fff; border-radius: 3px;
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center; }
-.hm-tile b { font-size: .68rem; font-weight: 700; color: #fafafa; line-height: 1.12;
+.hm-tile b { font-size: .68rem; font-weight: 700; color: inherit; line-height: 1.12;
   max-width: 96%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm-tile b.big { font-size: .82rem; }
-.hm-tile span { font-size: .68rem; color: rgba(250,250,250,.85); }
-.hm-tile:hover { outline: 2px solid #fff; outline-offset: -2px; z-index: 3; filter: brightness(1.12); }
+.hm-tile span { font-size: .68rem; color: inherit; opacity: .88; }
+.hm-tile:hover { outline: 2px solid #1f2937; outline-offset: -2px; z-index: 3; }
 #hm-tip { position: fixed; display: none; z-index: 10000; pointer-events: none;
-  background: #1c1e24; color: #e5e9f0; border: 1px solid #3a3f4b; border-radius: 8px;
+  background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 12px; font-size: .8rem; line-height: 1.5; max-width: 220px;
-  box-shadow: 0 4px 14px rgba(0,0,0,.4); }
-#hm-tip .tip-up { color: #ff8a8f; font-weight: 700; }
-#hm-tip .tip-dn { color: #7fb2ff; font-weight: 700; }
+  box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+#hm-tip .tip-up { color: #d93036; font-weight: 700; }
+#hm-tip .tip-dn { color: #1e63e0; font-weight: 700; }
 .heat-cell { color: #fafafa !important; font-weight: 600; }
+
+/* 마켓 홈 — 오늘의 종목 */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chips .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px;
+  font-size: .8rem; font-weight: 600; color: var(--muted); cursor: pointer; padding: 5px 13px; }
+.chips .chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.mv-list { padding: 4px 0; }
+.mv-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; cursor: pointer;
+  border-bottom: 1px solid var(--line); }
+.mv-row:last-child { border-bottom: none; }
+.mv-row:hover { background: #f7f8fa; }
+.mv-rank { width: 20px; text-align: center; font-weight: 800; color: var(--muted); font-size: .84rem; }
+.mv-name { flex: 1; min-width: 0; font-size: .88rem; line-height: 1.3; }
+.mv-sub { font-size: .74rem; color: var(--muted); }
+.mv-price { text-align: right; font-size: .86rem; font-weight: 700; white-space: nowrap; }
+.mv-price .pos, .mv-price .neg { display: block; font-size: .76rem; }
 
 /* 투자 대가 */
 .guru-block summary { flex-wrap: wrap; }
@@ -288,3 +332,15 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 /* TradingView 실시간 티커 (로딩 실패 시 JS가 숨김) */
 .tv-ticker { margin-bottom: 8px; min-height: 46px; border-radius: 8px; overflow: hidden; }
+
+/* 마켓 — 경제일정 */
+.cal-list { padding: 4px 0; }
+.cal-day { border-bottom: 1px solid var(--line); padding: 8px 14px 10px; }
+.cal-day:last-child { border-bottom: none; }
+.cal-day.today { background: #f5f9ff; }
+.cal-date { font-size: .82rem; font-weight: 800; margin-bottom: 4px; }
+.cal-row { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; font-size: .86rem; }
+.cal-row.clickable { cursor: pointer; }
+.cal-row.clickable:hover .cal-name b { color: var(--accent); text-decoration: underline; }
+.cal-name { flex: 0 0 auto; min-width: 130px; }
+.cal-info { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

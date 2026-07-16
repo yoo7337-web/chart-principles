@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=24">
-<script src="firebase-config.js?v=24"></script>
-<script src="js/auth.js?v=24"></script>
+<link rel="stylesheet" href="css/style.css?v=25">
+<script src="firebase-config.js?v=25"></script>
+<script src="js/auth.js?v=25"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -34,10 +34,11 @@
   <button class="tab" data-tab="value">내재가치</button>
 </nav>
 <nav class="tabs" data-group-tabs="market" style="display:none">
-  <button class="tab" data-tab="heatmap">섹터 히트맵</button>
+  <button class="tab" data-tab="heatmap">홈</button>
   <button class="tab" data-tab="internals">시장 내부</button>
   <button class="tab" data-tab="rotation">섹터 로테이션</button>
   <button class="tab" data-tab="macro">매크로·지표</button>
+  <button class="tab" data-tab="calendar">경제일정</button>
   <button class="tab" data-tab="news">뉴스·속보</button>
   <button class="tab" data-tab="deals">딜 레이더</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
@@ -176,14 +177,31 @@
     </div>
     <!-- 자체 데이터 기반 지수 티커 (TV 로딩 실패 시 폴백, 30분 갱신) -->
     <div id="macro-ticker" class="macro-ticker"></div>
-    <div class="asof" id="hm-asof"></div>
-    <div class="criteria" id="hm-context"></div>
+
+    <div class="home-topbar">
+      <div class="mk-toggle" id="home-mk">
+        <button data-mk="kr" class="active">🇰🇷 국내증시</button>
+        <button data-mk="us">🇺🇸 미국증시</button>
+      </div>
+      <span class="asof" id="hm-asof"></span>
+    </div>
+    <div id="home-cards" class="idx-cards"></div>
+
+    <h2 class="home-h">섹터 히트맵
+      <button id="hm-back" class="hm-back" style="display:none">← 전체 보기</button>
+      <span class="sub-note">타일=시가총액 · 클릭=종목 조회 · ⤢=섹터 확대</span></h2>
     <div class="controls hm-bar">
-      <label>시장 <select id="hm-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label>
-      <span id="hm-legend" class="hm-legend"></span>
-      <span class="sub-note">타일=시가총액 · 클릭=종목 조회</span>
+      <span id="hm-legend" class="hm-legend-grad"></span>
     </div>
     <div id="hm-tree" class="treemap"></div>
+    <div class="criteria" id="hm-context"></div>
+
+    <h2 class="home-h">오늘의 종목</h2>
+    <div class="chips" id="mv-chips"></div>
+    <div id="mv-list" class="mv-list card-flat"></div>
+
+    <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
+    <div id="home-news" class="news-list card-flat"></div>
   </section>
 
   <section id="tab-internals" class="panel">
@@ -208,7 +226,19 @@
   <section id="tab-macro" class="panel">
     <div class="criteria" id="macro-context"></div>
     <div id="macro-cards" class="cards macro"></div>
-    <h2 style="margin-top:24px">📅 경제 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
+  </section>
+
+  <section id="tab-calendar" class="panel">
+    <div class="criteria" id="cal-context"></div>
+    <div class="home-topbar">
+      <div class="mk-toggle" id="cal-mk">
+        <button data-mk="kr" class="active">🇰🇷 국내</button>
+        <button data-mk="us">🇺🇸 미국</button>
+      </div>
+    </div>
+    <h2>📢 실적발표·IR 일정 <span class="sub-note" id="cal-src"></span></h2>
+    <div id="cal-earnings" class="card-flat cal-list"></div>
+    <h2 style="margin-top:24px">📅 경제지표 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
     <div class="card-flat" style="height:450px;padding:0;overflow:hidden">
       <div class="tradingview-widget-container" style="height:100%">
         <div class="tradingview-widget-container__widget" style="height:100%"></div>
@@ -280,6 +310,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=24"></script>
+<script src="js/app.js?v=25"></script>
 </body>
 </html>
