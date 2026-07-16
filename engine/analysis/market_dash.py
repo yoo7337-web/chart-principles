@@ -208,6 +208,48 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
     return tiles
 
 
+def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> tuple:
+    """홈 탭용 featured(시총 상위 대표종목 2/시장) + movers(거래대금·거래량·급등·급락 상위 10)."""
+    LIQ_MIN = {"kr": 1e10, "us": 5e7}  # 급등/급락 유동성 컷: 당일 거래대금 KR 100억 / US $50M
+    snaps = {"kr": [], "us": []}
+    for (mk, tk), df in data.items():
+        c = df["close"]
+        if len(c) < 21:
+            continue
+        last = float(c.iloc[-1])
+        chg = chg_map.get((mk, tk))
+        if chg is None:
+            chg = float(c.iloc[-1] / c.iloc[-2] - 1)
+        snaps[mk].append({
+            "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
+            "last": round(last, 2), "chg": round(chg, 4),
+            "value": round(float(last * df["volume"].iloc[-1])),
+            "vol": round(float(df["volume"].iloc[-1])),
+            "_mcap": float(smap.get(f"{mk}_{tk}", {}).get("mcap") or 0),
+        })
+
+    featured, movers = {}, {}
+    for mk, rows in snaps.items():
+        top2 = sorted([r for r in rows if r["_mcap"] > 0], key=lambda r: -r["_mcap"])[:2]
+        feats = []
+        for r in top2:
+            spark = [round(float(v), 2) for v in data[(mk, r["t"])]["close"].tail(30)]
+            feats.append({k: v for k, v in r.items() if k != "_mcap"} | {"spark": spark})
+        featured[mk] = feats
+
+        liq = [r for r in rows if r["value"] >= LIQ_MIN[mk]]
+        if len(liq) < 10:  # 필터가 과하면 절반으로 완화
+            liq = [r for r in rows if r["value"] >= LIQ_MIN[mk] / 2]
+        strip = lambda rs: [{k: v for k, v in r.items() if k != "_mcap"} for r in rs[:10]]
+        movers[mk] = {
+            "value": strip(sorted(rows, key=lambda r: -r["value"])),
+            "volume": strip(sorted(rows, key=lambda r: -r["vol"])),
+            "gainers": strip(sorted(liq, key=lambda r: -r["chg"])),
+            "losers": strip(sorted(liq, key=lambda r: r["chg"])),
+        }
+    return featured, movers
+
+
 def main():
     print("[1/4] 매크로 지표 (yfinance)...")
     macro = fetch_macro()
@@ -222,9 +264,10 @@ def main():
     reg = regime_map(data)
     regime = {mk: (str(r[r != "na"].iloc[-1]) if len(r[r != "na"]) else "neutral") for mk, r in reg.items()}
 
-    print("[3/4] 섹터 히트맵...")
+    print("[3/4] 섹터 히트맵 + 홈(featured/movers)...")
     smap = build_sector_map(data, kr_names)
     heatmap = build_heatmap(data, kr_names, smap, chg_map)
+    featured, movers = build_home_extras(data, kr_names, smap, chg_map)
 
     print("[4/4] 저장...")
     asof = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
@@ -232,6 +275,7 @@ def main():
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "asof": asof, "regime": regime,
         "macro": macro, "breadth": breadth, "hot": hot, "heatmap": heatmap,
+        "featured": featured, "movers": movers,
     }
     (APP_DATA / "market.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     ks = breadth["kr"]
