@@ -29,6 +29,18 @@ from collect import US_TICKERS
 from common import APP_DATA
 
 KST = timezone(timedelta(hours=9))
+
+
+def _logo(mk: str, tk: str):
+    """KR=네이버 로고 패턴 / US=company.json(clearbit)."""
+    if mk == "kr":
+        return f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{tk}.svg"
+    try:
+        if not hasattr(_logo, "_map"):
+            _logo._map = json.loads((APP_DATA / "company.json").read_text(encoding="utf-8"))["map"]
+        return (_logo._map.get(f"us_{tk}") or {}).get("logo")
+    except Exception:
+        return None
 OUT = APP_DATA / "calendar.json"
 MAX_AGE_H = 20
 LOOKBACK_D, LOOKAHEAD_D = 3, 30
@@ -71,7 +83,7 @@ def fetch_us() -> list:
             if not (lo <= d <= hi):
                 continue
             eps = cal.get("Earnings Average")
-            out.append({"t": t, "name": t, "date": d.isoformat(),
+            out.append({"t": t, "name": t, "date": d.isoformat(), "logo": _logo("us", t),
                         "eps_est": round(float(eps), 2) if eps is not None else None,
                         "src": "yfinance"})
         except Exception:
@@ -120,7 +132,9 @@ def fetch_kr(probe: bool = False):
         if key in seen:
             continue
         seen.add(key)
-        out.append({"t": name2code.get(name, ""), "name": name, "date": d, "time": tm,
+        code = name2code.get(name, "")
+        out.append({"t": code, "name": name, "date": d, "time": tm,
+                    "logo": _logo("kr", code) if code else None,
                     "event": event[:60], "src": "KIND"})
     out.sort(key=lambda r: (r["date"], r.get("time", "")))
     print(f"  KR IR일정 {len(out)}건")

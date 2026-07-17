@@ -210,6 +210,17 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
 
 def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> tuple:
     """홈 탭용 featured(시총 상위 대표종목 2/시장) + movers(거래대금·거래량·급등·급락 상위 10)."""
+    # 로고: KR=네이버 패턴 / US=company.json(clearbit) — 홈 오늘의종목·지수카드용
+    try:
+        comap = json.loads((APP_DATA / "company.json").read_text(encoding="utf-8"))["map"]
+    except Exception:
+        comap = {}
+
+    def logo_of(mk, tk):
+        if mk == "kr":
+            return f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{tk}.svg"
+        return (comap.get(f"us_{tk}") or {}).get("logo")
+
     LIQ_MIN = {"kr": 1e10, "us": 5e7}  # 급등/급락 유동성 컷: 당일 거래대금 KR 100억 / US $50M
     snaps = {"kr": [], "us": []}
     for (mk, tk), df in data.items():
@@ -222,6 +233,7 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
             chg = float(c.iloc[-1] / c.iloc[-2] - 1)
         snaps[mk].append({
             "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
+            "logo": logo_of(mk, tk),
             "last": round(last, 2), "chg": round(chg, 4),
             "value": round(float(last * df["volume"].iloc[-1])),
             "vol": round(float(df["volume"].iloc[-1])),
@@ -230,6 +242,7 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
 
     # 전 종목 최신 시세 맵 — 종목조회 헤더가 히트맵과 같은 소스를 쓰도록(주1 stocks/*.json 지연 보정)
     quotes = {f"{mk}_{r['t']}": [r["last"], r["chg"]] for mk in snaps for r in snaps[mk]}
+
 
     featured, movers = {}, {}
     for mk, rows in snaps.items():

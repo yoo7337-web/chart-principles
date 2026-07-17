@@ -39,6 +39,14 @@ GURUS = [
      "style": "매크로 톱다운 — 추세에 크게, 틀리면 빨리 손절"},
     {"id": "tepper", "name": "데이비드 테퍼", "fund": "Appaloosa Management", "cik": 1656456,
      "style": "위기 매수 전문 — 공포 국면의 신용·주식에 공격적"},
+    {"id": "dalio", "name": "레이 달리오", "fund": "Bridgewater Associates", "cik": 1350694,
+     "style": "매크로 분산 — 세계 최대 헤지펀드, 전천후(All Weather) 관점"},
+    {"id": "klarman", "name": "세스 클라만", "fund": "Baupost Group", "cik": 1061768,
+     "style": "딥밸류 교과서 — 안전마진과 비유동 자산의 절대수익 추구"},
+    {"id": "liLu", "name": "리 루", "fund": "Himalaya Capital", "cik": 1709323,
+     "style": "멍거가 인정한 집중 가치투자 — 극소수 종목 장기 보유"},
+    {"id": "wood", "name": "캐시 우드", "fund": "ARK Invest", "cik": 1697748,
+     "style": "파괴적 혁신 성장주 — ETF라 보유내역 공개 투명성 최상위"},
 ]
 
 
@@ -183,6 +191,55 @@ TRUMP_STATIC = {
 }
 
 
+# 한국 — 13F 제도 부재: 5% 대량보유 공시(DART)·펀드 운용보고서·국민연금 공시로만 일부 공개.
+# ⚠전체 포트폴리오가 아닌 "공개된 일부"임을 카드마다 명시. 갱신은 수동 큐레이션.
+KR_SOURCE = "DART 5% 대량보유 공시·운용보고서·언론 보도 기반 — 전체 포트폴리오 아님, 부정기 갱신"
+KR_STATIC = [
+    {"id": "nps", "name": "국민연금", "fund": "국민연금공단 기금운용본부",
+     "style": "국내 최대 큰손 — 지분 공시 자체가 수급 이벤트",
+     "holdings": ["국내 주식 약 150조원 운용 — 삼성전자·SK하이닉스 등 대형주 전반 5~10% 보유",
+                  "분기별 국내주식 대량보유 내역 공시(기금운용본부 홈페이지·DART)",
+                  "지분율 변동(특히 10% 룰 관련 매도)이 대형주 수급의 주요 변수"]},
+    {"id": "parkyo", "name": "박영옥 (주식농부)", "fund": "개인 투자자",
+     "style": "농심(農心) 투자 — 기업과 동행하는 장기 집중, 농업·중소형 가치주",
+     "holdings": ["5% 이상 보유로 공시된 종목만 확인 가능(대표적 슈퍼개미 공시 사례)",
+                  "농업·식품·중소형 제조 가치주 위주 — 조광피혁 등 장기 보유 이력",
+                  "DART '대량보유상황보고서'로 추적"]},
+    {"id": "vip", "name": "VIP자산운용 (김민국·최준철)", "fund": "VIP자산운용",
+     "style": "국내 가치투자 대표 하우스 — 저평가 우량주 장기",
+     "holdings": ["운용보고서·기고를 통해 종목 논리를 공개하는 드문 하우스",
+                  "5% 공시 종목 다수(중소형 가치주) — DART 추적 가능"]},
+    {"id": "kang", "name": "강방천", "fund": "에셋플러스자산운용",
+     "style": "1등 기업론 — 산업 내 지배력 있는 기업 장기 보유",
+     "holdings": ["'코리아리치투게더' 등 공모펀드 보고서로 보유 종목 확인 가능",
+                  "모바일·플랫폼·소비 1등주 선호로 알려짐"]},
+    {"id": "lcw", "name": "이채원", "fund": "라이프자산운용",
+     "style": "한국 가치투자 1세대 — 최근 행동주의 결합",
+     "holdings": ["한국투자밸류 시절부터 저PBR·자산주 중심",
+                  "라이프운용의 행동주의 캠페인(SK 등)으로 지분·의도 공시"]},
+    {"id": "heo", "name": "허남권", "fund": "신영자산운용",
+     "style": "정통 장기 가치투자 — 배당·자산가치 중시",
+     "holdings": ["'신영밸류' 시리즈 운용보고서로 보유 종목 공개",
+                  "저평가 대형·중형 가치주 장기 보유 스타일"]},
+    {"id": "truston", "name": "트러스톤자산운용", "fund": "트러스톤자산운용",
+     "style": "행동주의 — 지배구조 개선 캠페인",
+     "holdings": ["태광산업·BYC 등 캠페인으로 지분·주주서한 공개",
+                  "캠페인 종목은 5% 공시 + 언론으로 의도까지 드러남"]},
+    {"id": "align", "name": "얼라인파트너스 (이창환)", "fund": "얼라인파트너스자산운용",
+     "style": "행동주의 — 은행주 밸류업 캠페인 주도",
+     "holdings": ["JB금융 등 은행 지주 캠페인 — 투자 논리를 가장 적극 공개",
+                  "공개 주주서한·프레젠테이션으로 목표 지분·논리 확인 가능"]},
+    {"id": "kcgi", "name": "KCGI (강성부)", "fund": "KCGI",
+     "style": "지배구조 투자 — 승계·지배구조 이벤트 드리븐",
+     "holdings": ["한진칼 사태로 유명 — 지배구조 관련 지분 공시 다수",
+                  "DART 대량보유 공시로 캠페인 종목 추적"]},
+    {"id": "timefolio", "name": "타임폴리오자산운용", "fund": "타임폴리오자산운용",
+     "style": "국내 대표 헤지펀드 하우스 — 롱숏·이벤트 드리븐",
+     "holdings": ["사모 중심이라 비공개가 원칙이나 ETF 라인업(TIMEFOLIO 액티브)은 보유내역 매일 공개",
+                  "ETF 보유내역이 하우스 뷰의 힌트"]},
+]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
@@ -229,7 +286,17 @@ def main():
     except Exception as e:
         print(f"  버크셔 유동성 실패: {e}", file=sys.stderr)
 
+    for m in managers:
+        m["country"] = "us"
+    TRUMP_STATIC["country"] = "us"
     managers.append(TRUMP_STATIC)  # 13F 비대상 — 공개 신고 기반 정적 카드
+    for k in KR_STATIC:  # 한국 — 5% 공시·운용보고서 기반 정적 카드
+        managers.append({**k, "country": "kr", "type": "disclosure", "source": KR_SOURCE,
+                         "report_date": "수동 큐레이션", "filing_date": None,
+                         "total_value": None, "n_positions": None,
+                         "holdings": [{"issuer": h, "weight": None, "change": "hold", "chg_shares": None}
+                                      for h in k["holdings"]],
+                         "exits": [], "thesis": None})
 
     OUT.write_text(json.dumps({"generated": date.today().isoformat(), "managers": managers},
                               ensure_ascii=False), encoding="utf-8")
