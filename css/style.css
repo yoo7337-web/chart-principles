@@ -467,3 +467,6 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .pf-grade.bad { background: #fef2f2; color: #991b1b; }
 .pf-reason { font-size: .84rem; padding: 6px 10px; background: #f8fafc; border-radius: 6px; margin: 4px 0 2px; }
 .pf-edit, .pf-del, .pf-goto { font-size: .82rem; }
+
+.fin-ext td, .fin-ext th { font-size: .8rem; padding: 5px 8px; }
+.fin-ext td:first-child { color: var(--muted); font-weight: 600; }

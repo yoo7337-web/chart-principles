@@ -2089,6 +2089,28 @@ function renderLookupFin(st) {
       pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#16a34a"/>
         <text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#15803d">${p[2].toFixed(1)}%</text>`).join("");
   }
+  // 확장 지표 표: 순이익·순이익률·EPS·ROE·부채비율·주당배당금
+  let extTable = "";
+  const ext = co.fin_ext;
+  if (ext?.length) {
+    const kr = st.market === "kr";
+    const fmtN = (v) => v == null ? "-" : finFmt(v, co.fin_unit);
+    const fmtP = (v, warn) => v == null ? "-" :
+      `<span class="${warn ? (v >= 200 ? "neg" : "") : (v >= 0 ? "pos" : "neg")}">${v.toLocaleString(undefined, { maximumFractionDigits: 1 })}%</span>`;
+    const fmtE = (v) => v == null ? "-" : (kr ? Math.round(v).toLocaleString() + "원" : "$" + v);
+    const ROWS = [
+      ["순이익", (r) => fmtN(r.net)],
+      ["순이익률", (r) => fmtP(r.npm)],
+      ["EPS", (r) => fmtE(r.eps)],
+      ["ROE", (r) => fmtP(r.roe)],
+      ["부채비율", (r) => fmtP(r.debt, true)],
+    ];
+    if (ext.some((r) => r.dps != null)) ROWS.push(["주당배당금", (r) => fmtE(r.dps)]);
+    extTable = `<div class="tablewrap" style="margin-top:6px"><table class="fin-ext">
+      <tr><th></th>${ext.map((r) => `<th>${r.y}${r.est ? "(E)" : ""}</th>`).join("")}</tr>
+      ${ROWS.map(([name, f]) => `<tr><td>${name}</td>${ext.map((r) => `<td>${f(r)}</td>`).join("")}</tr>`).join("")}
+    </table></div>`;
+  }
   host.innerHTML = `<h3 class="lk-h3">📊 연간 실적 <span class="sub-note">(단위 ${co.fin_unit === "억원" ? "조/억원" : "USD"} · (E)=컨센서스 추정 · ${st.market === "kr" ? (co.fin_src === "DART" ? "DART 전자공시 실적 + 네이버 추정" : "네이버") : "Yahoo"})</span></h3>
     <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
       <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>
@@ -2096,7 +2118,8 @@ function renderLookupFin(st) {
     </svg>
     <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출액 ·
       <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#16a34a">●─</span> 영업이익률(%)
-      · 옅은색 = 추정치</p>`;
+      · 옅은색 = 추정치</p>
+    ${extTable}`;
 }
 
 // 공시(6개월)·뉴스(1주일) 피드
