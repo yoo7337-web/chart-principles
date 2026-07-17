@@ -2520,7 +2520,7 @@ function pfRenderList(arr) {
             <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a></div>`).join("") : `<p class="mini-note">없음</p>`}</div>
         <div><div class="perf-h">📢 최근 공시</div>
           ${fd.disc?.length ? fd.disc.slice(0, 5).map((d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(5)}</span>
-            <span>${d.title}</span></div>`).join("") : `<p class="mini-note">없음</p>`}</div>
+            ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>` : `<span>${d.title}</span>`}</div>`).join("") : `<p class="mini-note">없음</p>`}</div>
       </div>` : "";
     return `<details class="card-flat pf-card ${c.grade}" ${c.grade !== "good" ? "open" : ""}>
       <summary class="pf-sum">
