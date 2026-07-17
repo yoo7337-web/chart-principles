@@ -35,6 +35,7 @@ let lookupInd = null;
 let lookupSupply = null;
 let simChart = null;
 let applyRendered = false;
+let rankRendered = false;
 let regimeRendered = false;
 let todayRendered = false;
 let simRendered = false;
@@ -56,21 +57,17 @@ function activateTab(tabId) {
   document.querySelectorAll(".panel").forEach((x) => x.classList.toggle("active", x.id === "tab-" + tabId));
   const group = document.querySelector(`.tabs [data-tab="${tabId}"]`)?.closest(".tabs")?.dataset.groupTabs;
   if (group) lastTabOfGroup[group] = tabId;
+  if (tabId === "rank" && !rankRendered) renderRank();
   if (tabId === "chart" && !chart) renderChartTab();
   if (tabId === "apply" && !applyRendered) renderApply();
-  if (tabId === "regime" && !regimeRendered) renderRegime();
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
-  if (tabId === "sim" && !simRendered) renderSim();
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
-  if (tabId === "macro" && !macroRendered) renderMacro();
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "internals" && !internalsRendered) renderInternals();
   if (tabId === "rotation" && !rotationRendered) renderRotation();
   if (tabId === "gurus" && !gurusRendered) renderGurus();
-  if (tabId === "value" && !valRendered) initValue();
-  if (tabId === "deals" && !dealsRendered) renderDeals();
 }
 
 document.querySelectorAll(".tab").forEach((b) =>
@@ -308,6 +305,8 @@ function ruleTable(rows, withReason) {
 }
 
 function renderRank() {
+  rankRendered = true;
+  if (!regimeRendered) renderRegime();  // 국면별 원칙(흡수 섹션)
   const m = DATA.meta;
   const nextRevalidate = (() => {
     const d = new Date(DATA.generated);
@@ -559,6 +558,7 @@ const VERDICT_CLS = { "적용됨": "ok", "부분 적용": "partial", "적용 안
 function renderApply() {
   if (!APPLY) { $("#apply-context").textContent = "apply2026.json 로드 실패 — python analysis\\apply2026.py 실행 필요"; return; }
   applyRendered = true;
+  if (!simRendered) renderSim();  // 시뮬레이션(흡수 섹션)
   const c = APPLY.context;
   $("#apply-context").innerHTML =
     `<b>검증 기간</b> ${APPLY.period} · 신호 후 <b>${APPLY.horizon}영업일</b> 수익률로 판정<br>
@@ -1460,6 +1460,12 @@ function archiveList(arch, withStock) {
 function renderNews() {
   if (!NEWS) { $("#news-context").textContent = "news.json 없음 — python analysis\\market_news.py 실행 필요"; return; }
   newsRendered = true;
+  if (!dealsRendered) renderDeals();  // 딜 레이더(흡수 서브뷰)
+  document.querySelectorAll("#nd-toggle button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("#nd-toggle button").forEach((x) => x.classList.toggle("active", x === b));
+    $("#nd-news").style.display = b.dataset.nd === "news" ? "" : "none";
+    $("#nd-deals").style.display = b.dataset.nd === "deals" ? "" : "none";
+  });
   $("#news-context").innerHTML =
     `<b>기사 수집</b> ${NEWS.generated} (${relTime(NEWS.generated)} · <b>클라우드 30분 주기</b>) · <b>AI 큐레이션</b> ${NEWS.curation_at || "-"} ·
      Google News · 30일 누적 보관`;
@@ -1510,6 +1516,7 @@ function lineChart(hostSel, series, color, refLine) {
 function renderInternals() {
   if (!MPRO) { $("#int-context").textContent = "market_pro.json 없음 — python analysis\\market_pro.py 실행 필요"; return; }
   internalsRendered = true;
+  if (!macroRendered) renderMacro();  // 매크로 카드(흡수 섹션)
 
   if (MPRO.brief) {
     $("#int-brief").style.display = "";
@@ -1797,10 +1804,12 @@ function renderLookupProfile(st) {
   const gv = document.getElementById("goto-value");
   if (gv) gv.addEventListener("click", (e) => {
     e.preventDefault();
-    activateTab("value");
+    const box = document.getElementById("value-inline");
+    box.open = true;
     if (!valRendered) initValue();
     loadValue(`${st.market}_${st.ticker}`, st.name);
     $("#val-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 
@@ -2471,6 +2480,6 @@ Promise.all([
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal;
-    renderRank();
+    renderHome();  // 첫 화면 = 마켓 홈 (IA 재편)
   })
   .catch((e) => { $("#meta").textContent = "results.json 로드 실패 — 먼저 python analysis\\report.py 실행: " + e; });
