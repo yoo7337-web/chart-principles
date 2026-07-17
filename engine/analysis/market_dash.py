@@ -228,6 +228,9 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
             "_mcap": float(smap.get(f"{mk}_{tk}", {}).get("mcap") or 0),
         })
 
+    # 전 종목 최신 시세 맵 — 종목조회 헤더가 히트맵과 같은 소스를 쓰도록(주1 stocks/*.json 지연 보정)
+    quotes = {f"{mk}_{r['t']}": [r["last"], r["chg"]] for mk in snaps for r in snaps[mk]}
+
     featured, movers = {}, {}
     for mk, rows in snaps.items():
         top2 = sorted([r for r in rows if r["_mcap"] > 0], key=lambda r: -r["_mcap"])[:2]
@@ -247,7 +250,7 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
             "gainers": strip(sorted(liq, key=lambda r: -r["chg"])),
             "losers": strip(sorted(liq, key=lambda r: r["chg"])),
         }
-    return featured, movers
+    return featured, movers, quotes
 
 
 def main():
@@ -267,7 +270,7 @@ def main():
     print("[3/4] 섹터 히트맵 + 홈(featured/movers)...")
     smap = build_sector_map(data, kr_names)
     heatmap = build_heatmap(data, kr_names, smap, chg_map)
-    featured, movers = build_home_extras(data, kr_names, smap, chg_map)
+    featured, movers, quotes = build_home_extras(data, kr_names, smap, chg_map)
 
     print("[4/4] 저장...")
     asof = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
@@ -275,7 +278,7 @@ def main():
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "asof": asof, "regime": regime,
         "macro": macro, "breadth": breadth, "hot": hot, "heatmap": heatmap,
-        "featured": featured, "movers": movers,
+        "featured": featured, "movers": movers, "quotes": quotes,
     }
     (APP_DATA / "market.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     ks = breadth["kr"]

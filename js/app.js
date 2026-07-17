@@ -1682,14 +1682,21 @@ function loadExtras() {
   return EXTRAS.loading;
 }
 
+// 최신 시세: market.json quotes(30분 갱신, 히트맵과 동일 소스) 우선 → 없으면 종목 시계열 폴백
+function freshQuote(st) {
+  const q = MARKET?.quotes?.[`${st.market}_${st.ticker}`];
+  if (q) return { cur: q[0], chg: q[1], src: `${relTime(MARKET.generated)} 시세 (히트맵과 동일 · 30분 갱신)` };
+  const s = st.series;
+  const cur = s[s.length - 1]?.c, prev = s[s.length - 2]?.c;
+  return { cur, chg: cur != null && prev ? cur / prev - 1 : null, src: `종가 기준 ${st.asof}` };
+}
+
 // 헤더: 로고 + 종목명 + 현재가/등락
 function renderLookupHead(st) {
   const host = $("#lookup-head");
   host.style.display = "";
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
-  const s = st.series;
-  const cur = s[s.length - 1]?.c, prev = s[s.length - 2]?.c;
-  const chg = cur != null && prev ? cur / prev - 1 : null;
+  const { cur, chg, src } = freshQuote(st);
   const up = (chg ?? 0) >= 0;
   host.innerHTML = `
     ${co.logo ? `<img class="lk-logo" src="${co.logo}" alt="" onerror="this.style.display='none'">` : ""}
@@ -1697,7 +1704,7 @@ function renderLookupHead(st) {
       <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span></div>
       <div class="lk-price">${fmtPrice(cur, st.market)}
         ${chg != null ? `<span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(chg, 2)}</span>` : ""}
-        <span class="sub-note">종가 기준 ${st.asof}</span></div>
+        <span class="sub-note">${src}</span></div>
     </div>`;
 }
 
@@ -1723,7 +1730,7 @@ function renderLookupCons(st) {
   const cons = co?.cons;
   if (!cons?.target) { host.style.display = "none"; return; }
   host.style.display = "";
-  const cur = st.series[st.series.length - 1]?.c;
+  const { cur } = freshQuote(st);  // 히트맵과 동일한 30분 시세로 괴리율 계산
   const upside = cur ? cons.target / cur - 1 : null;
   let opLabel = "-", opDesc = "";
   if (st.market === "kr" && cons.opinion != null) {
