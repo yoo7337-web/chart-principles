@@ -1126,16 +1126,16 @@ function watchTvTicker() {
   setTimeout(() => {
     const frame = tv.querySelector("iframe");
     const ok = frame && frame.clientHeight > 10;
-    if (ok) { const self = $("#macro-ticker"); if (self) self.style.display = "none"; }
+    if (ok) { renderMacroTicker(["^KS11", "^KQ11", "^SOX", "^VIX"]); }  // TV가 못 싣는 지수(라이선스)만 자체 배치 티커로
     else tv.style.display = "none";
   }, 6000);
 }
 
 // 자체 매크로 데이터로 지수 티커 스트립 렌더 (TradingView 로딩 실패 시 폴백 — 사이트 데이터와 일치)
-function renderMacroTicker() {
+function renderMacroTicker(pickOverride) {
   const host = $("#macro-ticker");
   if (!host || !MARKET?.macro) return;
-  const pick = ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X", "^VIX", "^TNX", "CL=F"];
+  const pick = pickOverride || ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X", "^VIX", "^TNX", "CL=F"];
   const byId = Object.fromEntries(MARKET.macro.map((m) => [m.id, m]));
   host.innerHTML = pick.filter((id) => byId[id]).map((id) => {
     const m = byId[id]; const up = m.chg >= 0;
