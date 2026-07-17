@@ -778,19 +778,22 @@ function fillTodayTable() {
     b.addEventListener("click", () => toggleTodayChart(b, rows[+b.dataset.i])));
 }
 
-// 신호 행 아래에 해당 종목 미니차트 펼침 — 신호일 ★ 강조 + 같은 원칙의 과거 신호 표시
+// 신호 행 아래에 해당 종목 미니차트 펼침 — 신호일 ★ 강조 + 같은 원칙의 과거 신호 + 원칙 보조지표 패널
 let todayChart = null;
+let todayInd = null;
 function toggleTodayChart(btn, sig) {
   const tr = btn.closest("tr");
   const open = tr.nextElementSibling?.classList.contains("today-chart-row");
   document.querySelectorAll(".today-chart-row").forEach((r) => r.remove());
   if (todayChart) { todayChart.remove(); todayChart = null; }
+  if (todayInd) { todayInd.remove(); todayInd = null; }
   document.querySelectorAll(".today-chart-btn").forEach((x) => { x.textContent = "📈 보기"; });
   if (open) return;  // 이미 열려 있었으면 닫기만
   btn.textContent = "▲ 닫기";
   const row = document.createElement("tr");
   row.className = "today-chart-row";
-  row.innerHTML = `<td colspan="7"><div class="chart" style="height:300px"></div><p class="legend"></p></td>`;
+  row.innerHTML = `<td colspan="7"><div class="chart" style="height:300px"></div>
+    <div class="chart today-ind" style="height:150px;margin-top:6px;display:none"></div><p class="legend"></p></td>`;
   tr.after(row);
   fetch(`data/stocks/${sig.market}_${sig.ticker}.json` + _cb)
     .then((r) => (r.ok ? r.json() : null)).then((st) => {
@@ -808,6 +811,16 @@ function toggleTodayChart(btn, sig) {
         ser.setData(s.filter((x) => x[k] != null).map((x) => ({ time: x.t, value: x[k] })));
       };
       line("ma20", "#f39c12"); line("ma60", "#8e44ad");
+      // 볼린저 계열 원칙은 밴드 오버레이 (점선)
+      const bbRule = /^bb_|bollinger/.test(sig.rule_id);
+      if (bbRule) {
+        const dashed = (k) => {
+          const ser = todayChart.addLineSeries({ color: "#b0b8bf", lineWidth: 1, lineStyle: 2,
+            priceLineVisible: false, lastValueVisible: false });
+          ser.setData(s.filter((x) => x[k] != null).map((x) => ({ time: x.t, value: x[k] })));
+        };
+        dashed("bbu"); dashed("bbd");
+      }
       const t0 = s[0].t;
       const marks = st.markers.filter((m) => m.rule_id === sig.rule_id && m.t >= t0);
       cd.setMarkers(marks.map((m) => ({
@@ -817,9 +830,17 @@ function toggleTodayChart(btn, sig) {
         text: m.t === sig.date ? "★오늘" : "",
       })));
       todayChart.timeScale().fitContent();
+      // 원칙의 보조지표 패널 (MACD 교차·RSI·스토캐·OBV·이격도 원칙이면 해당 지표 표시)
+      const kind = IND_PANE[sig.rule_id];
+      let indLegend = "";
+      if (kind) {
+        todayInd = drawOscKind(row.querySelector(".today-ind"), kind, s, marks.map((m) => m.t));
+        todayInd?.timeScale().fitContent();
+        indLegend = " · " + IND_LEGEND[kind] + " (●=신호일)";
+      }
       row.querySelector(".legend").innerHTML =
         `<b>${sig.rule}</b> 신호 — ★=이번 신호(${sig.date}) · 초록/빨강 화살표=같은 원칙의 최근 6개월 신호 ·
-         ─ <span style="color:#f39c12">MA20</span> <span style="color:#8e44ad">MA60</span> ·
+         ─ <span style="color:#f39c12">MA20</span> <span style="color:#8e44ad">MA60</span>${bbRule ? ' · <span style="color:#b0b8bf">볼린저밴드(점선)</span>' : ""}${indLegend} ·
          상세 분석은 종목명 클릭 → 종목 조회`;
     });
 }
