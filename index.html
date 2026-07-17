@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=40">
-<script src="firebase-config.js?v=40"></script>
-<script src="js/auth.js?v=40"></script>
+<link rel="stylesheet" href="css/style.css?v=41">
+<script src="firebase-config.js?v=41"></script>
+<script src="js/auth.js?v=41"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -133,7 +133,8 @@
     <div id="lookup-info" class="rule-info" style="display:none"></div>
     <div id="lookup-story" class="commentary" style="display:none"></div>
     <div class="controls" id="lookup-filter" style="display:none">
-      <label><input type="radio" name="sigfilter" value="all" checked> 전체 신호</label>
+      <label><input type="radio" name="sigfilter" value="core" checked> ⭐ 채택 원칙만</label>
+      <label><input type="radio" name="sigfilter" value="all"> 전체 신호</label>
       <label><input type="radio" name="sigfilter" value="on"> ✅ 현 국면 적용 원칙만</label>
       <label><input type="radio" name="sigfilter" value="off"> ⛔ 미적용 원칙만</label>
       <span id="lookup-chips" class="sig-chips"></span>
@@ -141,6 +142,9 @@
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
+      </span>
+      <span class="mk-toggle" id="lookup-range">
+        <button data-n="250" class="active">1년</button><button data-n="750">3년</button><button data-n="1250">5년</button>
       </span>
       <label>보조지표 <select id="lookup-osc">
         <option value="">원칙 연동 (원칙 선택 시 자동)</option>
@@ -428,6 +432,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=40"></script>
+<script src="js/app.js?v=41"></script>
 </body>
 </html>

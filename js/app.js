@@ -803,6 +803,7 @@ function toggleTodayChart(btn, sig) {
     .then((r) => (r.ok ? r.json() : null)).then((st) => {
       const el = row.querySelector(".chart");
       if (!st) { el.textContent = "차트 데이터 없음 (stocks JSON 미생성 종목)"; el.style.padding = "20px"; return; }
+      if (!st._ta) { taEnrich(st.series); st._ta = true; }
       const s = st.series.slice(-130);
       todayChart = LightweightCharts.createChart(el, baseChartOpts(el, 300));
       const cd = todayChart.addCandlestickSeries({
@@ -896,6 +897,11 @@ function loadLookup(key) {
         drawLookupChart();
       });
       $("#lookup-osc").onchange = () => { lookupOsc = $("#lookup-osc").value; drawLookupChart(); };
+      tfbar.querySelectorAll("#lookup-range button").forEach((b) => b.onclick = () => {
+        lookupRange = +b.dataset.n;
+        tfbar.querySelectorAll("#lookup-range button").forEach((x) => x.classList.toggle("active", x === b));
+        drawLookupChart();
+      });
     }
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
     renderLookupHead(st);
@@ -932,10 +938,14 @@ let lookupTf = "d";   // 일/주/월봉
 let lookupOsc = "";   // 수동 선택 오실레이터 ("" = 원칙 연동)
 const TF_KO = { d: "일봉", w: "주봉", m: "월봉" };
 
+let lookupRange = 250;  // 표시 봉 수: 1년 250 / 3년 750 / 5년 1250
+
 function drawLookupChart() {
   const st = LOOKUP_ST;
+  if (!st._ta) { taEnrich(st.series); st._ta = true; }  // 지표는 클라이언트 계산(OHLCV 슬림 JSON)
   const tf = lookupTf;
-  const s = resampleBars(st.series, tf);
+  const ranged = st.series.slice(-lookupRange);
+  const s = resampleBars(ranged, tf);
   const selRule = $("#lookup-rule").value;  // "" = 전체
   $("#lookup-info").innerHTML =
     `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · 기준일 ${st.asof} · ${TF_KO[tf]}`
@@ -968,9 +978,10 @@ function drawLookupChart() {
   vol.setData(s.map((x) => ({ time: x.t, value: x.v, color: x.c >= x.o ? "#fecaca" : "#bfdbfe" })));
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
-  const filt = document.querySelector('input[name="sigfilter"]:checked')?.value || "all";
+  const filt = document.querySelector('input[name="sigfilter"]:checked')?.value || "core";
   const shown = st.markers.filter((m) => {
     if (selRule && m.rule_id !== selRule) return false;
+    if (filt === "core" && !SELECTED_RULES.has(m.rule_id)) return false;  // ⭐ 최종 채택 원칙만(기본)
     const on = ruleActive(m.rule_id, st.market);
     if (filt === "on" && !on) return false;
     if (filt === "off" && on) return false;
@@ -978,7 +989,13 @@ function drawLookupChart() {
   });
   // 주/월봉에서는 일 단위 신호일을 해당 봉으로 스냅
   const barTimes = s.map((x) => x.t);
-  const snap = (t) => { if (tf === "d") return t; for (const bt of barTimes) if (bt >= t) return bt; return null; };
+  const t0 = barTimes[0];
+  const snap = (t) => {
+    if (t < t0) return null;  // 표시 범위 밖
+    if (tf === "d") return t;
+    for (const bt of barTimes) if (bt >= t) return bt;
+    return null;
+  };
   candles.setMarkers(shown.map((m) => {
     const bt = snap(m.t);
     if (!bt) return null;
@@ -1730,6 +1747,7 @@ function toggleRotMembers(tr, sector, mk) {
 
 /* ---------- 종목 조회: 신호 라벨·게이팅·내러티브·프로파일 ---------- */
 // 차트 마커용 원칙 축약 (2~4자)
+let SELECTED_RULES = new Set();  // 최종 채택 원칙(매수5·매도5) — DATA 로드 후 채움
 const RULE_ABBR = {
   disparity_low: "이격", bb_lower_rsi: "BB·R", bb_lower_touch: "BB",
   rsi_oversold_exit: "R30", macd_cross_up_below0: "M↑",
@@ -2908,6 +2926,7 @@ Promise.all([
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal;
+    SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     renderHome();  // 첫 화면 = 마켓 홈 (IA 재편)
   })
   .catch((e) => { $("#meta").textContent = "results.json 로드 실패 — 먼저 python analysis\\report.py 실행: " + e; });
