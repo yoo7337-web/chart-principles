@@ -1652,10 +1652,46 @@ function drawRotation() {
     `<tr><th>섹터 (종목수)</th><th>1주</th><th>1개월</th><th>3개월</th>
        <th>RS 1주</th><th>RS 1개월</th><th>RS 3개월</th></tr>
      <tr style="font-weight:700"><td>시장 전체</td>${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td></tr>` +
-    rot.sectors.map((s) => `<tr>
-      <td>${s.sector} <span class="sub-note">(${s.n})</span></td>
+    rot.sectors.map((s) => `<tr class="rot-row" data-sector="${s.sector}" title="클릭 = 소속 종목 보기">
+      <td>▸ ${s.sector} <span class="sub-note">(${s.n})</span></td>
       ${rsCell(s.w1)}${rsCell(s.m1)}${rsCell(s.m3)}${rsCell(s.rs_w1)}${rsCell(s.rs_m1)}${rsCell(s.rs_m3)}
     </tr>`).join("");
+  document.querySelectorAll("#rot-table .rot-row").forEach((tr) =>
+    tr.addEventListener("click", () => toggleRotMembers(tr, tr.dataset.sector, mk)));
+}
+
+// 섹터 행 클릭 → 소속 종목(히트맵 유니버스, 시총순) 펼침
+function toggleRotMembers(tr, sector, mk) {
+  const open = tr.nextElementSibling?.classList.contains("rot-members");
+  document.querySelectorAll(".rot-members").forEach((r) => r.remove());
+  document.querySelectorAll("#rot-table .rot-row td:first-child").forEach((td) => {
+    td.innerHTML = td.innerHTML.replace("▾", "▸");
+  });
+  if (open) return;
+  tr.querySelector("td").innerHTML = tr.querySelector("td").innerHTML.replace("▸", "▾");
+  const members = (MARKET?.heatmap || [])
+    .filter((t) => t.m === mk && t.sector === sector)
+    .sort((a, b) => b.mcap - a.mcap);
+  const row = document.createElement("tr");
+  row.className = "rot-members";
+  row.innerHTML = `<td colspan="7"><div class="rot-mem-grid">${
+    members.length ? members.map((t) => `
+      <a href="#" class="rot-mem" data-key="${t.m}_${t.t}">
+        <span class="rot-mem-name">${t.name}</span>
+        <b class="${t.chg >= 0 ? "pos" : "neg"}">${pct(t.chg, 1)}</b>
+        <span class="sub-note">${fmtMcap(t.mcap, mk)}</span>
+      </a>`).join("")
+    : `<span class="mini-note">이 섹터의 종목 정보 없음</span>`
+  }</div>
+  <p class="sub-note" style="margin:6px 0 2px">시총순 · 등락=당일 · 클릭 = 종목 조회로 이동 (분석 유니버스 내 종목만 표시)</p></td>`;
+  tr.after(row);
+  row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.querySelector('.group[data-group="discover"]').click();
+    document.querySelector('[data-tab="lookup"]').click();
+    if (!lookupRendered) initLookup();
+    loadLookup(a.dataset.key);
+  }));
 }
 
 /* ---------- 종목 조회: 신호 라벨·게이팅·내러티브·프로파일 ---------- */

@@ -401,3 +401,15 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .vd-name { font-size: .76rem; color: var(--muted); }
 .vd-val { font-size: 1.15rem; margin: 4px 0 2px; }
 .vd-note { font-size: .78rem; color: var(--ink); }
+
+/* 섹터로테이션 — 소속 종목 펼침 + RS 가이드 */
+.rot-row { cursor: pointer; }
+.rot-row:hover td { background: #f8fafc; }
+.rot-members > td { background: #fafbfc; }
+.rot-mem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; padding: 6px 0; }
+.rot-mem { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--card); text-decoration: none; color: var(--ink); font-size: .82rem; white-space: nowrap; }
+.rot-mem:hover { border-color: var(--accent); }
+.rot-mem-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.rs-guide { padding: 4px 16px 12px; font-size: .86rem; line-height: 1.65; }
+.rs-guide p { margin: 6px 0; }

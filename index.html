@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=31">
-<script src="firebase-config.js?v=31"></script>
-<script src="js/auth.js?v=31"></script>
+<link rel="stylesheet" href="css/style.css?v=32">
+<script src="firebase-config.js?v=32"></script>
+<script src="js/auth.js?v=32"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -242,6 +242,25 @@
 
   <section id="tab-rotation" class="panel">
     <div class="criteria" id="rot-context"></div>
+    <details class="card-flat" style="margin-bottom:12px">
+      <summary>📖 RS(상대강도)란? — 읽는 법</summary>
+      <div class="rs-guide">
+        <p><b>RS(Relative Strength, 상대강도) = 섹터 수익률 − 시장 전체 수익률.</b>
+        "얼마나 올랐나"가 아니라 <b>"시장보다 얼마나 더/덜 올랐나"</b>를 봅니다.</p>
+        <p>예: 시장이 -5%인데 어떤 섹터가 -1%라면, 절대수익은 마이너스지만 <b>RS는 +4%p</b> —
+        하락장에서 자금이 상대적으로 이 섹터로 피신하고 있다는 뜻입니다. 반대로 시장 +10%에 섹터 +4%면
+        올랐어도 RS는 -6%p, 소외 섹터입니다.</p>
+        <p><b>기간 비교로 로테이션 단계를 읽습니다:</b></p>
+        <ul style="margin:4px 0 8px 20px; line-height:1.7">
+          <li><b>RS가 3개월 &lt; 1개월 &lt; 1주 순으로 커짐</b> → 자금 유입이 가속 중 (주도 섹터로 부상)</li>
+          <li><b>3개월 &gt; 1개월 &gt; 1주로 작아짐</b> → 주도력이 식는 중 (차익실현·이탈 시작)</li>
+          <li><b>1주만 급등</b> → 단기 순환매 가능성 — 지속성 확인 전엔 추격 주의</li>
+          <li><b>전 기간 RS 음수</b> → 구조적 소외 섹터</li>
+        </ul>
+        <p class="sub-note">수익률은 시가총액 가중(대형주 영향 큼) · 섹터 분류: KR=네이버 업종 / US=GICS ·
+        RS는 상대 개념이라 하락장에선 "덜 빠진 것"도 +로 표시됩니다</p>
+      </div>
+    </details>
     <div class="controls"><label>시장 <select id="rot-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label></div>
     <div class="tablewrap card-flat"><table id="rot-table"></table></div>
   </section>
@@ -333,6 +352,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=31"></script>
+<script src="js/app.js?v=32"></script>
 </body>
 </html>
