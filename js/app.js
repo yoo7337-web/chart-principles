@@ -40,6 +40,7 @@ let regimeRendered = false;
 let todayRendered = false;
 let simRendered = false;
 let lookupRendered = false;
+let journalRendered = false;
 
 const $ = (s) => document.querySelector(s);
 const pct = (x, d = 2) => (x == null ? "-" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
@@ -62,6 +63,7 @@ function activateTab(tabId) {
   if (tabId === "apply" && !applyRendered) renderApply();
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
+  if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
@@ -2165,6 +2167,180 @@ function renderDeals() {
   };
   document.querySelectorAll('input[name="dealsview"]').forEach((r) => { r.onchange = drawList; });
   drawList();
+}
+
+/* ---------- 매매일지 (localStorage — 서버 전송 없음) ---------- */
+const JR_KEY = "cp_journal_v1";
+const JR_EMOTIONS = ["차분", "확신", "조급", "공포", "탐욕", "FOMO", "복수심", "피곤"];
+let jrFilter = "all";
+let jrEditId = null;
+
+function jrLoad() { try { return JSON.parse(localStorage.getItem(JR_KEY)) || []; } catch (e) { return []; } }
+function jrSave(arr) { localStorage.setItem(JR_KEY, JSON.stringify(arr)); }
+function jrIsKr(t) { return /^\d{6}$/.test(t); }
+function jrPnl(r) {
+  if (r.exit == null || r.exit === "") return null;
+  const d = (r.exit - r.entry) * (r.side === "short" ? -1 : 1);
+  return { amt: d * r.qty, pct: r.entry ? d / r.entry : 0 };
+}
+function jrMoney(v, kr) {
+  const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+  const a = Math.abs(v);
+  return sign + (kr ? Math.round(a).toLocaleString() + "원" : "$" + a.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+}
+
+function initJournal() {
+  journalRendered = true;
+  if (!LOOKUP_INDEX) initLookup();  // 종목 자동완성 datalist 재사용
+  $("#jr-new").onclick = () => jrOpenModal(null);
+  $("#jr-close").onclick = $("#jr-cancel").onclick = () => $("#jr-modal").close();
+  $("#jr-filter").querySelectorAll(".chip").forEach((b) => b.onclick = () => {
+    jrFilter = b.dataset.f;
+    $("#jr-filter").querySelectorAll(".chip").forEach((x) => x.classList.toggle("active", x === b));
+    jrRenderList();
+  });
+  $("#jr-side").querySelectorAll("button").forEach((b) => b.onclick = () =>
+    $("#jr-side").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b)));
+  $("#jr-emo-chips").innerHTML = JR_EMOTIONS.map((e) => `<span class="badge jr-emo">${e}</span>`).join("");
+  $("#jr-emo-chips").querySelectorAll(".jr-emo").forEach((c) => c.onclick = () => {
+    const inp = $("#jr-emotion");
+    inp.value = inp.value ? (inp.value.includes(c.textContent) ? inp.value : inp.value + ", " + c.textContent) : c.textContent;
+  });
+  $("#jr-form").onsubmit = (e) => { e.preventDefault(); jrSubmit(); };
+  $("#jr-delete").onclick = () => {
+    if (!jrEditId || !confirm("이 거래 기록을 삭제할까요?")) return;
+    jrSave(jrLoad().filter((r) => r.id !== jrEditId));
+    $("#jr-modal").close(); jrRender();
+  };
+  $("#jr-export").onclick = () => {
+    const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), trades: jrLoad() }, null, 2)],
+      { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `매매일지_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+  $("#jr-import").onclick = () => $("#jr-import-file").click();
+  $("#jr-import-file").onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    f.text().then((txt) => {
+      try {
+        const d = JSON.parse(txt);
+        const arr = Array.isArray(d) ? d : d.trades;
+        if (!Array.isArray(arr)) throw new Error("bad");
+        const cur = jrLoad();
+        const ids = new Set(cur.map((r) => r.id));
+        const add = arr.filter((r) => r.id && !ids.has(r.id));
+        jrSave(cur.concat(add));
+        alert(`${add.length}건 가져옴 (중복 ${arr.length - add.length}건 제외)`);
+        jrRender();
+      } catch (err) { alert("JSON 형식이 올바르지 않습니다"); }
+      e.target.value = "";
+    });
+  };
+  jrRender();
+}
+
+function jrOpenModal(trade) {
+  jrEditId = trade?.id || null;
+  $("#jr-modal-title").textContent = trade ? "거래 수정 · 복기" : "새 거래 기록";
+  $("#jr-save").textContent = trade ? "저장" : "＋ 기록";
+  $("#jr-delete").style.display = trade ? "" : "none";
+  $("#jr-ticker").value = trade ? (jrIsKr(trade.ticker) ? `${trade.name} (${trade.ticker})` : trade.ticker) : "";
+  $("#jr-qty").value = trade?.qty ?? "";
+  $("#jr-entry").value = trade?.entry ?? "";
+  $("#jr-exit").value = trade?.exit ?? "";
+  $("#jr-etime").value = trade?.etime || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  $("#jr-xtime").value = trade?.xtime || "";
+  $("#jr-reason").value = trade?.reason || "";
+  $("#jr-emotion").value = trade?.emotion || "";
+  $("#jr-note").value = trade?.note || "";
+  const side = trade?.side || "buy";
+  $("#jr-side").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x.dataset.s === side));
+  $("#jr-modal").showModal();
+}
+
+function jrSubmit() {
+  const raw = $("#jr-ticker").value.trim();
+  const m = raw.match(/\(([A-Za-z0-9.]+)\)\s*$/);  // "삼성전자 (005930)" → 005930
+  const ticker = (m ? m[1] : raw).toUpperCase();
+  const hit = LOOKUP_INDEX?.find((x) => x.ticker.toUpperCase() === ticker || x.name === raw);
+  const rec = {
+    id: jrEditId || ("t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+    ticker: hit ? hit.ticker : ticker,
+    name: m ? raw.replace(/\s*\(.*\)$/, "") : (hit?.name || ticker),
+    side: $("#jr-side").querySelector(".active")?.dataset.s || "buy",
+    qty: +$("#jr-qty").value,
+    entry: +$("#jr-entry").value,
+    exit: $("#jr-exit").value === "" ? null : +$("#jr-exit").value,
+    etime: $("#jr-etime").value, xtime: $("#jr-xtime").value || null,
+    reason: $("#jr-reason").value.trim(), emotion: $("#jr-emotion").value.trim(), note: $("#jr-note").value.trim(),
+  };
+  const arr = jrLoad();
+  const i = arr.findIndex((r) => r.id === rec.id);
+  if (i >= 0) arr[i] = rec; else arr.unshift(rec);
+  jrSave(arr);
+  $("#jr-modal").close();
+  jrRender();
+}
+
+function jrRender() { jrRenderStats(); jrRenderList(); }
+
+function jrRenderStats() {
+  const arr = jrLoad();
+  const closed = arr.filter((r) => jrPnl(r));
+  let krSum = 0, usSum = 0, win = 0;
+  closed.forEach((r) => {
+    const p = jrPnl(r);
+    if (jrIsKr(r.ticker)) krSum += p.amt; else usSum += p.amt;
+    if (p.amt > 0) win++;
+  });
+  const pnlTxt = [krSum ? jrMoney(krSum, true) : null, usSum ? jrMoney(usSum, false) : null]
+    .filter(Boolean).join(" · ") || "0";
+  const cls = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  $("#jr-stats").innerHTML = `
+    <div class="idx-card"><div class="sub-note">총 손익 (종료 거래)</div>
+      <div class="lk-name ${cls(krSum + usSum)}">${pnlTxt}</div></div>
+    <div class="idx-card"><div class="sub-note">승률</div>
+      <div class="lk-name">${closed.length ? Math.round(win / closed.length * 100) + "%" : "-"}
+        <span class="sub-note">${closed.length ? `(${win}/${closed.length})` : ""}</span></div></div>
+    <div class="idx-card"><div class="sub-note">거래</div>
+      <div class="lk-name">${arr.length}<span class="sub-note"> 종료 ${closed.length} · 진행 ${arr.length - closed.length}</span></div></div>`;
+}
+
+function jrRenderList() {
+  const host = $("#jr-list");
+  let arr = jrLoad();
+  if (jrFilter === "open") arr = arr.filter((r) => !jrPnl(r));
+  if (jrFilter === "closed") arr = arr.filter((r) => jrPnl(r));
+  if (!arr.length) {
+    host.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px 16px;color:var(--muted)">
+      아직 기록이 없습니다 — <b>＋ 새 거래</b>로 첫 매매를 기록해 보세요.<br>
+      <span class="sub-note">기록하는 것만으로도 충동 매매가 줄어듭니다.</span></div>`;
+    return;
+  }
+  host.innerHTML = arr.map((r) => {
+    const p = jrPnl(r);
+    const kr = jrIsKr(r.ticker);
+    const logo = kr ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${r.ticker}.svg` :
+      (EXTRAS.company?.map?.[`us_${r.ticker}`]?.logo || "");
+    return `<div class="card-flat jr-row" data-id="${r.id}">
+      ${logo ? `<img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
+      <span class="jr-main"><b>${r.name}</b> <span class="sub-note">${r.ticker}</span>
+        <span class="badge ${r.side === "buy" ? "hero" : "dim"}">${r.side === "buy" ? "매수" : "공매도"}</span>
+        <span class="badge dim" style="${p ? "" : "background:#eef2ff;color:#3730a3;border-color:#c7d2fe"}">${p ? "종료" : "진행중"}</span><br>
+        <span class="jr-sub">${r.qty}주 · ${fmtPrice(r.entry, kr ? "kr" : "us")} → ${r.exit != null ? fmtPrice(r.exit, kr ? "kr" : "us") : "—"}
+          · ${(r.etime || "").replace("T", " ")}</span>
+        ${r.reason ? `<br><span class="jr-sub">📝 ${r.reason.slice(0, 80)}</span>` : ""}
+        ${r.emotion ? `<span class="jr-sub"> · 😶 ${r.emotion}</span>` : ""}</span>
+      <span class="jr-pnl">${p ? `<b class="${p.amt >= 0 ? "pos" : "neg"}">${jrMoney(p.amt, kr)}</b><br>
+        <span class="${p.amt >= 0 ? "pos" : "neg"}">${pct(p.pct, 1)}</span>` : ""}</span>
+    </div>`;
+  }).join("");
+  host.querySelectorAll(".jr-row").forEach((el) => el.onclick = () => {
+    jrOpenModal(jrLoad().find((r) => r.id === el.dataset.id));
+  });
 }
 
 /* ---------- 투자 대가 (13F) ---------- */

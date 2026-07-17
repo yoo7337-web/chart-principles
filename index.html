@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=36">
-<script src="firebase-config.js?v=36"></script>
-<script src="js/auth.js?v=36"></script>
+<link rel="stylesheet" href="css/style.css?v=37">
+<script src="firebase-config.js?v=37"></script>
+<script src="js/auth.js?v=37"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -29,6 +29,7 @@
 <nav class="tabs" data-group-tabs="discover" style="display:none">
   <button class="tab" data-tab="today">오늘의 신호</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
+  <button class="tab" data-tab="journal">매매일지</button>
 </nav>
 <nav class="tabs" data-group-tabs="market">
   <button class="tab active" data-tab="heatmap">홈</button>
@@ -349,12 +350,66 @@
     <div id="gurus-list"></div>
   </section>
 
+  <section id="tab-journal" class="panel">
+    <div class="criteria">✍️ <b>매매일지</b> — 모든 데이터는 <b>이 브라우저에만</b> 저장됩니다(서버 전송 없음).
+      기기 변경·백업은 <b>내보내기/가져오기</b>(JSON) 사용. 손익 = (청산가−진입가)×수량, 공매도는 반대.</div>
+    <div class="idx-cards" id="jr-stats"></div>
+    <div class="home-topbar" style="margin:14px 0 10px">
+      <div class="chips" id="jr-filter">
+        <button class="chip active" data-f="all">전체</button>
+        <button class="chip" data-f="open">진행</button>
+        <button class="chip" data-f="closed">종료</button>
+      </div>
+      <span style="flex:1"></span>
+      <button class="today-chart-btn" id="jr-export">⬇ 내보내기</button>
+      <button class="today-chart-btn" id="jr-import">⬆ 가져오기</button>
+      <input type="file" id="jr-import-file" accept=".json" style="display:none">
+      <button class="jr-new" id="jr-new">＋ 새 거래</button>
+    </div>
+    <div id="jr-list"></div>
+
+    <dialog id="jr-modal">
+      <form method="dialog" class="jr-form" id="jr-form">
+        <div class="jr-head"><b id="jr-modal-title">새 거래 기록</b>
+          <button type="button" class="jr-x" id="jr-close">✕</button></div>
+        <div class="jr-grid3">
+          <label>종목 <input type="text" id="jr-ticker" placeholder="예: AAPL, 삼성전자" list="lookup-list" autocomplete="off" required></label>
+          <label>방향
+            <span class="mk-toggle" id="jr-side">
+              <button type="button" data-s="buy" class="active">매수</button>
+              <button type="button" data-s="short">공매도</button>
+            </span>
+            <span class="sub-note">보통 '매수'예요. 공매도는 빌려서 먼저 파는 고급 거래입니다.</span></label>
+          <label>수량 (주) <input type="number" id="jr-qty" min="0" step="any" placeholder="10" required></label>
+        </div>
+        <div class="jr-grid2">
+          <label>진입가 <input type="number" id="jr-entry" min="0" step="any" placeholder="150.00" required></label>
+          <label>청산가 <span class="sub-note">(비우면 진행중)</span> <input type="number" id="jr-exit" min="0" step="any" placeholder="-"></label>
+          <label>진입 시각 <input type="datetime-local" id="jr-etime"></label>
+          <label>청산 시각 <input type="datetime-local" id="jr-xtime"></label>
+        </div>
+        <label class="jr-full">매매 근거
+          <textarea id="jr-reason" rows="3" placeholder="왜 진입했는가? (차트 / 뉴스 / 패턴 / 전략)"></textarea></label>
+        <label class="jr-full">진입 당시 감정
+          <input type="text" id="jr-emotion" placeholder="차분 / 조급 / 공포 / 탐욕...">
+          <span class="badges" id="jr-emo-chips" style="margin-top:6px"></span></label>
+        <label class="jr-full">복기 노트
+          <textarea id="jr-note" rows="3" placeholder="잘한 점 · 실수 · 다음에 어떻게 할까?"></textarea></label>
+        <div class="jr-actions">
+          <button type="button" class="jr-del" id="jr-delete" style="display:none">삭제</button>
+          <span style="flex:1"></span>
+          <button type="button" class="today-chart-btn" id="jr-cancel">취소</button>
+          <button type="submit" class="jr-new" id="jr-save">＋ 기록</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
 </main>
 
 <footer>
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=36"></script>
+<script src="js/app.js?v=37"></script>
 </body>
 </html>

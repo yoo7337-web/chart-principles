@@ -418,3 +418,32 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   background: #fff; object-fit: contain; flex: 0 0 28px; display: inline-block; }
 .cal-logo { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
   background: #fff; object-fit: contain; flex: 0 0 22px; vertical-align: middle; margin-right: 6px; display: inline-block; }
+
+/* 매매일지 */
+.jr-new { border: none; background: #b91c1c; color: #fff; border-radius: 999px; padding: 8px 18px;
+  font-size: .88rem; font-weight: 700; cursor: pointer; }
+.jr-new:hover { background: #991b1b; }
+#jr-modal { border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+#jr-modal::backdrop { background: rgba(17,24,39,.45); }
+.jr-form { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.jr-head { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
+.jr-x { border: none; background: none; font-size: 1.1rem; cursor: pointer; color: var(--muted); }
+.jr-grid3 { display: grid; grid-template-columns: 1.2fr 1.3fr 0.8fr; gap: 14px; }
+.jr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .jr-grid3, .jr-grid2 { grid-template-columns: 1fr; } }
+.jr-form label { display: flex; flex-direction: column; gap: 6px; font-size: .84rem; color: var(--muted); font-weight: 600; }
+.jr-form input, .jr-form textarea { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .9rem; background: #fafbfc; font-family: inherit; }
+.jr-form input:focus, .jr-form textarea:focus { outline: 2px solid #c7d2fe; background: #fff; }
+.jr-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.jr-del { border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c; border-radius: 8px;
+  padding: 7px 14px; font-size: .84rem; cursor: pointer; }
+.jr-emo { cursor: pointer; }
+.jr-emo:hover { border-color: var(--accent); color: var(--accent); }
+.jr-row { display: flex; gap: 12px; align-items: center; cursor: pointer; }
+.jr-row:hover { border-color: var(--accent); }
+.jr-main { flex: 1; line-height: 1.6; }
+.jr-sub { font-size: .78rem; color: var(--muted); }
+.jr-pnl { text-align: right; font-size: .92rem; line-height: 1.5; }
+#jr-stats.idx-cards { grid-template-columns: repeat(3, 1fr); }
