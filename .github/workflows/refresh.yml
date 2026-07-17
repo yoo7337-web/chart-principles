@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false  # 긴 실행(stock_extras 첫 생성) 보호 — 후속은 대기
 
 jobs:
   refresh:
