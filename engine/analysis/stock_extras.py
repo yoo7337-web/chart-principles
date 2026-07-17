@@ -170,6 +170,22 @@ def kr_company(code: str) -> dict:
         if fin:
             out["fin"] = fin[-5:]
             out["fin_unit"] = "억원"
+        # 확장 지표: 순이익·순이익률·ROE·부채비율·EPS·주당배당금 (연도 조인용 y 동일 포맷)
+        _EXT = {"당기순이익": "net", "순이익률": "npm", "ROE": "roe",
+                "부채비율": "debt", "EPS": "eps", "주당배당금": "dps"}
+        ext = []
+        for key, t in sorted(titles.items()):
+            row = {"y": t["title"].rstrip("."), "est": t.get("isConsensus") == "Y"}
+            has = False
+            for kor, en in _EXT.items():
+                v = _num((rows.get(kor) or {}).get(key, {}).get("value"))
+                if v is not None:
+                    row[en] = v
+                    has = True
+            if has:
+                ext.append(row)
+        if ext:
+            out["fin_ext"] = ext[-6:]
     except Exception:
         pass
     try:  # 기업개요 (wisereport)
@@ -221,6 +237,49 @@ def us_company(tk: str) -> dict:
             if rows:
                 out["fin"] = rows[-5:]
                 out["fin_unit"] = "$M"
+        # 확장 지표: 순이익·순이익률·EPS·ROE·부채비율 (연도 조인)
+        ni = fin.loc["Net Income"] if "Net Income" in fin.index else None
+        eps_row = None
+        for nm in ("Basic EPS", "Diluted EPS"):
+            if nm in fin.index:
+                eps_row = fin.loc[nm]
+                break
+        try:
+            bs = t.balance_sheet
+        except Exception:
+            bs = None
+        eq = liab = None
+        if bs is not None:
+            for nm in ("Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"):
+                if nm in bs.index:
+                    eq = bs.loc[nm]
+                    break
+            for nm in ("Total Liabilities Net Minority Interest", "Total Liab"):
+                if nm in bs.index:
+                    liab = bs.loc[nm]
+                    break
+        ext = []
+        for col in sorted(fin.columns):
+            r = _num(rev.get(col)) if rev is not None else None
+            n = _num(ni.get(col)) if ni is not None else None
+            e = _num(eps_row.get(col)) if eps_row is not None else None
+            q = _num(eq.get(col)) if eq is not None else None
+            lb = _num(liab.get(col)) if liab is not None else None
+            row = {"y": str(col)[:4], "est": False}
+            if n is not None:
+                row["net"] = round(n / 1e6)
+                if r:
+                    row["npm"] = round(n / r * 100, 1)
+                if q:
+                    row["roe"] = round(n / q * 100, 1)
+            if e is not None:
+                row["eps"] = round(e, 2)
+            if q and lb is not None:
+                row["debt"] = round(lb / q * 100, 1)
+            if len(row) > 2:
+                ext.append(row)
+        if ext:
+            out["fin_ext"] = ext[-5:]
     except Exception:
         pass
     return out
