@@ -178,15 +178,20 @@ def load_all() -> dict:
 
 
 def _append_new(path: Path, new: pd.DataFrame) -> int:
-    """캐시 parquet에 마지막 날짜 이후 데이터만 append. 추가된 행 수 반환."""
-    old = pd.read_parquet(path)
-    add = new[new.index > old.index.max()]
-    if add.empty:
+    """캐시 parquet 병합 — 겹치는 날짜는 새 데이터로 갱신(잠정 장중 봉의 확정치 보정).
+
+    ⚠append-only였을 때의 실사고(2026-07-17): 24시간 클라우드가 장중에 처음 잡은 봉이
+    영구 동결됨(GOOGL 07-16 372.11 vs 실제 종가 354.46). 겹침 구간은 항상 새 fetch가 이김.
+    """
+    if new.empty:
         return 0
-    merged = pd.concat([old, add]).sort_index()
+    old = pd.read_parquet(path)
+    kept = old[old.index < new.index.min()]
+    merged = pd.concat([kept, new]).sort_index()
     merged = merged[~merged.index.duplicated(keep="last")]
+    changed = len(merged) - len(old)
     merged.to_parquet(path)
-    return len(add)
+    return max(changed, 0)
 
 
 def refresh_all() -> None:
