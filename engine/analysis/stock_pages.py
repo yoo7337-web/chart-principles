@@ -18,7 +18,7 @@ from common import APP_DATA, ROOT, dedupe_positions, load_ruleset
 from indicators import add_indicators
 
 OUT_DIR = APP_DATA / "stocks"
-CHART_BARS = 370  # 최근 약 1.5년
+CHART_BARS = 1250  # 최근 약 5년 (지표는 프런트 taEnrich()가 계산 — OHLCV만 저장해 용량 유지)
 SUPPLY_BARS = 120  # 수급 표시 구간
 H = 20
 
@@ -130,12 +130,7 @@ def main():
             "t": ts.strftime("%Y-%m-%d"),
             "o": fv(x.open, 2), "h": fv(x.high, 2), "l": fv(x.low, 2), "c": fv(x.close, 2),
             "v": float(x.volume),
-            "ma5": fv(x.ma5, 2), "ma20": fv(x.ma20, 2), "ma60": fv(x.ma60, 2), "ma120": fv(x.ma120, 2),
-            "bbu": fv(x.bb_up, 2), "bbd": fv(x.bb_dn, 2),
-            "rsi": fv(x.rsi, 2), "macd": fv(x.macd), "macds": fv(x.macd_sig),
-            "disp": fv(x.disparity20), "obv": fv(x.obv, 0), "obvm": fv(x.obv_ma20, 0),
-            "stoch": fv(x.stoch_k, 2),
-        } for ts, x in zip(w.index, w.itertuples())]
+        } for ts, x in zip(w.index, w.itertuples())]  # 지표 컬럼은 프런트 taEnrich()가 재계산
 
         markers, stats = [], []
         for rid, entry in ruleset.items():
