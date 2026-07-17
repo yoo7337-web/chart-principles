@@ -71,6 +71,74 @@ def kr_codes() -> dict:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
+# ---------- DART (전자공시) 재무 — 매출·영업이익·순이익 5개년 실적 ----------
+
+def _dart_key() -> str | None:
+    import os
+    k = os.getenv("DART_API_KEY", "").strip()
+    if k:
+        return k
+    for env in (Path(r"C:\Users\yoo73\fs-doctor\.env"), Path(r"C:\Users\yoo73\dart-scanner\.env")):
+        if env.exists():
+            m = re.search(r"^DART_API_KEY=(.+)$", env.read_text(encoding="utf-8"), re.M)
+            if m:
+                return m.group(1).strip().strip('"')
+    return None
+
+
+def _corp_codes(key: str) -> dict:
+    """{6자리 종목코드: corp_code} — corpCode.xml 1회 다운로드 후 캐시."""
+    cache = ROOT / "data" / "corp_codes.json"
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    import io
+    import zipfile
+    raw = urllib.request.urlopen(
+        f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={key}", timeout=30).read()
+    xml = zipfile.ZipFile(io.BytesIO(raw)).read("CORPCODE.xml").decode("utf-8")
+    out = {}
+    for m in re.finditer(r"<corp_code>(\d+)</corp_code>.*?<stock_code>(\d{6})</stock_code>", xml, re.S):
+        out[m.group(2)] = m.group(1)
+    cache.write_text(json.dumps(out), encoding="utf-8")
+    return out
+
+
+_DART = (None, {})  # (key, {code: corp_code}) — build_company가 세팅
+_DART_ROWS = {"매출액": "rev", "영업이익": "op", "당기순이익": "net"}
+
+
+def kr_fin_dart(corp_code: str, key: str) -> list:
+    """연간 실적 5개년 (fnlttSinglAcnt — 사업보고서, 연결 우선). 단위: 억원."""
+    from datetime import date as _date
+    years = {}
+    for by in (_date.today().year - 1, _date.today().year - 4):  # 각 호출이 3개년 반환 → 최대 6개년
+        try:
+            d = _getj(f"https://opendart.fss.or.kr/api/fnlttSinglAcnt.json?crtfc_key={key}"
+                      f"&corp_code={corp_code}&bsns_year={by}&reprt_code=11011")
+            if d.get("status") != "000":
+                continue
+            rows = d["list"]
+            fs = "CFS" if any(r["fs_div"] == "CFS" for r in rows) else "OFS"
+            for r in rows:
+                if r["fs_div"] != fs or r["account_nm"] not in _DART_ROWS:
+                    continue
+                k2 = _DART_ROWS[r["account_nm"]]
+                for term, ycol in (("thstrm", by), ("frmtrm", by - 1), ("bfefrmtrm", by - 2)):
+                    amt = _num(str(r.get(f"{term}_amount", "")).replace(",", ""))
+                    if amt is not None:
+                        years.setdefault(ycol, {})[k2] = round(amt / 1e8)  # 원→억원
+        except Exception:
+            pass
+    fin = []
+    for y in sorted(years):
+        v = years[y]
+        if v.get("rev") is None:
+            continue
+        opm = round(v["op"] / v["rev"] * 100, 1) if v.get("op") and v["rev"] else None
+        fin.append({"y": str(y), "rev": v.get("rev"), "op": v.get("op"), "opm": opm, "est": False})
+    return fin[-5:]
+
+
 # ---------- company.json (주 1회) ----------
 
 def kr_company(code: str) -> dict:
@@ -178,7 +246,17 @@ def _kr_parallel(codes: list, fn, label: str, workers: int = 6) -> dict:
     return out
 
 
-def build_company(quick: bool = False) -> dict:
+def build_company(quick: bool = False, prev: dict | None = None) -> dict:
+    global _DART
+    key = _dart_key()
+    if key:
+        try:
+            _DART = (key, _corp_codes(key))
+            print(f"  DART 연동: corp_code {len(_DART[1])}개")
+        except Exception as e:
+            print(f"  DART corp_code 실패({e}) — 네이버 재무만", file=sys.stderr)
+    else:
+        print("  DART_API_KEY 없음 — 네이버 재무만")
     names = kr_codes()
     codes = list(names)[:20] if quick else list(names)
     tickers = US_TICKERS[:5] if quick else US_TICKERS
@@ -193,6 +271,38 @@ def build_company(quick: bool = False) -> dict:
         if i % 25 == 0:
             print(f"  [US company] {i}/{len(tickers)}")
         time.sleep(0.2)
+
+    # DART 실적 보강 — 반드시 순차·저속(병렬 시 IP 차단 실사고). 기존 DART 데이터는 재사용.
+    if _DART[0]:
+        prev = prev or {}
+        target_year = str(__import__("datetime").date.today().year - 1)
+        done = fail_streak = fetched = 0
+        for code in codes:
+            k = f"kr_{code}"
+            if k not in cmap or code not in _DART[1]:
+                continue
+            old = prev.get(k, {})
+            est = [r for r in cmap[k].get("fin", []) if r.get("est")]
+            if old.get("fin_src") == "DART" and any(r["y"] == target_year for r in old.get("fin", [])):
+                cmap[k]["fin"] = ([r for r in old["fin"] if not r.get("est")] + est)[-6:]
+                cmap[k]["fin_src"] = "DART"
+                continue  # 최신 사업연도 이미 보유 — 재호출 불필요
+            if fail_streak >= 5:
+                continue  # 쿨다운 감지 — 남은 종목은 다음 실행에서
+            try:
+                dart = kr_fin_dart(_DART[1][code], _DART[0])
+                fail_streak = 0
+                if dart:
+                    cmap[k]["fin"] = (dart + est)[-6:]
+                    cmap[k]["fin_src"] = "DART"
+                    fetched += 1
+            except Exception:
+                fail_streak += 1
+            done += 1
+            if done % 100 == 0:
+                print(f"  [DART] {done} 처리 (신규 {fetched})")
+            time.sleep(0.3)
+        print(f"  DART 보강: 신규 {fetched} (누적은 prev 재사용)")
     print(f"  company {len(cmap)}종목")
     return cmap
 
@@ -325,10 +435,18 @@ def main():
         cur = _load(COMPANY)
         if args.force or args.quick or not _fresh(cur.get("generated"), 24 * 6):
             print("[1/2] company.json (주 1회)...")
-            cmap = build_company(args.quick)
+            cmap = build_company(args.quick, cur.get("map"))
             if args.quick:
                 cur.get("map", {}).update(cmap)
                 cmap = cur["map"]
+            elif not _DART[0]:  # DART 키 없는 환경(클라우드)에서 기존 DART 실적 보존
+                kept = 0
+                for k, old in cur.get("map", {}).items():
+                    if old.get("fin_src") == "DART" and k in cmap and cmap[k].get("fin_src") != "DART":
+                        cmap[k]["fin"], cmap[k]["fin_src"] = old["fin"], "DART"
+                        kept += 1
+                if kept:
+                    print(f"  DART 실적 보존: {kept}종목 (키 없음 — 추정행만 갱신됨)")
             COMPANY.write_text(json.dumps({"generated": now, "map": cmap},
                                           ensure_ascii=False, allow_nan=False), encoding="utf-8")
         else:
