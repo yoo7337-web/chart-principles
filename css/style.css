@@ -389,3 +389,15 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .today-chart-btn:hover { border-color: var(--accent); color: var(--accent); }
 .today-chart-row td { padding: 10px 6px; }
 #lookup-tfbar { align-items: center; gap: 14px; }
+
+/* 시장내부 결론 대시보드 */
+.vd-conclusion { font-size: .95rem; line-height: 1.6; padding: 10px 12px; background: #f8fafc;
+  border-left: 4px solid var(--accent); border-radius: 6px; margin: 8px 0 12px; }
+.vd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.vd-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; border-top: 3px solid var(--muted); }
+.vd-card.good { border-top-color: #16a34a; background: #f6fdf9; }
+.vd-card.warn { border-top-color: #f59e0b; background: #fffdf5; }
+.vd-card.bad  { border-top-color: #dc2626; background: #fef7f7; }
+.vd-name { font-size: .76rem; color: var(--muted); }
+.vd-val { font-size: 1.15rem; margin: 4px 0 2px; }
+.vd-note { font-size: .78rem; color: var(--ink); }

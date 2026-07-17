@@ -1540,10 +1540,75 @@ function renderInternals() {
   drawInternals();
 }
 
+// 시장내부 결론 대시보드 — 지표별 신호등 + 룰 기반 한 줄 결론 (AI 아님, 항상 표시)
+function renderIntVerdict(mk) {
+  const h = MPRO.breadth_hist?.[mk];
+  const host = $("#int-verdict");
+  if (!h) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const last = (arr) => arr?.[arr.length - 1]?.v;
+  const ago = (arr, n) => arr?.[Math.max(0, arr.length - 1 - n)]?.v;
+  const adr = last(h.adr), ma50 = last(h.ma50), ma200 = last(h.ma200);
+  const nhnlNow = last(h.nhnl), nhnlPrev = ago(h.nhnl, 20);
+  const nhnlTrend = nhnlNow != null && nhnlPrev != null ? nhnlNow - nhnlPrev : null;
+
+  // 판정: st = good(🟢)/warn(🟡)/bad(🔴), 기준은 각 카드에 명시
+  const cards = [];
+  if (adr != null) {
+    const st = adr >= 120 ? "warn" : adr >= 100 ? "good" : adr >= 80 ? "warn" : "bad";
+    const note = adr >= 120 ? "과열 구간 — 단기 되돌림 주의" : adr >= 100 ? "상승 종목 우위"
+      : adr >= 80 ? "하락 종목 우위" : "침체 — 과매도 접근(역발상 관찰)";
+    cards.push(["ADR (20일 등락비율)", adr.toFixed(0), st, note, "100=중립"]);
+  }
+  if (nhnlTrend != null) {
+    const st = nhnlTrend > 0 ? "good" : nhnlTrend < 0 ? "bad" : "warn";
+    cards.push(["신고−신저 누적 (20일 추세)", (nhnlTrend > 0 ? "+" : "") + Math.round(nhnlTrend).toLocaleString(), st,
+      nhnlTrend > 0 ? "체력 확장 — 신고가가 더 많음" : "체력 위축 — 신저가가 더 많음", "우상향=건강"]);
+  }
+  if (ma50 != null) {
+    const st = ma50 >= 50 ? "good" : ma50 >= 30 ? "warn" : "bad";
+    cards.push(["50일선 위 종목", ma50.toFixed(0) + "%", st,
+      ma50 >= 50 ? "과반이 중기 상승추세" : ma50 >= 30 ? "중기 추세 참여 저조" : "대다수가 중기 하락추세", "50%=중립"]);
+  }
+  if (ma200 != null) {
+    const st = ma200 >= 50 ? "good" : ma200 >= 30 ? "warn" : "bad";
+    cards.push(["200일선 위 종목", ma200.toFixed(0) + "%", st,
+      ma200 >= 50 ? "장기 추세 건재" : ma200 >= 30 ? "장기 추세 약화" : "장기 하락장 성격", "50%=중립"]);
+  }
+
+  const nBad = cards.filter((c) => c[2] === "bad").length;
+  const nGood = cards.filter((c) => c[2] === "good").length;
+  const risk = MPRO.risk?.score;
+  let emoji, verdict;
+  if (nBad >= 2) {
+    emoji = "⚠️";
+    verdict = `<b>시장 내부 체력이 약합니다.</b> 지수 방향과 별개로 다수 종목이 하락 추세 — 신규 진입은 보수적으로, 매수 원칙은 종목별 신호 확인 후.`;
+  } else if (nGood >= 3) {
+    emoji = "✅";
+    verdict = `<b>시장 체력 양호.</b> 상승이 소수 주도가 아니라 폭넓게 확산 — 원칙 신호의 신뢰도가 높은 환경.`;
+  } else {
+    emoji = "➖";
+    verdict = `<b>혼조.</b> 지표들이 엇갈립니다 — 지수보다 종목 선별이 중요한 구간.`;
+  }
+  if (risk != null) verdict += ` <span class="sub-note">(리스크 점수 ${risk} — ${risk >= 60 ? "리스크온" : risk <= 40 ? "리스크오프" : "중립"})</span>`;
+
+  const ICON = { good: "🟢", warn: "🟡", bad: "🔴" };
+  host.innerHTML = `
+    <div class="vd-conclusion">${emoji} ${verdict}</div>
+    <div class="vd-grid">${cards.map(([name, val, st, note, ref]) => `
+      <div class="vd-card ${st}">
+        <div class="vd-name">${name} <span class="sub-note">${ref}</span></div>
+        <div class="vd-val">${ICON[st]} <b>${val}</b></div>
+        <div class="vd-note">${note}</div>
+      </div>`).join("")}</div>
+    <p class="sub-note" style="margin-top:8px">판정 기준은 카드에 표기 — 룰 기반 자동 판정(참고용, 매수·매도 지시 아님) · 상세 추이는 아래 120일 차트</p>`;
+}
+
 function drawInternals() {
   intCharts.forEach((c) => c.remove());
   intCharts = [];
   const mk = $("#int-mk").value;
+  renderIntVerdict(mk);
   const h = MPRO.breadth_hist?.[mk];
   if (!h) return;
   lineChart("#int-adr", h.adr, "#2563eb", 100);
