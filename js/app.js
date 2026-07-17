@@ -54,7 +54,46 @@ function tickerLabel(mk, tk) {
 /* ---------- 중분류(그룹) + 탭 ---------- */
 const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "portfolio" };
 
+/* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
+const TAB_KO = { heatmap: "홈", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
+  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회",
+  portfolio: "포트폴리오 점검", journal: "매매일지", rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
+let navStack = [];
+let navSuppress = false;
+let currentTab = "heatmap";
+
+// 그룹 nav·탭바 표시까지 동기화하는 완전 이동 (뒤로가기·해시 복원용)
+function gotoTabFull(tabId) {
+  const nav = document.querySelector(`.tabs [data-tab="${tabId}"]`)?.closest(".tabs");
+  if (!nav) return;
+  const group = nav.dataset.groupTabs;
+  document.querySelectorAll(".group").forEach((x) => x.classList.toggle("active", x.dataset.group === group));
+  document.querySelectorAll(".tabs").forEach((n) => {
+    n.style.display = (n.dataset.groupTabs === group && !n.classList.contains("solo")) ? "" : "none";
+  });
+  activateTab(tabId);
+}
+
+function updateBackBtn() {
+  const b = document.getElementById("nav-back");
+  if (!b) return;
+  const prev = navStack[navStack.length - 1];
+  b.style.display = prev ? "" : "none";
+  if (prev) b.textContent = `← ${TAB_KO[prev] || prev}(으)로`;
+}
+
+window.addEventListener("popstate", () => {
+  const t = location.hash.slice(1);
+  if (!t || !document.getElementById("tab-" + t)) return;
+  navSuppress = true;
+  gotoTabFull(t);
+  navSuppress = false;
+  if (navStack[navStack.length - 1] === t) navStack.pop();  // 브라우저 뒤로 = 스택 소비
+  updateBackBtn();
+});
+
 function activateTab(tabId) {
+  const from = currentTab;
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tabId));
   document.querySelectorAll(".panel").forEach((x) => x.classList.toggle("active", x.id === "tab-" + tabId));
   const group = document.querySelector(`.tabs [data-tab="${tabId}"]`)?.closest(".tabs")?.dataset.groupTabs;
@@ -72,6 +111,15 @@ function activateTab(tabId) {
   if (tabId === "internals" && !internalsRendered) renderInternals();
   if (tabId === "rotation" && !rotationRendered) renderRotation();
   if (tabId === "gurus" && !gurusRendered) renderGurus();
+  if (tabId !== from) {
+    if (!navSuppress) {
+      navStack.push(from);
+      if (navStack.length > 20) navStack.shift();
+      try { history.pushState({ tab: tabId }, "", "#" + tabId); } catch (e) { /* file:// 등 */ }
+    }
+    currentTab = tabId;
+    updateBackBtn();
+  }
 }
 
 document.querySelectorAll(".tab").forEach((b) =>
@@ -1252,8 +1300,7 @@ function renderIdxCards() {
   }).join("");
   host.querySelectorAll(".idx-card.clickable").forEach((el) => {
     el.onclick = () => {
-      document.querySelector('.group[data-group="research"]').click();
-      activateTab("lookup");
+            gotoTabFull("lookup");
       if (!lookupRendered) initLookup();
       loadLookup(`${homeMk}_${el.dataset.t}`);
     };
@@ -1286,8 +1333,7 @@ function renderMovers() {
   }).join("") || `<p class="mini-note">데이터 없음</p>`;
   list.querySelectorAll(".mv-row").forEach((el) => {
     el.onclick = () => {
-      document.querySelector('.group[data-group="research"]').click();
-      activateTab("lookup");
+            gotoTabFull("lookup");
       if (!lookupRendered) initLookup();
       loadLookup(`${homeMk}_${el.dataset.t}`);
     };
@@ -1369,8 +1415,7 @@ function drawTreemap() {
       d.addEventListener("mouseleave", () => { tip.style.display = "none"; });
       d.addEventListener("click", () => {
         tip.style.display = "none";
-        document.querySelector('.group[data-group="research"]').click();
-        activateTab("lookup");
+                gotoTabFull("lookup");
         if (!lookupRendered) initLookup();
         loadLookup(`${t.m}_${t.t}`);
       });
@@ -1459,8 +1504,7 @@ function drawCalList() {
   }).join("");
   host.querySelectorAll(".cal-row.clickable").forEach((el) => {
     el.onclick = () => {
-      document.querySelector('.group[data-group="research"]').click();
-      activateTab("lookup");
+            gotoTabFull("lookup");
       if (!lookupRendered) initLookup();
       loadLookup(`${calMk}_${el.dataset.t}`);
     };
@@ -1738,8 +1782,7 @@ function toggleRotMembers(tr, sector, mk) {
   tr.after(row);
   row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
-    document.querySelector('.group[data-group="discover"]').click();
-    document.querySelector('[data-tab="lookup"]').click();
+    gotoTabFull("lookup");
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   }));
@@ -2314,8 +2357,7 @@ function renderGuruAgg() {
 
   host.querySelectorAll(".agg-goto").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
-    document.querySelector('.group[data-group="discover"]').click();
-    document.querySelector('[data-tab="lookup"]').click();
+    gotoTabFull("lookup");
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   }));
@@ -2693,8 +2735,7 @@ function pfRenderList(arr) {
 
   listEl.querySelectorAll(".pf-goto").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
-    document.querySelector('.group[data-group="discover"]').click();
-    document.querySelector('[data-tab="lookup"]').click();
+    gotoTabFull("lookup");
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   }));
@@ -3062,6 +3103,20 @@ Promise.all([
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
-    renderHome();  // 첫 화면 = 마켓 홈 (IA 재편)
+    document.getElementById("nav-back").onclick = () => {
+      const prev = navStack.pop();
+      if (!prev) return;
+      navSuppress = true;
+      gotoTabFull(prev);
+      navSuppress = false;
+      try { history.replaceState({ tab: prev }, "", "#" + prev); } catch (e) {}
+      updateBackBtn();
+    };
+    const h0 = location.hash.slice(1);
+    if (h0 && h0 !== "heatmap" && document.getElementById("tab-" + h0)) {
+      navSuppress = true; gotoTabFull(h0); navSuppress = false;  // 딥링크 복원
+    } else {
+      renderHome();  // 첫 화면 = 마켓 홈 (IA 재편)
+    }
   })
   .catch((e) => { $("#meta").textContent = "results.json 로드 실패 — 먼저 python analysis\\report.py 실행: " + e; });

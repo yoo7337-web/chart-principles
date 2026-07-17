@@ -470,3 +470,10 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 .fin-ext td, .fin-ext th { font-size: .8rem; padding: 5px 8px; }
 .fin-ext td:first-child { color: var(--muted); font-weight: 600; }
+
+/* 플로팅 뒤로 가기 */
+.nav-back { position: fixed; left: 18px; bottom: 18px; z-index: 50;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 999px; padding: 10px 18px; font-size: .88rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+.nav-back:hover { border-color: var(--accent); color: var(--accent); }
