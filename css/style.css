@@ -477,3 +477,16 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   border-radius: 999px; padding: 10px 18px; font-size: .88rem; font-weight: 700; cursor: pointer;
   box-shadow: 0 4px 16px rgba(0,0,0,.12); }
 .nav-back:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 기업개요 4단(소개·사업·매출구성·주주) */
+.ov-sec { margin: 10px 0; }
+.ov-sec > b { font-size: .88rem; }
+.ov-biz { margin: 6px 0 0 18px; font-size: .86rem; line-height: 1.7; }
+.mix-bars { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.mix-row { display: flex; align-items: center; gap: 10px; font-size: .82rem; }
+.mix-name { flex: 0 0 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mix-track { flex: 1; height: 12px; background: #f3f4f6; border-radius: 6px; overflow: hidden; }
+.mix-fill { display: block; height: 100%; background: #7ba6e8; border-radius: 6px; }
+.mix-fill.sh { background: #f0955a; }
+.mix-row b { width: 52px; text-align: right; }
+@media (max-width: 640px) { .mix-name { flex-basis: 120px; } }

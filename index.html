@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=44">
-<script src="firebase-config.js?v=44"></script>
-<script src="js/auth.js?v=44"></script>
+<link rel="stylesheet" href="css/style.css?v=46">
+<script src="firebase-config.js?v=46"></script>
+<script src="js/auth.js?v=46"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -281,8 +281,11 @@
           <li><b>1주만 급등</b> → 단기 순환매 가능성 — 지속성 확인 전엔 추격 주의</li>
           <li><b>전 기간 RS 음수</b> → 구조적 소외 섹터</li>
         </ul>
+        <p><b>참여도 3종(RS의 '속'을 보는 지표):</b> <b>오늘 상승</b>=섹터 내 당일 상승 종목 비율 ·
+        <b>20일선 위</b>=중기 추세에 올라탄 종목 비율(60%↑ 초록/30%↓ 빨강) · <b>52주 신고</b>=신고가 경신 종목 수.
+        RS가 +인데 참여도가 낮으면 <b>소수 대형주가 끌어올린 착시</b> — 확산 여부를 함께 확인하세요.</p>
         <p class="sub-note">수익률은 시가총액 가중(대형주 영향 큼) · 섹터 분류: KR=네이버 업종 / US=GICS ·
-        RS는 상대 개념이라 하락장에선 "덜 빠진 것"도 +로 표시됩니다</p>
+        RS는 상대 개념이라 하락장에선 "덜 빠진 것"도 +로 표시됩니다 · 섹터 행을 펼치면 소속 종목과 최신 기사</p>
       </div>
     </details>
     <div class="controls"><label>시장 <select id="rot-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label></div>
@@ -436,6 +439,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=44"></script>
+<script src="js/app.js?v=46"></script>
 </body>
 </html>

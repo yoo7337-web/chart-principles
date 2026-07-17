@@ -14,6 +14,7 @@ let GURUS = null;
 let VAL = null;
 let DEALS = null;
 let NEWS_BRIEFS = null, DEALS_BRIEFS = null, NEWS_ARCH = null, DEALS_ARCH = null;
+let SECNEWS = null;
 let dealsRendered = false;
 let gurusRendered = false;
 let valRendered = false;
@@ -1745,12 +1746,16 @@ function drawRotation() {
   const m = rot.market;
   $("#rot-table").innerHTML =
     `<tr><th>섹터 (종목수)</th><th>1주</th><th>1개월</th><th>3개월</th>
-       <th>RS 1주</th><th>RS 1개월</th><th>RS 3개월</th></tr>
-     <tr style="font-weight:700"><td>시장 전체</td>${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td></tr>` +
-    rot.sectors.map((s) => `<tr class="rot-row" data-sector="${s.sector}" title="클릭 = 소속 종목 보기">
+       <th>RS 1주</th><th>RS 1개월</th><th>RS 3개월</th><th>오늘 상승</th><th>20일선 위</th><th>52주 신고</th></tr>
+     <tr style="font-weight:700"><td>시장 전체</td>${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>` +
+    rot.sectors.map((s) => {
+      const part = (v, warnLow) => v == null ? "<td>-</td>" :
+        `<td class="${v >= 60 ? "pos" : v < (warnLow ?? 30) ? "neg" : ""}">${v}%</td>`;
+      return `<tr class="rot-row" data-sector="${s.sector}" title="클릭 = 소속 종목·최신 기사 보기">
       <td>▸ ${s.sector} <span class="sub-note">(${s.n})</span></td>
       ${rsCell(s.w1)}${rsCell(s.m1)}${rsCell(s.m3)}${rsCell(s.rs_w1)}${rsCell(s.rs_m1)}${rsCell(s.rs_m3)}
-    </tr>`).join("");
+      ${part(s.up)}${part(s.ma20)}<td>${s.hi52 ?? "-"}</td>
+    </tr>`;}).join("");
   document.querySelectorAll("#rot-table .rot-row").forEach((tr) =>
     tr.addEventListener("click", () => toggleRotMembers(tr, tr.dataset.sector, mk)));
 }
@@ -1778,6 +1783,14 @@ function toggleRotMembers(tr, sector, mk) {
       </a>`).join("")
     : `<span class="mini-note">이 섹터의 종목 정보 없음</span>`
   }</div>
+  ${(() => {
+    const arts = SECNEWS?.[mk]?.[sector];
+    if (!arts?.length) return "";
+    return `<div class="perf-h" style="margin-top:10px">📰 ${sector} 최신 기사 <span class="sub-note">(구글뉴스 · 하루 1회 수집)</span></div>` +
+      arts.map((n) => `<div class="lk-feed-row"><span class="lk-feed-date">${n.t}</span>
+        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
+        ${n.src ? `<span class="sub-note">${n.src}</span>` : ""}</div>`).join("");
+  })()}
   <p class="sub-note" style="margin:6px 0 2px">시총순 · 등락=당일 · 클릭 = 종목 조회로 이동 (분석 유니버스 내 종목만 표시)</p></td>`;
   tr.after(row);
   row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {
@@ -2047,10 +2060,35 @@ function renderLookupOverview(st) {
   if (!co?.overview) { host.style.display = "none"; return; }
   host.style.display = "";
   const ind = co.industry || f?.industry;
+  // 사업구조: 개요 불릿(1행=회사, 2행~=사업/전략) 분리 서술
+  const biz = co.biz_lines?.length > 1 ? co.biz_lines.slice(1) : null;
+  const intro = co.biz_lines?.length ? co.biz_lines[0] : co.overview;
+  // 매출구성 바
+  let mixHtml = "";
+  if (co.sales_mix?.length) {
+    const max = Math.max(...co.sales_mix.map((x) => x.pct), 1);
+    mixHtml = `<div class="ov-sec"><b>📊 매출 구성</b><div class="mix-bars">` +
+      co.sales_mix.map((x) => `<div class="mix-row"><span class="mix-name">${x.name}</span>
+        <span class="mix-track"><span class="mix-fill" style="width:${x.pct / max * 100}%"></span></span>
+        <b>${x.pct.toFixed(1)}%</b></div>`).join("") + `</div></div>`;
+  }
+  // 주주구성
+  let shHtml = "";
+  if (co.holders?.length || co.holders_pct || co.minor_pct != null) {
+    const rows = (co.holders || []).map((x) => `<div class="mix-row"><span class="mix-name">${x.name}
+        <span class="sub-note">${x.rel || ""}</span></span>
+        <span class="mix-track"><span class="mix-fill sh" style="width:${Math.min(100, x.pct)}%"></span></span>
+        <b>${x.pct}%</b></div>`).join("");
+    const extra = co.minor_pct != null ? `<p class="sub-note" style="margin-top:4px">소액주주 지분 ${co.minor_pct}% (사업보고서 기준)</p>`
+      : co.holders_pct ? `<p class="sub-note" style="margin-top:4px">내부자 ${co.holders_pct.insider}% · 기관 ${co.holders_pct.inst}% 보유</p>` : "";
+    shHtml = `<div class="ov-sec"><b>👥 주주 구성</b><div class="mix-bars">${rows}</div>${extra}</div>`;
+  }
   host.innerHTML = `<h3 class="lk-h3">🏢 기업 개요 ${ind ? `<span class="badge dim">${ind}</span>` : ""}
       ${co.website ? `<a class="ext-link" href="${co.website}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}</h3>
-    <p class="lk-ov-text">${co.overview}</p>
-    <p class="sub-note">출처: ${st.market === "kr" ? "네이버·와이즈리포트" : "Yahoo Finance"} (주 1회 갱신)</p>`;
+    <div class="ov-sec"><b>무엇을 하는 회사인가</b><p class="lk-ov-text">${intro}</p></div>
+    ${biz ? `<div class="ov-sec"><b>🧩 사업 구조·전략</b><ul class="ov-biz">${biz.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}
+    ${mixHtml}${shHtml}
+    <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART 사업보고서(주주)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
 }
 
 // 증권가 컨센서스 카드: 목표주가 vs 현재가 + 투자의견
@@ -3097,11 +3135,12 @@ Promise.all([
   getJSON("news_archive.json"),
   getJSON("deals_archive.json"),
   getJSON("calendar.json"),
+  getJSON("sector_news.json"),
 ])
-  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal]) => {
+  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal, sn]) => {
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
-    NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal;
+    NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal; SECNEWS = sn;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
