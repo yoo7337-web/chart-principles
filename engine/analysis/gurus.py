@@ -133,6 +133,56 @@ def gen_thesis(g: dict, rows: list, sold: list) -> str | None:
     return sanitize(raw) if raw else None
 
 
+def brk_liquidity() -> dict | None:
+    """버크셔 유동성 추이 (SEC XBRL companyconcept, 분기 10-Q/10-K).
+
+    현금성 = CashCashEquivalentsRestrictedCash... + 채권AFS / 주식 = EquitySecuritiesFvNi.
+    ⚠단기 T-bill은 이 세계 XBRL에 별도 태그가 없어 미포함 — 라벨에 명시(현금·현금성+채권 기준).
+    현금비중 = 현금성 / (현금성 + 주식포트폴리오).
+    """
+    tags = {"cash": "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+            "debt": "AvailableForSaleSecuritiesDebtSecurities",
+            "eq": "EquitySecuritiesFvNi"}
+    series = {}
+    for k, tag in tags.items():
+        d = get_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK0001067983/us-gaap/{tag}.json")
+        for x in d["units"]["USD"]:
+            if x.get("form") in ("10-Q", "10-K"):
+                series.setdefault(x["end"], {})[k] = x["val"]
+        time.sleep(0.3)
+    rows = []
+    for end in sorted(series):
+        v = series[end]
+        if "cash" not in v or "eq" not in v:
+            continue
+        liq = v["cash"] + v.get("debt", 0)
+        rows.append({"d": end, "cash": round(liq / 1e9, 1),
+                     "ratio": round(liq / (liq + v["eq"]) * 100, 1)})
+    return {"series": rows[-10:], "note": "현금·현금성(제한 포함)+채권AFS 기준, 단기 T-bill 별도태그 없음"} if rows else None
+
+
+# 트럼프 — 13F 비대상(기관 운용역 아님) → 공개 재산신고(OGE Form 278e)·공시·언론보도 기반 정적 큐레이션.
+# ⚠비중·평가액은 추정이며 부정기 갱신(13F처럼 분기 자동 갱신 불가). 갱신 시 이 블록을 수동 수정.
+TRUMP_STATIC = {
+    "id": "trump", "name": "도널드 트럼프", "fund": "개인 자산 (Trump Organization 외)",
+    "style": "브랜드·부동산 제국 + 미디어·암호화폐 — 레버리지와 브랜드 라이선스 중심",
+    "type": "disclosure",
+    "source": "OGE 공개 재산신고(Form 278e)·SEC 공시(DJT)·언론 보도 종합 — 추정치, 부정기 갱신",
+    "report_date": "2025-06 신고분", "filing_date": None,
+    "total_value": None, "n_positions": None,
+    "holdings": [
+        {"issuer": "Trump Media & Technology(DJT) 지분 — 약 1.15억주(신탁 보유)", "weight": None, "change": "hold", "chg_shares": None},
+        {"issuer": "암호화폐 — $TRUMP 밈코인 지분·World Liberty Financial($WLFI)·비트코인 채굴(American Bitcoin)", "weight": None, "change": "hold", "chg_shares": None},
+        {"issuer": "부동산 — 마러라고·트럼프타워 등 상업·리조트 (Trump Organization)", "weight": None, "change": "hold", "chg_shares": None},
+        {"issuer": "현금·채권 — 신고 기준 수억 달러 유동자산(라이선스·행사 수입 포함)", "weight": None, "change": "hold", "chg_shares": None},
+        {"issuer": "브랜드 라이선스·상품 — 시계·스니커즈·서적 등 로열티", "weight": None, "change": "hold", "chg_shares": None},
+    ],
+    "exits": [],
+    "thesis": "상장 미디어 지분(DJT)과 암호화폐 프로젝트가 자산 변동성의 대부분을 차지하며, 전통 자산(부동산·현금)은"
+              " 안정 축. 13F 의무가 없어 분기 추적이 불가능하므로 여기 수치는 공개 신고·보도 기반 추정으로만 볼 것.",
+}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
@@ -168,9 +218,22 @@ def main():
         except Exception as e:
             print(f"  {g['fund']} 실패: {e}", file=sys.stderr)
 
+    # 버핏 현금(유동성) 추이 부착
+    try:
+        liq = brk_liquidity()
+        if liq:
+            for m in managers:
+                if m["id"] == "buffett":
+                    m["cash"] = liq
+                    print(f"  버크셔 유동성: {len(liq['series'])}분기, 최근 현금비중 {liq['series'][-1]['ratio']}%")
+    except Exception as e:
+        print(f"  버크셔 유동성 실패: {e}", file=sys.stderr)
+
+    managers.append(TRUMP_STATIC)  # 13F 비대상 — 공개 신고 기반 정적 카드
+
     OUT.write_text(json.dumps({"generated": date.today().isoformat(), "managers": managers},
                               ensure_ascii=False), encoding="utf-8")
-    print(f"완료: gurus.json — {len(managers)}/{len(GURUS)}명")
+    print(f"완료: gurus.json — {len(managers)}명 (13F {len(managers)-1} + 공개신고 1)")
 
 
 if __name__ == "__main__":
