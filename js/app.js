@@ -51,7 +51,7 @@ function tickerLabel(mk, tk) {
 }
 
 /* ---------- 중분류(그룹) + 탭 ---------- */
-const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap" };
+const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "journal" };
 
 function activateTab(tabId) {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tabId));
@@ -79,7 +79,7 @@ document.querySelectorAll(".group").forEach((g) =>
   g.addEventListener("click", () => {
     document.querySelectorAll(".group").forEach((x) => x.classList.toggle("active", x === g));
     document.querySelectorAll(".tabs").forEach((nav) => {
-      nav.style.display = nav.dataset.groupTabs === g.dataset.group ? "" : "none";
+      nav.style.display = (nav.dataset.groupTabs === g.dataset.group && !nav.classList.contains("solo")) ? "" : "none";
     });
     activateTab(lastTabOfGroup[g.dataset.group]);
   }));
