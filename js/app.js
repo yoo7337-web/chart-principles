@@ -1904,8 +1904,53 @@ function renderGurus() {
   $("#gurus-context").innerHTML =
     `SEC 13F 의무공시 기반(분기말 <b>+45일 지연</b> — '최신'의 한계) · 확인 주기 <b>주 1회</b>(13F가 분기
      공시라 이것으로 충분, 마지막 확인 ${GURUS.generated}) ·
-     Thesis는 보유·변화 기반 <b>AI 추정</b>이며 본인 발언이 아님 · 트럼프 등 정치인은 13F 비대상이라 미포함`;
+     Thesis는 보유·변화 기반 <b>AI 추정</b>이며 본인 발언이 아님 · 트럼프는 13F 비대상 — <b>공개 재산신고 기반 별도 카드</b>(추정·부정기)`;
+  // 버핏 현금(유동성) 추이 SVG: 막대=현금성 $B, 라인=현금비중 %
+  const cashSvg = (c) => {
+    const s = c.series;
+    if (!s?.length) return "";
+    const W = 620, H = 170, padL = 8, padB = 30, padT = 24;
+    const gw = (W - padL * 2) / s.length;
+    const maxV = Math.max(...s.map((r) => r.cash), 1);
+    const rMin = Math.min(...s.map((r) => r.ratio)), rMax = Math.max(...s.map((r) => r.ratio));
+    const yBar = (v) => padT + (maxV - v) / maxV * (H - padT - padB);
+    const yR = (v) => padT + 2 + (rMax - v) / (rMax - rMin || 1) * 46;
+    let bars = "", labels = "";
+    const pts = [];
+    s.forEach((r, i) => {
+      const cx = padL + gw * i + gw / 2, bw = Math.min(30, gw / 2);
+      const y = yBar(r.cash);
+      bars += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${H - padB - y}" fill="#93c5fd" rx="2"/>
+        <text x="${cx}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#4b5563">$${r.cash}B</text>`;
+      pts.push([cx, yR(r.ratio), r.ratio]);
+      labels += `<text x="${cx}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.d.slice(2, 7).replace("-", ".")}</text>`;
+    });
+    const line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#dc2626" stroke-width="2"/>` +
+      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#dc2626"/>` +
+        (i === pts.length - 1 || i % 2 === 0 ? `<text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#b91c1c">${p[2]}%</text>` : "")).join("");
+    return `<div class="guru-cash"><b>💰 현금성 자산 추이</b>
+        <span class="sub-note">(막대=현금·현금성+채권 $B · <span style="color:#dc2626">라인=현금비중</span>
+        =현금성/(현금성+주식포트) · SEC 10-Q, 단기 T-bill 별도태그 미포함)</span>
+      <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${line}${labels}</svg></div>`;
+  };
+
   $("#gurus-list").innerHTML = GURUS.managers.map((m) => {
+    // 13F 비대상(트럼프 등) — 공개 재산신고 기반 정적 카드
+    if (m.type === "disclosure") {
+      return `<details class="stock-block guru-block">
+        <summary><b>${m.name}</b> <span class="sub-note">${m.fund}</span>
+          <span class="badge dim">13F 비대상 · 공개 신고 기반</span>
+          <span class="badge dim">${m.report_date}</span></summary>
+        <div class="guru-body">
+          <p class="guru-style">투자 스타일: ${m.style}</p>
+          <p class="mini-note">⚠ ${m.source} — 비중·평가액 추정 불가 항목은 서술형으로만 표기</p>
+          ${m.thesis ? `<div class="commentary guru-thesis"><b>구성 해설</b><br>${m.thesis}</div>` : ""}
+          <div class="tablewrap"><table class="guru-table">
+            <tr><th>주요 자산</th></tr>
+            ${m.holdings.map((h) => `<tr><td>${h.issuer}</td></tr>`).join("")}</table></div>
+        </div>
+      </details>`;
+    }
     const rows = m.holdings.map((h) => {
       const [label, color] = GURU_CHG[h.change] || GURU_CHG.hold;
       return `<tr>
@@ -1925,6 +1970,7 @@ function renderGurus() {
       </summary>
       <div class="guru-body">
         <p class="guru-style">투자 스타일: ${m.style}</p>
+        ${m.cash ? cashSvg(m.cash) : ""}
         ${m.thesis ? `<div class="commentary guru-thesis"><b>🤖 AI 추정 Thesis</b><br>${m.thesis}</div>` : ""}
         <div class="tablewrap"><table class="guru-table">
           <tr><th>보유 종목 (상위 15)</th><th>비중</th><th>분기 변화</th></tr>${rows}</table></div>
