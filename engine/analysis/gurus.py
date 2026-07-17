@@ -193,7 +193,54 @@ TRUMP_STATIC = {
 
 # 한국 — 13F 제도 부재: 5% 대량보유 공시(DART)·펀드 운용보고서·국민연금 공시로만 일부 공개.
 # ⚠전체 포트폴리오가 아닌 "공개된 일부"임을 카드마다 명시. 갱신은 수동 큐레이션.
-KR_SOURCE = "DART 5% 대량보유 공시·운용보고서·언론 보도 기반 — 전체 포트폴리오 아님, 부정기 갱신"
+KR_SOURCE = "DART 대량보유(5%) 공시 자동 수집(최근 6개월) — 5% 미만 보유는 비공시라 전체 포트폴리오 아님"
+
+# 제출인명(flr_nm) 매칭 키워드 — DART D001(대량보유상황보고서) 스캔용
+KR_MATCH = {
+    "nps": ["국민연금"], "parkyo": ["박영옥"], "vip": ["브이아이피자산운용"],
+    "kang": ["에셋플러스자산운용"], "lcw": ["라이프자산운용"], "heo": ["신영자산운용"],
+    "truston": ["트러스톤자산운용"], "align": ["얼라인파트너스"], "kcgi": ["케이씨지아이"],
+    "timefolio": ["타임폴리오자산운용"],
+}
+
+
+def kr_dart_holdings() -> dict:
+    """최근 6개월 DART D001 전수 스캔 → 관심 제출인별 실보유(공시) 종목. {id: [(corp, 최근일, 건수)]}"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from stock_extras import _dart_key, _getj
+    key = _dart_key()
+    if not key:
+        return {}
+    from datetime import timedelta
+    today = date.today()
+    windows = [((today - timedelta(days=180)).strftime("%Y%m%d"), (today - timedelta(days=91)).strftime("%Y%m%d")),
+               ((today - timedelta(days=90)).strftime("%Y%m%d"), today.strftime("%Y%m%d"))]
+    raw = defaultdict(dict)  # id -> corp -> {"d": 최근일, "n": 건수}
+    for b, e in windows:
+        pg = 1
+        while True:
+            try:
+                d = get_json(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&pblntf_ty=D"
+                             f"&pblntf_detail_ty=D001&bgn_de={b}&end_de={e}&page_count=100&page_no={pg}")
+            except Exception:
+                break
+            if d.get("status") != "000":
+                break
+            for r in d["list"]:
+                for gid, keys in KR_MATCH.items():
+                    if any(k in r["flr_nm"] for k in keys):
+                        c = raw[gid].setdefault(r["corp_name"], {"d": r["rcept_dt"], "n": 0})
+                        c["n"] += 1
+                        c["d"] = max(c["d"], r["rcept_dt"])
+            if pg >= int(d.get("total_page", 1)):
+                break
+            pg += 1
+            time.sleep(0.12)
+    out = {}
+    for gid, corps in raw.items():
+        rows = sorted(corps.items(), key=lambda x: -int(x[1]["d"]))
+        out[gid] = [(c, v["d"], v["n"]) for c, v in rows]
+    return out
 KR_STATIC = [
     {"id": "nps", "name": "국민연금", "fund": "국민연금공단 기금운용본부",
      "style": "국내 최대 큰손 — 지분 공시 자체가 수급 이벤트",
@@ -290,13 +337,30 @@ def main():
         m["country"] = "us"
     TRUMP_STATIC["country"] = "us"
     managers.append(TRUMP_STATIC)  # 13F 비대상 — 공개 신고 기반 정적 카드
-    for k in KR_STATIC:  # 한국 — 5% 공시·운용보고서 기반 정적 카드
+    try:
+        kr_hold = kr_dart_holdings()
+        print(f"  KR 대량보유 공시 스캔: {sum(len(v) for v in kr_hold.values())}종목 "
+              f"({', '.join(f'{k}:{len(v)}' for k, v in kr_hold.items())})")
+    except Exception as e:
+        kr_hold = {}
+        print(f"  KR 공시 스캔 실패({e}) — 서술 카드만", file=sys.stderr)
+    for k in KR_STATIC:  # 한국 — DART 대량보유 공시 자동 수집 + 스타일 서술
+        real = kr_hold.get(k["id"], [])
+        fmt_d = lambda d: f"{d[4:6]}/{d[6:8]}"
+        if real:
+            shown = real[:15]
+            holds = [f"{c} — 최근 보고 {fmt_d(d)}{f' · 공시 {n}건' if n > 1 else ''}" for c, d, n in shown]
+            if len(real) > 15:
+                holds.append(f"… 외 {len(real) - 15}종목 (최근 6개월 공시 기준)")
+        else:
+            holds = k["holdings"] + ["(최근 6개월 내 5% 신규·변동 공시 없음)"]
         managers.append({**k, "country": "kr", "type": "disclosure", "source": KR_SOURCE,
-                         "report_date": "수동 큐레이션", "filing_date": None,
-                         "total_value": None, "n_positions": None,
+                         "report_date": f"최근 6개월 공시 {len(real)}종목" if real else "공시 없음",
+                         "filing_date": None, "total_value": None, "n_positions": len(real) or None,
                          "holdings": [{"issuer": h, "weight": None, "change": "hold", "chg_shares": None}
-                                      for h in k["holdings"]],
-                         "exits": [], "thesis": None})
+                                      for h in holds],
+                         "exits": [], "thesis": "스타일: " + k["style"] + " · " +
+                                    " / ".join(k["holdings"][:2])})
 
     OUT.write_text(json.dumps({"generated": date.today().isoformat(), "managers": managers},
                               ensure_ascii=False), encoding="utf-8")
