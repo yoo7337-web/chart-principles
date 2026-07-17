@@ -2212,6 +2212,115 @@ function renderDeals() {
   drawList();
 }
 
+
+/* ---------- 투자대가 보유 종합 (13F 종목 기준 집계) ---------- */
+// 13F 이슈어명 → 유니버스 티커 (시총·로고·조회 연동용 — 미포함 종목은 텍스트만)
+const ISSUER_TICKER = {
+  "APPLE INC": "AAPL", "AMAZON COM INC": "AMZN", "ALPHABET INC": "GOOGL", "MICROSOFT CORP": "MSFT",
+  "NVIDIA CORP": "NVDA", "NVIDIA CORPORATION": "NVDA", "META PLATFORMS INC": "META", "TESLA INC": "TSLA",
+  "TAIWAN SEMICONDUCTOR MANUFAC": "TSM", "BERKSHIRE HATHAWAY INC": "BRK-B", "OCCIDENTAL PETE CORP": "OXY",
+  "COCA COLA CO": "KO", "COCA-COLA CO": "KO", "BANK AMER CORP": "BAC", "BANK OF AMERICA CORP": "BAC",
+  "AMERICAN EXPRESS CO": "AXP", "CHEVRON CORP NEW": "CVX", "CHEVRON CORP": "CVX", "MOODYS CORP": "MCO",
+  "KRAFT HEINZ CO": "KHC", "BROADCOM INC": "AVGO", "ADVANCED MICRO DEVICES INC": "AMD",
+  "MICRON TECHNOLOGY INC": "MU", "INTEL CORP": "INTC", "QUALCOMM INC": "QCOM", "NETFLIX INC": "NFLX",
+  "WALMART INC": "WMT", "JPMORGAN CHASE & CO": "JPM", "UNITEDHEALTH GROUP INC": "UNH",
+  "ELI LILLY & CO": "LLY", "EXXON MOBIL CORP": "XOM", "JOHNSON & JOHNSON": "JNJ", "VISA INC": "V",
+  "MASTERCARD INC": "MA", "PALANTIR TECHNOLOGIES INC": "PLTR", "COINBASE GLOBAL INC": "COIN",
+  "UBER TECHNOLOGIES INC": "UBER", "SALESFORCE INC": "CRM", "ORACLE CORP": "ORCL", "ADOBE INC": "ADBE",
+};
+const GURU_SHORT = { "워런 버핏": "버핏", "하워드 막스": "막스", "빌 애크먼": "애크먼", "마이클 버리": "버리",
+  "스탠리 드러켄밀러": "드러켄밀러", "데이비드 테퍼": "테퍼", "레이 달리오": "달리오", "세스 클라만": "클라만",
+  "리 루": "리루", "캐시 우드": "캐시우드" };
+
+function renderGuruAgg() {
+  const host = $("#guru-agg");
+  const usM = GURUS.managers.filter((m) => (m.country || "us") === "us" && m.type !== "disclosure");
+  // 이슈어 기준 집계
+  const agg = new Map();
+  usM.forEach((m) => {
+    const short = GURU_SHORT[m.name] || m.name;
+    m.holdings.forEach((hh) => {
+      const key = hh.issuer.toUpperCase();
+      const r = agg.get(key) || { issuer: hh.issuer, holders: [], total: 0, newBy: [], addBy: [], trimBy: [] };
+      r.holders.push({ name: short, weight: hh.weight, change: hh.change });
+      r.total += hh.value || 0;
+      if (hh.change === "new") r.newBy.push(short);
+      if (hh.change === "add") r.addBy.push(short);
+      if (hh.change === "trim") r.trimBy.push(short);
+      agg.set(key, r);
+    });
+    (m.exits || []).forEach((e) => {
+      const key = e.issuer.toUpperCase();
+      const r = agg.get(key) || { issuer: e.issuer, holders: [], total: 0, newBy: [], addBy: [], trimBy: [] };
+      (r.exitBy = r.exitBy || []).push(short);
+      agg.set(key, r);
+    });
+  });
+  // 시총 매핑
+  agg.forEach((r, key) => {
+    const tk = ISSUER_TICKER[key];
+    if (tk) {
+      r.ticker = tk;
+      const tile = MARKET?.heatmap?.find((x) => x.m === "us" && x.t === tk);
+      r.mcap = tile?.mcap || 0;
+      r.logo = EXTRAS.company?.map?.[`us_${tk}`]?.logo || "";
+    }
+  });
+  const rows = [...agg.values()].filter((r) => r.holders.length);
+  rows.sort((a, b) => (b.mcap || 0) - (a.mcap || 0) || b.total - a.total);
+
+  const CHG_ICON = { new: "🆕", add: "➕", trim: "➖", hold: "" };
+  const holderBadges = (r) => r.holders
+    .sort((a, b) => b.weight - a.weight)
+    .map((x) => `<span class="badge ${x.change === "new" ? "hero" : x.change === "trim" ? "" : "dim"}"
+      title="포트 비중 ${(x.weight * 100).toFixed(1)}%">${CHG_ICON[x.change]}${x.name} ${(x.weight * 100).toFixed(0)}%</span>`).join(" ");
+
+  // 신규 매수 섹션
+  const newRows = rows.filter((r) => r.newBy.length)
+    .sort((a, b) => b.newBy.length - a.newBy.length || (b.mcap || 0) - (a.mcap || 0));
+  // 전원 청산 섹션
+  const exitRows = [...agg.values()].filter((r) => (r.exitBy || []).length && !r.holders.length)
+    .sort((a, b) => b.exitBy.length - a.exitBy.length);
+
+  host.innerHTML = `
+    <div class="criteria">종목 기준으로 뒤집은 13F 집계 — 각 대가의 <b>상위 15 보유</b>만 대상(전체 포트 아님).
+      비중 %는 그 대가 포트폴리오 내 비중 · 🆕신규 ➕증액 ➖축소 · 시총순 정렬(유니버스 밖 종목은 13F 금액순)</div>
+
+    <h2>🆕 이번 분기 신규 매수 <span class="sub-note">(${newRows.length}종목 — 대가들이 새로 담은 것)</span></h2>
+    ${newRows.length ? `<div class="tablewrap card-flat"><table>
+      <tr><th>종목</th><th>신규 매수</th><th>기존 보유</th></tr>
+      ${newRows.slice(0, 20).map((r) => `<tr>
+        <td>${r.logo ? `<img class="cal-logo" src="${r.logo}" onerror="this.style.visibility='hidden'">` : ""}${r.ticker ? `<a href="#" class="goto-lookup agg-goto" data-key="us_${r.ticker}"><b>${r.issuer}</b></a>` : `<b>${r.issuer}</b>`}</td>
+        <td><b class="pos">${r.newBy.join(" · ")}</b></td>
+        <td class="sub-note">${r.holders.filter((x) => x.change !== "new").map((x) => x.name).join(" · ") || "-"}</td>
+      </tr>`).join("")}</table></div>` : `<p class="mini-note">신규 편입 없음</p>`}
+
+    <h2 style="margin-top:26px">📊 대가 보유 전체 <span class="sub-note">(${rows.length}종목 · 시총순 · 배지 클릭 안내: 비중은 각 대가 포트 내 %)</span></h2>
+    <div class="tablewrap card-flat"><table>
+      <tr><th>종목</th><th>시총</th><th>대가</th><th>보유 중인 대가 (비중·변화)</th></tr>
+      ${rows.map((r) => `<tr>
+        <td style="white-space:nowrap">${r.logo ? `<img class="cal-logo" src="${r.logo}" onerror="this.style.visibility='hidden'">` : ""}${r.ticker ? `<a href="#" class="goto-lookup agg-goto" data-key="us_${r.ticker}"><b>${r.issuer}</b></a>` : r.issuer}</td>
+        <td>${r.mcap ? fmtMcap(r.mcap, "us") : "-"}</td>
+        <td><b>${r.holders.length}</b></td>
+        <td style="white-space:normal;text-align:left">${holderBadges(r)}${(r.exitBy || []).length ? ` <span class="badge" style="background:#fef2f2;color:#991b1b">❌청산: ${r.exitBy.join("·")}</span>` : ""}</td>
+      </tr>`).join("")}</table></div>
+
+    ${exitRows.length ? `<h2 style="margin-top:26px">❌ 전원 청산 <span class="sub-note">(상위 15에서 사라진 대형 포지션)</span></h2>
+    <div class="tablewrap card-flat"><table><tr><th>종목</th><th>청산한 대가</th></tr>
+      ${exitRows.slice(0, 15).map((r) => `<tr><td>${r.issuer}</td><td class="neg">${r.exitBy.join(" · ")}</td></tr>`).join("")}</table></div>` : ""}
+
+    <p class="sub-note" style="margin-top:10px">13F는 분기말 +45일 지연 공시 · 롱 포지션만 표시(숏·옵션 제외) ·
+      각 대가의 상위 15 보유만 집계하므로 소형 포지션은 누락될 수 있음</p>`;
+
+  host.querySelectorAll(".agg-goto").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.querySelector('.group[data-group="discover"]').click();
+    document.querySelector('[data-tab="lookup"]').click();
+    if (!lookupRendered) initLookup();
+    loadLookup(a.dataset.key);
+  }));
+}
+
 /* ---------- 매매일지 (localStorage — 서버 전송 없음) ---------- */
 const JR_KEY = "cp_journal_v1";
 const JR_EMOTIONS = ["차분", "확신", "조급", "공포", "탐욕", "FOMO", "복수심", "피곤"];
@@ -2653,6 +2762,9 @@ function renderGurus() {
     b.classList.toggle("active", b.dataset.mk === mk);
     b.onclick = () => { window._guruMk = b.dataset.mk; renderGurus(); };
   });
+  $("#guru-agg").style.display = mk === "agg" ? "" : "none";
+  $("#gurus-list").style.display = mk === "agg" ? "none" : "";
+  if (mk === "agg") { renderGuruAgg(); return; }
   $("#gurus-list").innerHTML = GURUS.managers.filter((m) => (m.country || "us") === mk).map((m) => {
     // 13F 비대상(트럼프 등) — 공개 재산신고 기반 정적 카드
     if (m.type === "disclosure") {
