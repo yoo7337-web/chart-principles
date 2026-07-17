@@ -1256,6 +1256,7 @@ function renderMovers() {
       ? `거래량 ${r.vol.toLocaleString()}주` : `거래대금 ${fmtMcap(r.value, homeMk)}`;
     return `<div class="mv-row" data-t="${r.t}">
       <span class="mv-rank">${i + 1}</span>
+      ${r.logo ? `<img class="mv-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
       <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span><br>
         <span class="mv-sub">${sub}</span></span>
       <span class="mv-price">${fmtPrice(r.last, homeMk)}
@@ -1427,6 +1428,7 @@ function drawCalList() {
       <div class="cal-date">${d.slice(5).replace("-", "/")} (${yo})${isToday ? " · 오늘" : ""}
         <span class="sub-note">${items.length}건</span></div>
       ${items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
+        ${r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`}
         <span class="cal-name"><b>${r.name}</b>${r.t ? `<span class="sub-note"> ${r.t}</span>` : ""}</span>
         <span class="cal-info">${calMk === "kr"
           ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
@@ -2205,7 +2207,12 @@ function renderGurus() {
       <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${line}${labels}</svg></div>`;
   };
 
-  $("#gurus-list").innerHTML = GURUS.managers.map((m) => {
+  const mk = window._guruMk || "us";
+  document.querySelectorAll("#guru-mk button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mk === mk);
+    b.onclick = () => { window._guruMk = b.dataset.mk; renderGurus(); };
+  });
+  $("#gurus-list").innerHTML = GURUS.managers.filter((m) => (m.country || "us") === mk).map((m) => {
     // 13F 비대상(트럼프 등) — 공개 재산신고 기반 정적 카드
     if (m.type === "disclosure") {
       return `<details class="stock-block guru-block">

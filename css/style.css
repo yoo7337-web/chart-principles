@@ -413,3 +413,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .rot-mem-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
 .rs-guide { padding: 4px 16px 12px; font-size: .86rem; line-height: 1.65; }
 .rs-guide p { margin: 6px 0; }
+
+.mv-logo { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line);
+  background: #fff; object-fit: contain; flex: 0 0 28px; display: inline-block; }
+.cal-logo { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
+  background: #fff; object-fit: contain; flex: 0 0 22px; vertical-align: middle; margin-right: 6px; display: inline-block; }
