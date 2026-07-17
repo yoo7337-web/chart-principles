@@ -57,6 +57,7 @@ jobs:
       - name: Run core pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: |
           cd engine
           python analysis/collect.py --cloud
