@@ -298,6 +298,15 @@ def main():
             print(f"gurus 스냅샷 {gen} — {MAX_AGE_DAYS}일 미경과, 스킵")
             return
 
+    prev_thesis = {}
+    if OUT.exists():
+        try:
+            for m in json.loads(OUT.read_text(encoding="utf-8"))["managers"]:
+                if m.get("thesis"):
+                    prev_thesis[(m["id"], m.get("report_date"))] = m["thesis"]
+        except Exception:
+            pass
+
     managers = []
     for g in GURUS:
         try:
@@ -309,7 +318,7 @@ def main():
             time.sleep(0.3)
             prev = parse_infotable(g["cik"], accs[1][0]) if len(accs) > 1 else {}
             rows, sold, total = diff_holdings(cur, prev)
-            thesis = gen_thesis(g, rows, sold)
+            thesis = gen_thesis(g, rows, sold) or prev_thesis.get((g["id"], accs[0][1]))
             managers.append({
                 **{k: g[k] for k in ("id", "name", "fund", "style")},
                 "report_date": accs[0][1], "filing_date": accs[0][2],
@@ -355,6 +364,7 @@ def main():
         else:
             holds = k["holdings"] + ["(최근 6개월 내 5% 신규·변동 공시 없음)"]
         managers.append({**k, "country": "kr", "type": "disclosure", "source": KR_SOURCE,
+                         "corps": [[c, d, n] for c, d, n in real],  # 전체(집계용) — 카드 표시는 상위 15
                          "report_date": f"최근 6개월 공시 {len(real)}종목" if real else "공시 없음",
                          "filing_date": None, "total_value": None, "n_positions": len(real) or None,
                          "holdings": [{"issuer": h, "weight": None, "change": "hold", "chg_shares": None}
