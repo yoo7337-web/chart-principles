@@ -2391,7 +2391,9 @@ function renderGuruAgg() {
       ${exitRows.slice(0, 15).map((r) => `<tr><td>${r.issuer}</td><td class="neg">${r.exitBy.join(" · ")}</td></tr>`).join("")}</table></div>` : ""}
 
     <p class="sub-note" style="margin-top:10px">13F는 분기말 +45일 지연 공시 · 롱 포지션만 표시(숏·옵션 제외) ·
-      각 대가의 상위 15 보유만 집계하므로 소형 포지션은 누락될 수 있음</p>`;
+      각 대가의 상위 15 보유만 집계하므로 소형 포지션은 누락될 수 있음</p>
+
+    ${krAggHtml()}`;
 
   host.querySelectorAll(".agg-goto").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
@@ -2399,6 +2401,72 @@ function renderGuruAgg() {
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   }));
+}
+
+
+// 한국 대가 보유 집계 — DART 대량보유 공시 기반(corps 전체 리스트)
+function krAggHtml() {
+  const krM = GURUS.managers.filter((m) => m.country === "kr" && m.corps?.length);
+  if (!krM.length) return "";
+  const agg = new Map();  // 종목명 → {holders:[{name, d, n}], latest}
+  krM.forEach((m) => {
+    const short = m.name.replace(/\s*\(.*\)$/, "");
+    m.corps.forEach(([c, d, n]) => {
+      const r = agg.get(c) || { name: c, holders: [], latest: "0" };
+      r.holders.push({ name: short, d, n });
+      if (d > r.latest) r.latest = d;
+      agg.set(c, r);
+    });
+  });
+  // 티커 매칭(로고·시총·조회 연동)
+  agg.forEach((r) => {
+    const hit = LOOKUP_INDEX?.find((x) => x.market === "kr" && x.name === r.name);
+    if (hit) {
+      r.ticker = hit.ticker;
+      r.mcap = MARKET?.heatmap?.find((t) => t.m === "kr" && t.t === hit.ticker)?.mcap || 0;
+    }
+  });
+  const rows = [...agg.values()];
+  const fmtD = (d) => `${d.slice(4, 6)}/${d.slice(6, 8)}`;
+  const nameCell = (r) => r.ticker
+    ? `<img class="cal-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${r.ticker}.svg" onerror="this.style.visibility='hidden'"><a href="#" class="goto-lookup agg-goto" data-key="kr_${r.ticker}"><b>${r.name}</b></a>`
+    : `<b>${r.name}</b>`;
+  const holderBadges = (r) => r.holders
+    .sort((a, b) => (b.d > a.d ? 1 : -1))
+    .map((x) => `<span class="badge ${x.name === "국민연금" ? "dim" : "hero"}" title="최근 보고 ${fmtD(x.d)}${x.n > 1 ? " · 공시 " + x.n + "건" : ""}">${x.name}</span>`).join(" ");
+
+  // ① 겹침: 국민연금 외 2곳 이상 보유 (겹칠수록 확신 신호)
+  const overlap = rows.filter((r) => r.holders.filter((x) => x.name !== "국민연금").length >= 2)
+    .sort((a, b) => b.holders.length - a.holders.length || (b.mcap || 0) - (a.mcap || 0));
+  // ② 최근 30일 보고 (신규·변동 움직임)
+  const now = new Date();
+  const cut = new Date(now.getTime() - 30 * 864e5);
+  const cutS = `${cut.getFullYear()}${String(cut.getMonth() + 1).padStart(2, "0")}${String(cut.getDate()).padStart(2, "0")}`;
+  const recent = rows.filter((r) => r.latest >= cutS && r.holders.some((x) => x.name !== "국민연금"))
+    .sort((a, b) => (b.latest > a.latest ? 1 : -1)).slice(0, 20);
+
+  return `<h2 style="margin-top:34px">🇰🇷 한국 대가·기관 보유 종합 <span class="sub-note">(DART 대량보유(5%) 공시 최근 6개월 · ${rows.length}종목 — 5% 미만 비공시라 전체 포트 아님)</span></h2>
+
+    ${overlap.length ? `<h3 style="margin:12px 0 4px">🤝 겹치는 보유 <span class="sub-note">(국민연금 제외 2곳 이상 — 겹칠수록 강한 확신 신호)</span></h3>
+    <div class="tablewrap card-flat"><table>
+      <tr><th>종목</th><th>시총</th><th>보유</th><th>보유 주체 (최신 보고순)</th></tr>
+      ${overlap.map((r) => `<tr>
+        <td style="white-space:nowrap">${nameCell(r)}</td>
+        <td>${r.mcap ? fmtMcap(r.mcap, "kr") : "-"}</td><td><b>${r.holders.length}</b></td>
+        <td style="white-space:normal;text-align:left">${holderBadges(r)}</td></tr>`).join("")}
+    </table></div>` : `<p class="mini-note">국민연금 외 2곳 이상 겹치는 종목 없음</p>`}
+
+    <h3 style="margin:18px 0 4px">🕒 최근 30일 보고 <span class="sub-note">(지분 신규·변동 공시 — 최신 움직임)</span></h3>
+    <div class="tablewrap card-flat"><table>
+      <tr><th>종목</th><th>최근 보고</th><th>보유 주체</th></tr>
+      ${recent.map((r) => `<tr>
+        <td style="white-space:nowrap">${nameCell(r)}</td>
+        <td>${fmtD(r.latest)}</td>
+        <td style="white-space:normal;text-align:left">${holderBadges(r)}</td></tr>`).join("")}
+    </table></div>
+
+    <p class="sub-note" style="margin-top:8px">배지 초록=대가·운용사, 회색=국민연금 · 배지에 마우스를 올리면 보고일·공시 횟수 ·
+      국민연금 단독 보유(${rows.filter((r) => r.holders.every((x) => x.name === "국민연금")).length}종목)는 목록에서 생략 — 개별 카드(🇰🇷 한국 탭)에서 확인</p>`;
 }
 
 /* ---------- 매매일지 (localStorage — 서버 전송 없음) ---------- */
