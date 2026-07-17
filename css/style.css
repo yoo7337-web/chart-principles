@@ -448,3 +448,22 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .jr-sub { font-size: .78rem; color: var(--muted); }
 .jr-pnl { text-align: right; font-size: .92rem; line-height: 1.5; }
 #jr-stats.idx-cards { grid-template-columns: repeat(3, 1fr); }
+
+/* 포트폴리오 점검 */
+.pf-input { align-items: end; gap: 10px; }
+.pf-input label { display: flex; flex-direction: column; gap: 4px; font-size: .84rem; color: var(--muted); }
+.pf-input input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+#pf-stats.idx-cards { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 760px) { #pf-stats.idx-cards { grid-template-columns: repeat(2, 1fr); } }
+.pf-card { margin-top: 10px; border-left: 4px solid var(--line); }
+.pf-card.good { border-left-color: #16a34a; }
+.pf-card.warn { border-left-color: #f59e0b; }
+.pf-card.bad { border-left-color: #dc2626; }
+.pf-sum { display: flex; align-items: center; gap: 10px; padding: 10px 4px; }
+.pf-name { flex: 1; }
+.pf-grade { font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.pf-grade.good { background: #ecfdf5; color: #065f46; }
+.pf-grade.warn { background: #fffbeb; color: #92400e; }
+.pf-grade.bad { background: #fef2f2; color: #991b1b; }
+.pf-reason { font-size: .84rem; padding: 6px 10px; background: #f8fafc; border-radius: 6px; margin: 4px 0 2px; }
+.pf-edit, .pf-del, .pf-goto { font-size: .82rem; }

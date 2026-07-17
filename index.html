@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=38">
-<script src="firebase-config.js?v=38"></script>
-<script src="js/auth.js?v=38"></script>
+<link rel="stylesheet" href="css/style.css?v=39">
+<script src="firebase-config.js?v=39"></script>
+<script src="js/auth.js?v=39"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -19,7 +19,7 @@
   <button class="group active" data-group="market">📡 마켓 현황</button>
   <button class="group" data-group="discover">🔍 투자 발굴</button>
   <button class="group" data-group="research">📐 원칙 연구</button>
-  <button class="group" data-group="journal">✍️ 매매일지</button>
+  <button class="group" data-group="journal">✍️ 내 투자</button>
 </nav>
 
 <nav class="tabs" data-group-tabs="research" style="display:none">
@@ -31,7 +31,8 @@
   <button class="tab" data-tab="today">오늘의 신호</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
 </nav>
-<nav class="tabs solo" data-group-tabs="journal" style="display:none">
+<nav class="tabs" data-group-tabs="journal" style="display:none">
+  <button class="tab" data-tab="portfolio">포트폴리오 점검</button>
   <button class="tab" data-tab="journal">매매일지</button>
 </nav>
 <nav class="tabs" data-group-tabs="market">
@@ -353,6 +354,20 @@
     <div id="gurus-list"></div>
   </section>
 
+  <section id="tab-portfolio" class="panel">
+    <div class="criteria">🩺 <b>포트폴리오 점검</b> — 보유종목이 지금 산업·시장 흐름에 제대로 실려 있는지
+      룰 기반으로 진단합니다. 보유내역은 <b>이 브라우저에만</b> 저장(서버 전송 없음).
+      시세 30분 · 뉴스/공시 일 1회 · 판정은 참고용(매수·매도 지시 아님).</div>
+    <div class="controls pf-input">
+      <label>종목 <input type="text" id="pf-ticker" placeholder="이름 또는 티커" list="lookup-list" autocomplete="off"></label>
+      <label>수량 <input type="number" id="pf-qty" min="0" step="any" placeholder="10" style="width:90px"></label>
+      <label>평균단가 <input type="number" id="pf-avg" min="0" step="any" placeholder="매수 평단" style="width:120px"></label>
+      <button class="jr-new" id="pf-add">＋ 추가</button>
+      <button class="today-chart-btn" id="pf-import">📥 매매일지 진행중 불러오기</button>
+    </div>
+    <div class="idx-cards" id="pf-stats" style="display:none"></div>
+    <div id="pf-list" style="margin-top:14px"></div>
+  </section>
   <section id="tab-journal" class="panel">
     <div class="criteria">✍️ <b>매매일지</b> — 모든 데이터는 <b>이 브라우저에만</b> 저장됩니다(서버 전송 없음).
       기기 변경·백업은 <b>내보내기/가져오기</b>(JSON) 사용. 손익 = (청산가−진입가)×수량, 공매도는 반대.</div>
@@ -413,6 +428,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=38"></script>
+<script src="js/app.js?v=39"></script>
 </body>
 </html>

@@ -41,6 +41,7 @@ let todayRendered = false;
 let simRendered = false;
 let lookupRendered = false;
 let journalRendered = false;
+let portfolioRendered = false;
 
 const $ = (s) => document.querySelector(s);
 const pct = (x, d = 2) => (x == null ? "-" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
@@ -51,7 +52,7 @@ function tickerLabel(mk, tk) {
 }
 
 /* ---------- 중분류(그룹) + 탭 ---------- */
-const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "journal" };
+const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "portfolio" };
 
 function activateTab(tabId) {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tabId));
@@ -64,6 +65,7 @@ function activateTab(tabId) {
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
   if (tabId === "journal" && !journalRendered) initJournal();
+  if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
@@ -2341,6 +2343,228 @@ function jrRenderList() {
   host.querySelectorAll(".jr-row").forEach((el) => el.onclick = () => {
     jrOpenModal(jrLoad().find((r) => r.id === el.dataset.id));
   });
+}
+
+/* ---------- 포트폴리오 점검 (localStorage — 서버 전송 없음) ---------- */
+const PF_KEY = "cp_portfolio_v1";
+const pfStockCache = new Map();  // key -> stocks/{key}.json
+
+function pfLoad() { try { return JSON.parse(localStorage.getItem(PF_KEY)) || []; } catch (e) { return []; } }
+function pfSave(a) { localStorage.setItem(PF_KEY, JSON.stringify(a)); }
+
+function pfResolve(raw) {
+  const m = raw.match(/\(([A-Za-z0-9.]+)\)\s*$/);
+  const tk = (m ? m[1] : raw).toUpperCase();
+  const hit = LOOKUP_INDEX?.find((x) => x.ticker.toUpperCase() === tk || x.name === raw.trim() ||
+    (x.name + " (" + x.ticker + ")") === raw.trim());
+  return hit ? { ticker: hit.ticker, name: hit.name, mk: hit.market } : null;
+}
+
+function initPortfolio() {
+  portfolioRendered = true;
+  if (!LOOKUP_INDEX) initLookup();
+  $("#pf-add").onclick = () => {
+    const r = pfResolve($("#pf-ticker").value);
+    if (!r) { alert("유니버스에서 종목을 찾지 못했습니다 — 자동완성 목록에서 선택해 주세요"); return; }
+    const arr = pfLoad();
+    if (arr.some((x) => x.ticker === r.ticker)) { alert("이미 보유 목록에 있습니다"); return; }
+    arr.push({ ...r, qty: +$("#pf-qty").value || 0, avg: +$("#pf-avg").value || 0 });
+    pfSave(arr);
+    $("#pf-ticker").value = $("#pf-qty").value = $("#pf-avg").value = "";
+    pfRender();
+  };
+  $("#pf-import").onclick = () => {
+    const open = (typeof jrLoad === "function" ? jrLoad() : []).filter((t) => t.exit == null && t.side === "buy");
+    if (!open.length) { alert("매매일지에 진행중(매수) 거래가 없습니다"); return; }
+    const arr = pfLoad();
+    let added = 0;
+    open.forEach((t) => {
+      if (!arr.some((x) => x.ticker === t.ticker)) {
+        arr.push({ ticker: t.ticker, name: t.name, mk: /^\d{6}$/.test(t.ticker) ? "kr" : "us", qty: t.qty, avg: t.entry });
+        added++;
+      }
+    });
+    pfSave(arr);
+    alert(added + "종목 불러옴 (중복 제외)");
+    pfRender();
+  };
+  pfRender();
+}
+
+async function pfRender() {
+  const arr = pfLoad();
+  const statsEl = $("#pf-stats"), listEl = $("#pf-list");
+  if (!arr.length) {
+    statsEl.style.display = "none";
+    listEl.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
+      보유종목을 추가하면 뉴스·수급·섹터 흐름·원칙 신호를 종합 점검합니다.<br>
+      <span class="sub-note">매매일지의 진행중 거래를 한 번에 불러올 수도 있습니다.</span></div>`;
+    return;
+  }
+  listEl.innerHTML = `<p class="mini-note">점검 데이터 로드 중...</p>`;
+  await loadExtras();
+  await Promise.all(arr.map((h) => {
+    const key = h.mk + "_" + h.ticker;
+    if (pfStockCache.has(key)) return null;
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+      .then((j) => pfStockCache.set(key, j));
+  }));
+  pfRenderStats(arr);
+  pfRenderList(arr);
+}
+
+// 종목별 점검 — 감점 룰: 유효 매도신호 -2 / 섹터 RS 전구간 음수 -1 / 외인+기관 동반매도 -1 / 1M 상대 -10%p -1
+function pfCheck(h) {
+  const key = h.mk + "_" + h.ticker;
+  const st = pfStockCache.get(key);
+  const q = MARKET?.quotes?.[key];
+  const cur = q ? q[0] : st?.series?.[st.series.length - 1]?.c;
+  const tile = MARKET?.heatmap?.find((t) => t.m === h.mk && t.t === h.ticker);
+  const sector = tile?.sector || st?.profile?.sector;
+  const rs = MPRO?.rotation?.[h.mk]?.sectors?.find((x) => x.sector === sector);
+  const p = st?.profile || {};
+  const sup = st?.supply_sum;
+  const cons = EXTRAS.company?.map?.[key]?.cons;
+  const cutoff = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const recentSell = (st?.markers || []).filter((m) => m.side === "sell" && m.t >= cutoff && ruleActive(m.rule_id, h.mk));
+  const recentBuy = (st?.markers || []).filter((m) => m.side === "buy" && m.t >= cutoff && ruleActive(m.rule_id, h.mk));
+
+  let score = 0;
+  const reasons = [];
+  if (recentSell.length) { score -= 2; reasons.push(`검증된 매도신호 ${recentSell.length}건(30일)`); }
+  if (rs && rs.rs_w1 < 0 && rs.rs_m1 < 0 && rs.rs_m3 < 0) { score -= 1; reasons.push("섹터가 전 기간 시장 대비 약세"); }
+  if (sup && sup.frgn_20 != null && sup.inst_20 != null && sup.frgn_20 < 0 && sup.inst_20 < 0) {
+    score -= 1; reasons.push("외국인·기관 20일 동반 순매도");
+  }
+  if (p.rel_m1 != null && p.rel_m1 < -0.10) { score -= 1; reasons.push(`1개월 시장 대비 ${pct(p.rel_m1, 0)} 뒤처짐`); }
+  const grade = score <= -3 ? "bad" : score < 0 ? "warn" : "good";
+  const gradeTxt = grade === "bad" ? "🔴 논거 재점검" : grade === "warn" ? "🟡 점검 필요" : "🟢 흐름 양호";
+  if (!reasons.length) reasons.push(recentBuy.length ? `매수신호 ${recentBuy.length}건(30일) — 원칙상 우호적` : "감점 요인 없음");
+  return { st, cur, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons };
+}
+
+function pfRenderStats(arr) {
+  const statsEl = $("#pf-stats");
+  statsEl.style.display = "";
+  let krVal = 0, krCost = 0, usVal = 0, usCost = 0;
+  const secW = {};
+  let nBad = 0, nWarn = 0;
+  arr.forEach((h) => {
+    const c = pfCheck(h);
+    const v = (c.cur || 0) * h.qty;
+    if (h.mk === "kr") { krVal += v; krCost += h.avg * h.qty; } else { usVal += v; usCost += h.avg * h.qty; }
+    if (c.sector) secW[c.sector] = (secW[c.sector] || 0) + v;
+    if (c.grade === "bad") nBad++;
+    if (c.grade === "warn") nWarn++;
+  });
+  const totV = krVal + usVal;
+  const topSec = Object.entries(secW).sort((a, b) => b[1] - a[1])[0];
+  const conc = topSec && totV ? topSec[1] / totV : 0;
+  const ret = (v, c) => (c ? v / c - 1 : null);
+  const fmtR = (r) => r == null ? "" : `<span class="${r >= 0 ? "pos" : "neg"}">${pct(r, 1)}</span>`;
+  const rg = MARKET?.regime || {};
+  const valTxt = [krVal ? Math.round(krVal).toLocaleString() + "원" : null,
+                  usVal ? "$" + usVal.toLocaleString(undefined, { maximumFractionDigits: 0 }) : null]
+    .filter(Boolean).join(" · ") || "-";
+  statsEl.innerHTML = `
+    <div class="idx-card"><div class="sub-note">평가액 (30분 시세)</div>
+      <div class="lk-name" style="font-size:.98rem">${valTxt}</div>
+      <div class="sub-note">수익률 🇰🇷${fmtR(ret(krVal, krCost)) || "-"} 🇺🇸${fmtR(ret(usVal, usCost)) || "-"}</div></div>
+    <div class="idx-card"><div class="sub-note">시장 국면</div>
+      <div class="lk-name" style="font-size:.98rem">🇰🇷 ${REGIME_KO[rg.kr] || "-"}<br>🇺🇸 ${REGIME_KO[rg.us] || "-"}</div></div>
+    <div class="idx-card"><div class="sub-note">섹터 집중도</div>
+      <div class="lk-name">${topSec ? `${Math.round(conc * 100)}%` : "-"}
+        <span class="sub-note">${topSec ? topSec[0] : ""}</span></div>
+      <div class="sub-note">${conc >= 0.4 ? "⚠ 단일 섹터 40%↑ — 분산 점검" : "집중도 양호"}</div></div>
+    <div class="idx-card"><div class="sub-note">점검 결과</div>
+      <div class="lk-name">${nBad ? `🔴 ${nBad}` : ""} ${nWarn ? `🟡 ${nWarn}` : ""} 🟢 ${arr.length - nBad - nWarn}</div>
+      <div class="sub-note">${nBad ? "빨간 종목의 보유 논거부터 재점검" : nWarn ? "노란 종목 사유 확인" : "전 종목 흐름 양호"}</div></div>`;
+}
+
+function pfRenderList(arr) {
+  const listEl = $("#pf-list");
+  listEl.innerHTML = arr.map((h, idx) => {
+    const key = h.mk + "_" + h.ticker;
+    const c = pfCheck(h);
+    const logo = h.mk === "kr" ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${h.ticker}.svg`
+      : (EXTRAS.company?.map?.[key]?.logo || "");
+    const ret = h.avg && c.cur ? c.cur / h.avg - 1 : null;
+    const fd = EXTRAS.feed?.map?.[key];
+    const rsArrow = c.rs ? (c.rs.rs_w1 > c.rs.rs_m1 ? "↗ 가속" : "↘ 감속") : "";
+    const upside = c.cons?.target && c.cur ? c.cons.target / c.cur - 1 : null;
+    const rowsHtml = `
+      <div class="prof-grid wide" style="margin-top:8px">
+        <div class="prof-row"><span>보유 손익 (평단 ${h.avg ? fmtPrice(h.avg, h.mk) : "-"})</span>
+          <span>${c.cur ? fmtPrice(c.cur, h.mk) : "-"} ${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span></div>
+        <div class="prof-row"><span>시장 대비 성과</span>
+          <span>1개월 ${c.p.rel_m1 != null ? `<b class="${c.p.rel_m1 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m1, 1)}</b>` : "-"}
+            · 3개월 ${c.p.rel_m3 != null ? `<b class="${c.p.rel_m3 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m3, 1)}</b>` : "-"}</span></div>
+        <div class="prof-row"><span>섹터 흐름 (${c.sector || "-"})</span>
+          <span>${c.rs ? `RS 1주 <b class="${c.rs.rs_w1 >= 0 ? "pos" : "neg"}">${pct(c.rs.rs_w1, 1)}</b>
+            · 1개월 <b class="${c.rs.rs_m1 >= 0 ? "pos" : "neg"}">${pct(c.rs.rs_m1, 1)}</b>
+            · 3개월 <b class="${c.rs.rs_m3 >= 0 ? "pos" : "neg"}">${pct(c.rs.rs_m3, 1)}</b> ${rsArrow}` : "섹터 데이터 없음"}</span></div>
+        <div class="prof-row"><span>수급 (20일)</span>
+          <span>${c.sup ? `외국인 <b class="${(c.sup.frgn_20 || 0) >= 0 ? "pos" : "neg"}">${c.sup.frgn_20 > 0 ? "+" : ""}${Math.round(c.sup.frgn_20 || 0).toLocaleString()}억</b>
+            · 기관 <b class="${(c.sup.inst_20 || 0) >= 0 ? "pos" : "neg"}">${c.sup.inst_20 > 0 ? "+" : ""}${Math.round(c.sup.inst_20 || 0).toLocaleString()}억</b>` : "미국 종목 미지원"}</span></div>
+        <div class="prof-row"><span>컨센서스</span>
+          <span>${c.cons?.target ? `목표가 ${fmtPrice(c.cons.target, h.mk)} <b class="${upside >= 0 ? "pos" : "neg"}">(${pct(upside, 0)})</b>` : "-"}</span></div>
+        <div class="prof-row"><span>원칙 신호 (30일, 현 국면 유효)</span>
+          <span>${c.recentSell.length ? `<b class="neg">매도 ${c.recentSell.length}건</b> (${[...new Set(c.recentSell.map((m) => RULE_ABBR[m.rule_id] || m.rule_id))].join("·")})` : ""}
+            ${c.recentBuy.length ? `<b class="pos">매수 ${c.recentBuy.length}건</b>` : ""}
+            ${!c.recentSell.length && !c.recentBuy.length ? "없음" : ""}</span></div>
+      </div>`;
+    const feedHtml = fd ? `
+      <div class="lookup-two" style="margin-top:10px">
+        <div><div class="perf-h">📰 최근 1주 뉴스</div>
+          ${fd.news?.length ? fd.news.slice(0, 5).map((n) => `<div class="lk-feed-row"><span class="lk-feed-date">${n.t}</span>
+            <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a></div>`).join("") : `<p class="mini-note">없음</p>`}</div>
+        <div><div class="perf-h">📢 최근 공시</div>
+          ${fd.disc?.length ? fd.disc.slice(0, 5).map((d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(5)}</span>
+            <span>${d.title}</span></div>`).join("") : `<p class="mini-note">없음</p>`}</div>
+      </div>` : "";
+    return `<details class="card-flat pf-card ${c.grade}" ${c.grade !== "good" ? "open" : ""}>
+      <summary class="pf-sum">
+        ${logo ? `<img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
+        <span class="pf-name"><b>${h.name}</b> <span class="sub-note">${h.ticker} · ${h.qty}주</span></span>
+        <span class="pf-ret">${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span>
+        <span class="pf-grade ${c.grade}">${c.gradeTxt}</span>
+      </summary>
+      <p class="pf-reason">${c.grade === "good" ? "✅" : "⚠"} ${c.reasons.join(" · ")}</p>
+      ${rowsHtml}${feedHtml}
+      <div style="margin-top:10px;display:flex;gap:14px">
+        <a href="#" class="goto-lookup pf-goto" data-key="${key}">종목 조회에서 상세 분석 →</a>
+        <span style="flex:1"></span>
+        <a href="#" class="pf-edit" data-i="${idx}">수정</a>
+        <a href="#" class="pf-del" data-i="${idx}" style="color:#b91c1c">삭제</a>
+      </div>
+    </details>`;
+  }).join("") + `<p class="sub-note" style="margin-top:10px">판정 룰: 유효 매도신호(-2) · 섹터 전기간 약세(-1) ·
+    외인+기관 동반매도(-1) · 1개월 상대성과 -10%p(-1) → 합계 -3↓=🔴 / -1~-2=🟡 / 0=🟢. 참고용 자동 판정.</p>`;
+
+  listEl.querySelectorAll(".pf-goto").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.querySelector('.group[data-group="discover"]').click();
+    document.querySelector('[data-tab="lookup"]').click();
+    if (!lookupRendered) initLookup();
+    loadLookup(a.dataset.key);
+  }));
+  listEl.querySelectorAll(".pf-del").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const arr = pfLoad();
+    if (!confirm(arr[+a.dataset.i].name + " 을(를) 목록에서 삭제할까요?")) return;
+    arr.splice(+a.dataset.i, 1);
+    pfSave(arr); pfRender();
+  }));
+  listEl.querySelectorAll(".pf-edit").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const arr = pfLoad(), it = arr[+a.dataset.i];
+    const qty = prompt(`${it.name} 수량(주)`, it.qty);
+    if (qty == null) return;
+    const avg = prompt(`${it.name} 평균단가`, it.avg);
+    if (avg == null) return;
+    it.qty = +qty || 0; it.avg = +avg || 0;
+    pfSave(arr); pfRender();
+  }));
 }
 
 /* ---------- 투자 대가 (13F) ---------- */
