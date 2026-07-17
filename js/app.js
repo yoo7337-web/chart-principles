@@ -378,8 +378,64 @@ function baseChartOpts(el, height) {
   };
 }
 
-function drawIndicatorPane(el, ruleId, s, markerDates) {
-  const kind = IND_PANE[ruleId];
+/* ---------- 클라이언트 TA (주봉·월봉 재계산용 — 일봉은 사전계산 컬럼 사용) ---------- */
+function taEnrich(bars) {
+  const c = bars.map((b) => b.c);
+  const sma = (n, i) => (i + 1 >= n ? c.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n : null);
+  const emaArr = (n) => { const k = 2 / (n + 1); let e = null; return c.map((v, i) => { e = e == null ? v : v * k + e * (1 - k); return i >= n - 1 ? e : null; }); };
+  const e12 = emaArr(12), e26 = emaArr(26);
+  const macd = c.map((_, i) => (e12[i] != null && e26[i] != null ? e12[i] - e26[i] : null));
+  let s9 = null;
+  const macds = macd.map((m) => { if (m == null) return null; s9 = s9 == null ? m : m * 0.2 + s9 * 0.8; return s9; });
+  let au = 0, ad = 0;
+  const rsi = c.map((v, i) => {
+    if (i === 0) return null;
+    const ch = v - c[i - 1], up = Math.max(ch, 0), dn = Math.max(-ch, 0);
+    if (i <= 14) { au += up / 14; ad += dn / 14; return i === 14 ? 100 - 100 / (1 + au / (ad || 1e-9)) : null; }
+    au = (au * 13 + up) / 14; ad = (ad * 13 + dn) / 14;
+    return 100 - 100 / (1 + au / (ad || 1e-9));
+  });
+  const rawK = bars.map((b, i) => {
+    if (i < 13) return null;
+    const w = bars.slice(i - 13, i + 1);
+    const hh = Math.max(...w.map((x) => x.h)), ll = Math.min(...w.map((x) => x.l));
+    return hh === ll ? 50 : (b.c - ll) / (hh - ll) * 100;
+  });
+  const stoch = rawK.map((v, i) => (v == null || rawK[i - 1] == null || rawK[i - 2] == null ? null : (rawK[i] + rawK[i - 1] + rawK[i - 2]) / 3));
+  let o = 0;
+  const obv = bars.map((b, i) => { if (i > 0) { if (b.c > bars[i - 1].c) o += b.v; else if (b.c < bars[i - 1].c) o -= b.v; } return o; });
+  bars.forEach((b, i) => {
+    b.ma5 = sma(5, i); b.ma20 = sma(20, i); b.ma60 = sma(60, i); b.ma120 = sma(120, i);
+    if (b.ma20 != null) {
+      const w = c.slice(i - 19, i + 1);
+      const sd = Math.sqrt(w.reduce((a, v) => a + (v - b.ma20) ** 2, 0) / 20);
+      b.bbu = b.ma20 + 2 * sd; b.bbd = b.ma20 - 2 * sd; b.disp = b.c / b.ma20 - 1;
+    }
+    b.rsi = rsi[i]; b.macd = macd[i]; b.macds = macds[i]; b.stoch = stoch[i];
+    b.obv = obv[i]; b.obvm = i >= 19 ? obv.slice(i - 19, i + 1).reduce((a, v) => a + v, 0) / 20 : null;
+  });
+  return bars;
+}
+
+// 일봉 시계열 → 주봉/월봉 리샘플 (마지막 거래일을 봉 날짜로) + 지표 재계산
+function resampleBars(series, tf) {
+  if (tf === "d") return series;
+  const keyOf = tf === "w"
+    ? (t) => { const d = new Date(t + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); }
+    : (t) => t.slice(0, 7);
+  const out = [];
+  let cur = null, k0 = null;
+  for (const x of series) {
+    const k = keyOf(x.t);
+    if (k !== k0) { if (cur) out.push(cur); cur = { t: x.t, o: x.o, h: x.h, l: x.l, c: x.c, v: x.v }; k0 = k; }
+    else { cur.h = Math.max(cur.h, x.h); cur.l = Math.min(cur.l, x.l); cur.c = x.c; cur.v += x.v; cur.t = x.t; }
+  }
+  if (cur) out.push(cur);
+  return taEnrich(out);
+}
+
+// 오실레이터 패널 (종류 직접 지정 — 원칙 연동·수동 선택 공용)
+function drawOscKind(el, kind, s, markerDates) {
   if (!kind) { el.style.display = "none"; return null; }
   el.style.display = "block";
   el.style.height = "160px";
@@ -421,6 +477,10 @@ function drawIndicatorPane(el, ruleId, s, markerDates) {
   }
   main.setMarkers((markerDates || []).map((d) => ({ time: d, position: "inBar", color: "#111827", shape: "circle" })));
   return c;
+}
+
+function drawIndicatorPane(el, ruleId, s, markerDates) {
+  return drawOscKind(el, IND_PANE[ruleId], s, markerDates);
 }
 
 function drawChart() {
