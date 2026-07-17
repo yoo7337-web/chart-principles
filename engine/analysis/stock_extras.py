@@ -158,19 +158,34 @@ def us_company(tk: str) -> dict:
     return out
 
 
+def _kr_parallel(codes: list, fn, label: str, workers: int = 6) -> dict:
+    """KR 종목 병렬 수집 (US 러너의 네이버 왕복 지연 상쇄 — 순차 50분→병렬 ~8분)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    out, done = {}, 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fn, c): c for c in codes}
+        for f in as_completed(futs):
+            code = futs[f]
+            try:
+                d = f.result()
+                if d:
+                    out[code] = d
+            except Exception:
+                pass
+            done += 1
+            if done % 100 == 0:
+                print(f"  [{label}] {done}/{len(codes)}")
+    return out
+
+
 def build_company(quick: bool = False) -> dict:
     names = kr_codes()
     codes = list(names)[:20] if quick else list(names)
     tickers = US_TICKERS[:5] if quick else US_TICKERS
     cmap = {}
-    for i, code in enumerate(codes, 1):
-        d = kr_company(code)
-        if d:
-            d.setdefault("logo", f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{code}.svg")
-            cmap[f"kr_{code}"] = d
-        if i % 50 == 0:
-            print(f"  [KR company] {i}/{len(codes)}")
-        time.sleep(0.12)
+    for code, d in _kr_parallel(codes, kr_company, "KR company").items():
+        d.setdefault("logo", f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{code}.svg")
+        cmap[f"kr_{code}"] = d
     for i, tk in enumerate(tickers, 1):
         d = us_company(tk)
         if d:
@@ -282,13 +297,9 @@ def build_feed(quick: bool = False) -> dict:
     codes = list(names)[:20] if quick else list(names)
     tickers = US_TICKERS[:5] if quick else US_TICKERS
     fmap = {}
-    for i, code in enumerate(codes, 1):
-        d = kr_feed(code)
+    for code, d in _kr_parallel(codes, kr_feed, "KR feed").items():
         if d["news"] or d["disc"]:
             fmap[f"kr_{code}"] = d
-        if i % 50 == 0:
-            print(f"  [KR feed] {i}/{len(codes)}")
-        time.sleep(0.12)
     ciks = _cik_map()
     for i, tk in enumerate(tickers, 1):
         d = us_feed(tk, ciks.get(tk.replace("-", "")))
