@@ -349,7 +349,8 @@ def kr_feed(code: str) -> dict:
                 continue
             if ts < cut_disc:
                 continue
-            out["disc"].append({"d": ts.strftime("%Y-%m-%d"), "title": it["title"][:80]})
+            out["disc"].append({"d": ts.strftime("%Y-%m-%d"), "title": it["title"][:80],
+                                "link": f"https://finance.naver.com/item/news_notice.naver?code={code}"})
         out["disc"] = out["disc"][:8]
     except Exception:
         pass
@@ -410,6 +411,41 @@ def build_feed(quick: bool = False) -> dict:
     for code, d in _kr_parallel(codes, kr_feed, "KR feed").items():
         if d["news"] or d["disc"]:
             fmap[f"kr_{code}"] = d
+
+    # DART 공시로 교체(원문 딥링크 rcptNo) — 반드시 순차·저속. 실패 시 네이버 공시(목록 링크) 유지.
+    key = _dart_key()
+    if key:
+        try:
+            cmap = _corp_codes(key)
+        except Exception:
+            cmap = {}
+        cut = (date.today() - timedelta(days=183)).strftime("%Y%m%d")
+        today_s = date.today().strftime("%Y%m%d")
+        done = fetched = fail_streak = 0
+        for code in codes:
+            k = f"kr_{code}"
+            cc = cmap.get(code)
+            if not cc or fail_streak >= 5:
+                continue
+            try:
+                d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
+                          f"&bgn_de={cut}&end_de={today_s}&page_count=8")
+                fail_streak = 0
+                if d.get("status") == "000" and d.get("list"):
+                    disc = [{"d": f"{r['rcept_dt'][:4]}-{r['rcept_dt'][4:6]}-{r['rcept_dt'][6:]}",
+                             "title": r["report_nm"][:80],
+                             "link": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={r['rcept_no']}"}
+                            for r in d["list"][:8]]
+                    if disc:
+                        fmap.setdefault(k, {"news": [], "disc": []})["disc"] = disc
+                        fetched += 1
+            except Exception:
+                fail_streak += 1
+            done += 1
+            if done % 150 == 0:
+                print(f"  [DART disc] {done} (교체 {fetched})")
+            time.sleep(0.25)
+        print(f"  DART 공시 딥링크: {fetched}종목 교체 (실패 시 네이버 목록 링크 유지)")
     ciks = _cik_map()
     for i, tk in enumerate(tickers, 1):
         d = us_feed(tk, ciks.get(tk.replace("-", "")))
