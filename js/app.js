@@ -760,19 +760,68 @@ function fillTodayTable() {
   const rows = TODAY.signals.filter((s) =>
     (!mk || s.market === mk) && (!side || s.side === side) && (!activeOnly || s.active));
   $("#today-table").innerHTML =
-    `<tr><th>신호일</th><th>종목</th><th>원칙</th><th>방향</th><th>종가</th><th>국면상</th></tr>` +
-    (rows.length ? rows.map((s) => `<tr style="${s.active ? "" : "opacity:.45"}">
+    `<tr><th>신호일</th><th>종목</th><th>원칙</th><th>방향</th><th>종가</th><th>국면상</th><th>차트</th></tr>` +
+    (rows.length ? rows.map((s, i) => `<tr style="${s.active ? "" : "opacity:.45"}">
       <td>${s.date}</td>
       <td><a href="#" class="goto-lookup" data-key="${s.market}_${s.ticker}">${s.market === "kr" ? s.name + " (" + s.ticker + ")" : s.ticker}</a></td>
       <td>${s.rule}</td><td>${s.side === "buy" ? "🟢 매수" : "🔴 매도"}</td>
       <td>${s.price.toLocaleString()}</td><td>${s.active ? "✅ 유효" : "⛔ 꺼짐"}</td>
-    </tr>`).join("") : `<tr><td colspan="6">조건에 맞는 신호 없음</td></tr>`);
+      <td><button class="today-chart-btn" data-i="${i}">📈 보기</button></td>
+    </tr>`).join("") : `<tr><td colspan="7">조건에 맞는 신호 없음</td></tr>`);
   document.querySelectorAll(".goto-lookup").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.preventDefault();
       document.querySelector('[data-tab="lookup"]').click();
       loadLookup(a.dataset.key);
     }));
+  document.querySelectorAll(".today-chart-btn").forEach((b) =>
+    b.addEventListener("click", () => toggleTodayChart(b, rows[+b.dataset.i])));
+}
+
+// 신호 행 아래에 해당 종목 미니차트 펼침 — 신호일 ★ 강조 + 같은 원칙의 과거 신호 표시
+let todayChart = null;
+function toggleTodayChart(btn, sig) {
+  const tr = btn.closest("tr");
+  const open = tr.nextElementSibling?.classList.contains("today-chart-row");
+  document.querySelectorAll(".today-chart-row").forEach((r) => r.remove());
+  if (todayChart) { todayChart.remove(); todayChart = null; }
+  document.querySelectorAll(".today-chart-btn").forEach((x) => { x.textContent = "📈 보기"; });
+  if (open) return;  // 이미 열려 있었으면 닫기만
+  btn.textContent = "▲ 닫기";
+  const row = document.createElement("tr");
+  row.className = "today-chart-row";
+  row.innerHTML = `<td colspan="7"><div class="chart" style="height:300px"></div><p class="legend"></p></td>`;
+  tr.after(row);
+  fetch(`data/stocks/${sig.market}_${sig.ticker}.json` + _cb)
+    .then((r) => (r.ok ? r.json() : null)).then((st) => {
+      const el = row.querySelector(".chart");
+      if (!st) { el.textContent = "차트 데이터 없음 (stocks JSON 미생성 종목)"; el.style.padding = "20px"; return; }
+      const s = st.series.slice(-130);
+      todayChart = LightweightCharts.createChart(el, baseChartOpts(el, 300));
+      const cd = todayChart.addCandlestickSeries({
+        upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
+        borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+      });
+      cd.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
+      const line = (k, color) => {
+        const ser = todayChart.addLineSeries({ color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+        ser.setData(s.filter((x) => x[k] != null).map((x) => ({ time: x.t, value: x[k] })));
+      };
+      line("ma20", "#f39c12"); line("ma60", "#8e44ad");
+      const t0 = s[0].t;
+      const marks = st.markers.filter((m) => m.rule_id === sig.rule_id && m.t >= t0);
+      cd.setMarkers(marks.map((m) => ({
+        time: m.t, position: m.side === "buy" ? "belowBar" : "aboveBar",
+        color: m.t === sig.date ? "#111827" : (m.side === "buy" ? "#16a34a" : "#dc2626"),
+        shape: m.side === "buy" ? "arrowUp" : "arrowDown",
+        text: m.t === sig.date ? "★오늘" : "",
+      })));
+      todayChart.timeScale().fitContent();
+      row.querySelector(".legend").innerHTML =
+        `<b>${sig.rule}</b> 신호 — ★=이번 신호(${sig.date}) · 초록/빨강 화살표=같은 원칙의 최근 6개월 신호 ·
+         ─ <span style="color:#f39c12">MA20</span> <span style="color:#8e44ad">MA60</span> ·
+         상세 분석은 종목명 클릭 → 종목 조회`;
+    });
 }
 
 /* ---------- 종목 조회 ---------- */
@@ -811,6 +860,18 @@ function loadLookup(key) {
     renderLookupStory(st);                     // 원칙 내러티브
     drawSupply(st);                            // 수급(외국인·기관 누적 순매수)
     buildSigChips(st);                         // 원칙별 신호수 칩
+    // 봉 주기·보조지표 컨트롤 (1회 바인딩)
+    const tfbar = $("#lookup-tfbar");
+    tfbar.style.display = "flex";
+    if (!tfbar.dataset.bound) {
+      tfbar.dataset.bound = "1";
+      tfbar.querySelectorAll("#lookup-tf button").forEach((b) => b.onclick = () => {
+        lookupTf = b.dataset.tf;
+        tfbar.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x === b));
+        drawLookupChart();
+      });
+      $("#lookup-osc").onchange = () => { lookupOsc = $("#lookup-osc").value; drawLookupChart(); };
+    }
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
     renderLookupHead(st);
     loadExtras().then(() => {
@@ -842,13 +903,19 @@ function loadLookup(key) {
   });
 }
 
+let lookupTf = "d";   // 일/주/월봉
+let lookupOsc = "";   // 수동 선택 오실레이터 ("" = 원칙 연동)
+const TF_KO = { d: "일봉", w: "주봉", m: "월봉" };
+
 function drawLookupChart() {
   const st = LOOKUP_ST;
-  const s = st.series;
+  const tf = lookupTf;
+  const s = resampleBars(st.series, tf);
   const selRule = $("#lookup-rule").value;  // "" = 전체
   $("#lookup-info").innerHTML =
-    `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · 기준일 ${st.asof} · 최근 1.5년`
-    + (selRule ? ` · 선택 원칙 신호만 + 보조지표 패널` : ` · 신호 라벨 = 원칙 축약(범례 하단)`);
+    `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · 기준일 ${st.asof} · ${TF_KO[tf]}`
+    + (tf === "d" ? " · 최근 1.5년" : " (1.5년 일봉 집계)")
+    + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`);
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
   if (lookupInd) { lookupInd.remove(); lookupInd = null; }
@@ -884,22 +951,28 @@ function drawLookupChart() {
     if (filt === "off" && on) return false;
     return true;
   });
+  // 주/월봉에서는 일 단위 신호일을 해당 봉으로 스냅
+  const barTimes = s.map((x) => x.t);
+  const snap = (t) => { if (tf === "d") return t; for (const bt of barTimes) if (bt >= t) return bt; return null; };
   candles.setMarkers(shown.map((m) => {
+    const bt = snap(m.t);
+    if (!bt) return null;
     const on = ruleActive(m.rule_id, st.market);
     return {
-      time: m.t, position: m.side === "buy" ? "belowBar" : "aboveBar",
+      time: bt, position: m.side === "buy" ? "belowBar" : "aboveBar",
       color: on ? (m.side === "buy" ? "#16a34a" : "#dc2626") : "#9ca3af",
       shape: m.side === "buy" ? "arrowUp" : "arrowDown",
       text: selRule ? m.name.replace(/\(.*\)/, "").slice(0, 8) : (RULE_ABBR[m.rule_id] || ""),
     };
-  }));
+  }).filter(Boolean));
 
-  // 특정 원칙 선택 시 해당 오실레이터 보조지표 패널
+  // 보조지표 패널: 수동 선택 우선, 없으면 선택 원칙 연동
   let legendExtra = "";
-  if (selRule && IND_PANE[selRule]) {
-    const dates = shown.map((m) => m.t);
-    lookupInd = drawIndicatorPane($("#lookup-ind"), selRule, s, dates);
-    legendExtra = " · " + IND_LEGEND[IND_PANE[selRule]] + " (●=신호일)";
+  const oscKind = lookupOsc || (selRule && IND_PANE[selRule]) || "";
+  if (oscKind) {
+    const dates = (!lookupOsc && selRule) ? shown.map((m) => snap(m.t)).filter(Boolean) : [];
+    lookupInd = drawOscKind($("#lookup-ind"), oscKind, s, dates);
+    legendExtra = " · " + IND_LEGEND[oscKind] + (dates.length ? " (●=신호일)" : "");
   } else {
     $("#lookup-ind").style.display = "none";
   }
@@ -1861,7 +1934,7 @@ function renderLookupFin(st) {
       pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#16a34a"/>
         <text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#15803d">${p[2].toFixed(1)}%</text>`).join("");
   }
-  host.innerHTML = `<h3 class="lk-h3">📊 연간 실적 <span class="sub-note">(단위 ${co.fin_unit === "억원" ? "조/억원" : "USD"} · (E)=컨센서스 추정 · ${st.market === "kr" ? "네이버" : "Yahoo"})</span></h3>
+  host.innerHTML = `<h3 class="lk-h3">📊 연간 실적 <span class="sub-note">(단위 ${co.fin_unit === "억원" ? "조/억원" : "USD"} · (E)=컨센서스 추정 · ${st.market === "kr" ? (co.fin_src === "DART" ? "DART 전자공시 실적 + 네이버 추정" : "네이버") : "Yahoo"})</span></h3>
     <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
       <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>
       ${bars}${line}${labels}

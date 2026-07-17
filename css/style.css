@@ -384,3 +384,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 .guru-cash { margin: 8px 0 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; }
 .guru-cash b { font-size: .88rem; }
+
+.today-chart-btn { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 3px 10px; font-size: .78rem; cursor: pointer; }
+.today-chart-btn:hover { border-color: var(--accent); color: var(--accent); }
+.today-chart-row td { padding: 10px 6px; }
+#lookup-tfbar { align-items: center; gap: 14px; }
