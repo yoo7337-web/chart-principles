@@ -24,6 +24,7 @@ CLOUD_OWNED = [
     "data/deals.json", "data/deals_archive.json", "data/deals_briefings.json",
     "data/calendar.json",  # KIND 클라우드 접근 프로브 OK(2026-07-17) → 완전 클라우드 소유
     "data/company.json", "data/feed.json",  # 종목 심화(개요·컨센·재무/공시·뉴스) — stock_extras.py
+    "data/sector_news.json",  # 섹터별 기사 — sector_news.py
 ]
 
 

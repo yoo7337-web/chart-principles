@@ -75,6 +75,9 @@ def sector_rotation(data: dict) -> dict:
             r = C.iloc[-1] / C.iloc[-1 - nd] - 1
             w = pd.Series(weights).reindex(r.index).fillna(0)
             mkt_ret[label] = float((r * w).sum() / w.sum()) if w.sum() > 0 else float(r.mean())
+        last, prev = C.iloc[-1], C.iloc[-2]
+        ma20_last = C.rolling(20).mean().iloc[-1]
+        hi52_max = C.iloc[-252:].max()
         by_sec = {}
         for tk in C.columns:
             sec = smap.get(f"{mk}_{tk}", {}).get("sector", "기타")
@@ -94,6 +97,10 @@ def sector_rotation(data: dict) -> dict:
                 sec_ret = float((r * w).sum() / w.sum())
                 rec[label] = round(sec_ret, 4)
                 rec[f"rs_{label}"] = round(sec_ret - mkt_ret[label], 4)  # 시장 대비 초과
+            # 참여도: 당일 상승 비율 / 20일선 위 비율 / 52주 신고가 수 — RS의 '속'을 보는 지표
+            rec["up"] = round(float((last[tks] > prev[tks]).mean() * 100))
+            rec["ma20"] = round(float((last[tks] > ma20_last[tks]).mean() * 100))
+            rec["hi52"] = int((last[tks] >= hi52_max[tks] * 0.999).sum())
             recs.append(rec)
         recs.sort(key=lambda x: -x["rs_m1"])
         out[mk] = {"sectors": recs, "market": {k: round(v, 4) for k, v in mkt_ret.items()}}
