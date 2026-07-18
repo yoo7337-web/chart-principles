@@ -2810,6 +2810,7 @@ function initPortfolio() {
 async function pfRender() {
   const arr = pfLoad();
   const statsEl = $("#pf-stats"), listEl = $("#pf-list");
+  pfMarketRender();  // 수급 컨텍스트는 보유 여부와 무관(토스 스냅샷 존재 시)
   if (!arr.length) {
     statsEl.style.display = "none";
     listEl.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
@@ -2829,7 +2830,62 @@ async function pfRender() {
   pfRenderList(arr);
 }
 
+// 시장 수급 컨텍스트 — 토스 스냅샷의 KOSPI/KOSDAQ 투자자별 순매수 20일 + 국채 스프레드 (참고 표시 전용)
+function pfMarketRender() {
+  const host = $("#pf-market");
+  if (!host) return;
+  const t = tossLoad();
+  const inv = t?.market?.investor;
+  const bonds = t?.market?.bonds;
+  if (!inv && !bonds) { host.style.display = "none"; host.innerHTML = ""; return; }
+  host.style.display = "";
+  const recs = inv?.[pfMkSel] ? [...inv[pfMkSel]].sort((a, b) => (a.d || "").localeCompare(b.d || "")) : [];
+  let svg = "";
+  if (recs.length) {
+    const W = 640, H = 120, pad = 4, y0 = H / 2;
+    const max = Math.max(1, ...recs.flatMap((r) => [Math.abs(r.indiv || 0), Math.abs(r.frgn || 0), Math.abs(r.inst || 0)]));
+    const gw = (W - pad * 2) / recs.length;
+    const bw = Math.max(2, gw / 3 - 1.5);
+    const colors = { indiv: "#9aa4b2", frgn: "#d93036", inst: "#1e63e0" };
+    let bars = "";
+    recs.forEach((r, i) => ["indiv", "frgn", "inst"].forEach((k, j) => {
+      const v = r[k] || 0;
+      const hh = Math.abs(v) / max * (H / 2 - 6);
+      const x = pad + i * gw + j * (bw + 1.5);
+      bars += `<rect x="${x.toFixed(1)}" y="${(v >= 0 ? y0 - hh : y0).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, hh).toFixed(1)}" fill="${colors[k]}" rx="1"/>`;
+    }));
+    svg = `<svg viewBox="0 0 ${W} ${H}" class="pf-invbar" preserveAspectRatio="none">
+      <line x1="0" y1="${y0}" x2="${W}" y2="${y0}" stroke="#d5d9e0" stroke-width="1"/>${bars}</svg>`;
+  }
+  const won = (v) => (v >= 0 ? "+" : "-") + (Math.abs(v) >= 1e12 ? (Math.abs(v) / 1e12).toFixed(1) + "조" : Math.round(Math.abs(v) / 1e8).toLocaleString() + "억");
+  const frgnSum = recs.reduce((a, r) => a + (r.frgn || 0), 0);
+  const pensionSum = recs.reduce((a, r) => a + (r.pension || 0), 0);
+  const b2 = bonds?.KR_BOND_2Y, b10 = bonds?.KR_BOND_10Y;
+  const spread = b2 != null && b10 != null ? b10 - b2 : null;
+  host.innerHTML = `<div class="card-flat">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3 class="lk-h3" style="margin:0">🏦 시장 수급 컨텍스트 <span class="sub-note">토스 동기 ${t.synced || ""} 기준 · 참고용</span></h3>
+      <span style="flex:1"></span>
+      ${inv ? `<span class="mk-toggle" id="pf-mk-toggle">
+        <button data-m="kospi" class="${pfMkSel === "kospi" ? "active" : ""}">코스피</button>
+        <button data-m="kosdaq" class="${pfMkSel === "kosdaq" ? "active" : ""}">코스닥</button></span>` : ""}
+    </div>
+    ${recs.length ? `${svg}
+      <p class="legend"><span style="color:#9aa4b2">■</span> 개인 · <span style="color:#d93036">■</span> 외국인 · <span style="color:#1e63e0">■</span> 기관 — 일별 순매수 (최근 ${recs.length}일)</p>
+      <div class="prof-grid wide">
+        <div class="prof-row"><span>외국인 ${recs.length}일 누적 순매수</span>
+          <span><b class="${frgnSum >= 0 ? "pos" : "neg"}">${won(frgnSum)}</b></span></div>
+        <div class="prof-row"><span>연기금 ${recs.length}일 누적 순매수</span>
+          <span><b class="${pensionSum >= 0 ? "pos" : "neg"}">${won(pensionSum)}</b> <span class="sub-note">— 연기금은 저점 분할매수 성향의 장기 자금</span></span></div>
+      </div>` : `<p class="mini-note">투자자별 매매대금 데이터 없음</p>`}
+    ${spread != null ? `<p class="sub-note" style="margin-top:6px">국채 금리: 2년 ${b2}% · 10년 ${b10}% → 장단기 스프레드
+      <b class="${spread >= 0 ? "pos" : "neg"}">${spread.toFixed(2)}%p</b>${spread < 0 ? " ⚠ 금리 역전 — 역사적으로 경기 둔화 선행 신호" : ""}</p>` : ""}
+  </div>`;
+  host.querySelectorAll("#pf-mk-toggle button").forEach((b) => b.onclick = () => { pfMkSel = b.dataset.m; pfMarketRender(); });
+}
+
 // 종목별 점검 — 감점 룰: 유효 매도신호 -2 / 섹터 RS 전구간 음수 -1 / 외인+기관 동반매도 -1 / 1M 상대 -10%p -1
+//                + 토스 거래소 경고: 정리매매·투자위험 -2 / 투자경고·단기과열 -1
 function pfCheck(h) {
   const key = h.mk + "_" + h.ticker;
   const st = pfStockCache.get(key);
@@ -2881,23 +2937,44 @@ function pfRenderStats(arr) {
   });
   const totV = krVal + usVal;
   const topSec = Object.entries(secW).sort((a, b) => b[1] - a[1])[0];
-  const conc = topSec && totV ? topSec[1] / totV : 0;
+  pfConc = topSec && totV ? [topSec[1] / totV, topSec[0]] : null;  // 집중도는 리스트 상단 배지로
   const ret = (v, c) => (c ? v / c - 1 : null);
   const fmtR = (r) => r == null ? "" : `<span class="${r >= 0 ? "pos" : "neg"}">${pct(r, 1)}</span>`;
   const rg = MARKET?.regime || {};
   const valTxt = [krVal ? Math.round(krVal).toLocaleString() + "원" : null,
                   usVal ? "$" + usVal.toLocaleString(undefined, { maximumFractionDigits: 0 }) : null]
     .filter(Boolean).join(" · ") || "-";
-  statsEl.innerHTML = `
-    <div class="idx-card"><div class="sub-note">평가액 (30분 시세)</div>
+  const toss = tossLoad();
+  const fx = toss?.fx || null;
+
+  // 카드1: 총 자산(토스 현금 포함) — 스냅샷 없으면 기존 평가액 카드
+  let card1;
+  if (toss?.cash) {
+    const cashKrw = (toss.cash.krw || 0) + (fx ? (toss.cash.usd || 0) * fx : 0);
+    const stockKrw = krVal + (fx ? usVal * fx : usVal ? NaN : 0);
+    const totTxt = isNaN(stockKrw) ? valTxt : Math.round(stockKrw + cashKrw).toLocaleString() + "원";
+    card1 = `<div class="idx-card"><div class="sub-note">총 자산 (주식+현금${fx ? " · 원화 환산" : ""})</div>
+      <div class="lk-name" style="font-size:.98rem">${totTxt}</div>
+      <div class="sub-note">주식 ${valTxt} · 현금 ${Math.round(cashKrw).toLocaleString()}원<br>토스 동기 ${toss.synced || "-"}</div></div>`;
+  } else {
+    card1 = `<div class="idx-card"><div class="sub-note">평가액 (30분 시세)</div>
       <div class="lk-name" style="font-size:.98rem">${valTxt}</div>
-      <div class="sub-note">수익률 🇰🇷${fmtR(ret(krVal, krCost)) || "-"} 🇺🇸${fmtR(ret(usVal, usCost)) || "-"}</div></div>
+      <div class="sub-note">수익률 🇰🇷${fmtR(ret(krVal, krCost)) || "-"} 🇺🇸${fmtR(ret(usVal, usCost)) || "-"}</div></div>`;
+  }
+
+  // 카드2: 오늘의 손익(토스 동기 시점) — 없으면 생략(시장 국면이 그 자리로)
+  let card2 = "";
+  const s = toss?.summary;
+  if (s && (s.krw?.dayPl != null || s.usd?.dayPl != null)) {
+    const dayKrw = (s.krw?.dayPl || 0) + (fx ? (s.usd?.dayPl || 0) * fx : 0);
+    card2 = `<div class="idx-card"><div class="sub-note">오늘의 손익 (동기 시점)</div>
+      <div class="pf-day ${dayKrw >= 0 ? "pos" : "neg"}">${jrMoney(dayKrw, true)}</div>
+      <div class="sub-note">${s.dayRate != null ? `일간 ${pct(s.dayRate, 2)}` : ""}${s.plRate != null ? ` · 총 ${pct(s.plRate, 1)}` : ""}${s.plRateAfterCost != null ? ` (실현 시 ${pct(s.plRateAfterCost, 1)})` : ""}</div></div>`;
+  }
+
+  statsEl.innerHTML = card1 + card2 + `
     <div class="idx-card"><div class="sub-note">시장 국면</div>
       <div class="lk-name" style="font-size:.98rem">🇰🇷 ${REGIME_KO[rg.kr] || "-"}<br>🇺🇸 ${REGIME_KO[rg.us] || "-"}</div></div>
-    <div class="idx-card"><div class="sub-note">섹터 집중도</div>
-      <div class="lk-name">${topSec ? `${Math.round(conc * 100)}%` : "-"}
-        <span class="sub-note">${topSec ? topSec[0] : ""}</span></div>
-      <div class="sub-note">${conc >= 0.4 ? "⚠ 단일 섹터 40%↑ — 분산 점검" : "집중도 양호"}</div></div>
     <div class="idx-card"><div class="sub-note">점검 결과</div>
       <div class="lk-name">${nBad ? `🔴 ${nBad}` : ""} ${nWarn ? `🟡 ${nWarn}` : ""} 🟢 ${arr.length - nBad - nWarn}</div>
       <div class="sub-note">${nBad ? "빨간 종목의 보유 논거부터 재점검" : nWarn ? "노란 종목 사유 확인" : "전 종목 흐름 양호"}</div></div>`;
@@ -2905,7 +2982,9 @@ function pfRenderStats(arr) {
 
 function pfRenderList(arr) {
   const listEl = $("#pf-list");
-  listEl.innerHTML = arr.map((h, idx) => {
+  const concHtml = pfConc && pfConc[0] >= 0.4 ?
+    `<p class="mini-note">⚠ <b>${pfConc[1]}</b> 섹터에 평가액의 ${Math.round(pfConc[0] * 100)}% 집중 — 분산을 점검하세요.</p>` : "";
+  listEl.innerHTML = concHtml + arr.map((h, idx) => {
     const key = h.mk + "_" + h.ticker;
     const c = pfCheck(h);
     const logo = h.mk === "kr" ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${h.ticker}.svg`
@@ -2914,10 +2993,15 @@ function pfRenderList(arr) {
     const fd = EXTRAS.feed?.map?.[key];
     const rsArrow = c.rs ? (c.rs.rs_w1 > c.rs.rs_m1 ? "↗ 가속" : "↘ 감속") : "";
     const upside = c.cons?.target && c.cur ? c.cons.target / c.cur - 1 : null;
+    const tossRow = c.toss && c.toss.dayPl != null ? `
+        <div class="prof-row"><span>토스 기준 (동기 시점)</span>
+          <span>오늘 <b class="${c.toss.dayPl >= 0 ? "pos" : "neg"}">${jrMoney(c.toss.dayPl, h.mk === "kr")}</b>
+            ${c.toss.plRateAfterCost != null ? ` · 실현 시 수익률 <b class="${c.toss.plRateAfterCost >= 0 ? "pos" : "neg"}">${pct(c.toss.plRateAfterCost, 1)}</b>` : ""}
+            ${c.toss.fee != null ? ` · 수수료·세금 ${(h.mk === "kr" ? Math.round((c.toss.fee || 0) + (c.toss.tax || 0)).toLocaleString() + "원" : "$" + ((c.toss.fee || 0) + (c.toss.tax || 0)).toFixed(2))}` : ""}</span></div>` : "";
     const rowsHtml = `
       <div class="prof-grid wide" style="margin-top:8px">
         <div class="prof-row"><span>보유 손익 (평단 ${h.avg ? fmtPrice(h.avg, h.mk) : "-"})</span>
-          <span>${c.cur ? fmtPrice(c.cur, h.mk) : "-"} ${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span></div>
+          <span>${c.cur ? fmtPrice(c.cur, h.mk) : "-"} ${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span></div>${tossRow}
         <div class="prof-row"><span>시장 대비 성과</span>
           <span>1개월 ${c.p.rel_m1 != null ? `<b class="${c.p.rel_m1 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m1, 1)}</b>` : "-"}
             · 3개월 ${c.p.rel_m3 != null ? `<b class="${c.p.rel_m3 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m3, 1)}</b>` : "-"}</span></div>
@@ -2947,7 +3031,8 @@ function pfRenderList(arr) {
     return `<details class="card-flat pf-card ${c.grade}" ${c.grade !== "good" ? "open" : ""}>
       <summary class="pf-sum">
         ${logo ? `<img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
-        <span class="pf-name"><b>${h.name}</b> <span class="sub-note">${h.ticker} · ${h.qty}주</span></span>
+        <span class="pf-name"><b>${h.name}</b> <span class="sub-note">${h.ticker} · ${h.qty}주</span>
+          ${c.warns.map((w) => `<span class="pf-warn-badge ${TOSS_WARN[w.type][1]}">${TOSS_WARN[w.type][0]}</span>`).join("")}</span>
         <span class="pf-ret">${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span>
         <span class="pf-grade ${c.grade}">${c.gradeTxt}</span>
       </summary>
@@ -2961,7 +3046,8 @@ function pfRenderList(arr) {
       </div>
     </details>`;
   }).join("") + `<p class="sub-note" style="margin-top:10px">판정 룰: 유효 매도신호(-2) · 섹터 전기간 약세(-1) ·
-    외인+기관 동반매도(-1) · 1개월 상대성과 -10%p(-1) → 합계 -3↓=🔴 / -1~-2=🟡 / 0=🟢. 참고용 자동 판정.</p>`;
+    외인+기관 동반매도(-1) · 1개월 상대성과 -10%p(-1) · 거래소 정리매매/투자위험(-2) · 투자경고/단기과열(-1)
+    → 합계 -3↓=🔴 / -1~-2=🟡 / 0=🟢. 참고용 자동 판정.</p>`;
 
   listEl.querySelectorAll(".pf-goto").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();

@@ -468,6 +468,18 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .pf-reason { font-size: .84rem; padding: 6px 10px; background: #f8fafc; border-radius: 6px; margin: 4px 0 2px; }
 .pf-edit, .pf-del, .pf-goto { font-size: .82rem; }
 
+/* 토스 동기화 확장 (v2) */
+.pf-day { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; }
+.pf-day.pos { color: #d93036; }
+.pf-day.neg { color: #1e63e0; }
+.pf-warn-badge { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 999px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
+.pf-warn-badge.red { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.pf-warn-badge.org { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.pf-warn-badge.dim { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.pf-invbar { width: 100%; height: 120px; display: block; margin-top: 10px;
+  background: #fbfcfe; border: 1px solid var(--line); border-radius: 8px; }
+
 .fin-ext td, .fin-ext th { font-size: .8rem; padding: 5px 8px; }
 .fin-ext td:first-child { color: var(--muted); font-weight: 600; }
 
