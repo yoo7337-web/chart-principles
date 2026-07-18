@@ -219,7 +219,7 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
     def logo_of(mk, tk):
         if mk == "kr":
             return f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{tk}.svg"
-        return (comap.get(f"us_{tk}") or {}).get("logo")
+        return f"https://assets.parqet.com/logos/symbol/{tk}?format=png"  # parqet(티커) — clearbit 종료 대체
 
     LIQ_MIN = {"kr": 1e10, "us": 5e7}  # 급등/급락 유동성 컷: 당일 거래대금 KR 100억 / US $50M
     snaps = {"kr": [], "us": []}

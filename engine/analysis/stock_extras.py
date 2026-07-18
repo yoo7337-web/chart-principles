@@ -47,6 +47,19 @@ def _num(s) -> float | None:
         return None
 
 
+def _scrub(o):
+    """NaN/Inf 등 JSON 비호환 float → None 재귀 치환 (allow_nan=False 보호)."""
+    if isinstance(o, dict):
+        return {k: _scrub(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_scrub(v) for v in o]
+    if isinstance(o, float) and o != o:  # NaN
+        return None
+    if isinstance(o, float) and o in (float("inf"), float("-inf")):
+        return None
+    return o
+
+
 def _load(path: Path) -> dict:
     if path.exists():
         try:
@@ -141,6 +154,68 @@ def kr_fin_dart(corp_code: str, key: str) -> list:
 
 # ---------- company.json (주 1회) ----------
 
+def _qlabel(yyyymm: str) -> str:
+    """202509 → 25Q3"""
+    y, m = int(yyyymm[:4]), int(yyyymm[4:6])
+    return f"{y % 100:02d}Q{(m + 2) // 3}"
+
+
+def _qlabel_dt(ts) -> str:
+    y, m = ts.year, ts.month
+    return f"{y % 100:02d}Q{(m + 2) // 3}"
+
+
+def kr_quarter(code: str) -> tuple:
+    """네이버 분기 재무 → (fin_q, metrics, stability_q). 매출/영업이익/순이익 분기 + 투자지표 스냅샷."""
+    f = _getj(f"https://m.stock.naver.com/api/stock/{code}/finance/quarter")["financeInfo"]
+    titles = {t["key"]: t for t in f["trTitleList"]}
+    rows = {r["title"]: r["columns"] for r in f["rowList"]}
+
+    def val(title, key):
+        return _num((rows.get(title) or {}).get(key, {}).get("value"))
+
+    keys = sorted(titles)  # YYYYMM 오름차순
+    fin_q, stab = [], []
+    for k in keys:
+        rev, op, np = val("매출액", k), val("영업이익", k), val("당기순이익", k)
+        est = titles[k].get("isConsensus") == "Y"
+        if rev is not None or op is not None or np is not None:
+            fin_q.append({"q": _qlabel(k), "rev": rev, "op": op, "np": np,
+                          "opm": val("영업이익률", k), "npm": val("순이익률", k), "est": est})
+        dr, qr = val("부채비율", k), val("당좌비율", k)
+        if dr is not None or qr is not None:
+            row = {"q": _qlabel(k), "est": est}
+            if dr is not None:
+                row["debtRatio"] = dr
+            if qr is not None:
+                row["quickRatio"] = qr
+            stab.append(row)
+    # 투자지표 스냅샷 — 최신 실적 분기(추정 제외) 기준
+    latest = next((k for k in reversed(keys) if titles[k].get("isConsensus") != "Y"), keys[-1] if keys else None)
+    metrics = {}
+    if latest:
+        for kor, en in [("PER", "per"), ("PBR", "pbr"), ("EPS", "eps"), ("BPS", "bps"),
+                        ("ROE", "roe"), ("부채비율", "debtRatio"), ("당좌비율", "quickRatio"),
+                        ("주당배당금", "dps")]:
+            v = val(kor, latest)
+            if v is not None:
+                metrics[en] = v
+    return fin_q[-8:], metrics, stab[-8:]
+
+
+def kr_peers(integ: dict, self_code: str) -> list:
+    """integration industryCompareInfo → 동종업계 비교 (시총·주가·등락·3개월수익률)."""
+    out = []
+    for x in (integ.get("industryCompareInfo") or [])[:6]:
+        code = x.get("itemCode")
+        if not code or code == self_code:
+            continue
+        out.append({"ticker": code, "name": x.get("stockName"), "mk": "kr",
+                    "price": _num(x.get("closePrice")), "mcap": _num(x.get("marketValue")),
+                    "chg": _num(x.get("fluctuationsRatio")), "ret3m": _num(x.get("threeMonthEarningRate"))})
+    return out[:5]
+
+
 def kr_company(code: str) -> dict:
     out = {}
     try:  # 로고 + 컨센서스
@@ -152,6 +227,19 @@ def kr_company(code: str) -> dict:
         tgt, rec = _num(c.get("priceTargetMean")), _num(c.get("recommMean"))
         if tgt or rec:
             out["cons"] = {"target": tgt, "opinion": rec, "at": c.get("createDate")}
+        peers = kr_peers(integ, code)
+        if peers:
+            out["peers"] = peers
+    except Exception:
+        pass
+    try:  # 분기 재무 + 투자지표 스냅샷 + 분기 안정성
+        fq, metrics, stab = kr_quarter(code)
+        if fq:
+            out["fin_q"] = fq
+        if metrics:
+            out["metrics"] = metrics
+        if stab:
+            out["stability_q"] = stab
     except Exception:
         pass
     try:  # 연간 재무: 매출액·영업이익·영업이익률 (실적 3~4 + 추정)
@@ -188,14 +276,33 @@ def kr_company(code: str) -> dict:
             out["fin_ext"] = ext[-6:]
     except Exception:
         pass
-    try:  # 기업개요 (wisereport)
+    try:  # 기업개요 (wisereport 스냅샷 — 회사 소개·사업구조 서술)
         html = _get(f"https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd={code}")
         m = re.search(r'<ul class="dot_cmp"(.*?)</ul>', html, re.S)
         if m:
-            txt = re.sub(r"<[^>]+>", " ", m.group(1))
-            txt = re.sub(r"\s+", " ", txt).strip().lstrip("> ").strip()
-            if len(txt) > 30:
-                out["overview"] = txt[:600]
+            lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", li)).strip().lstrip("> ").strip()
+                     for li in re.findall(r"<li[^>]*>(.*?)</li>", m.group(1), re.S)]
+            lines = [x for x in lines if len(x) > 10]
+            if lines:
+                out["overview"] = " ".join(lines)[:900]
+                out["biz_lines"] = lines[:4]  # 불릿 단위(회사/사업/전략 서술)
+    except Exception:
+        pass
+    try:  # 매출구성 (wisereport 기업개요 상세 — 제품명·구성비%)
+        html2 = _get(f"https://navercomp.wisereport.co.kr/v2/company/c1020001.aspx?cmp_cd={code}&cn=")
+        i = html2.find("주요제품 매출구성")
+        if i > 0:
+            txt = re.sub(r"[|\s]+", "|", re.sub(r"<[^>]+>", "|", html2[i:i + 5000]))
+            m2 = re.search(r"제품명\|구성비\|(.*?)(?:&nbsp;|차트\|건너뛰기|$)", txt)
+            if m2:
+                toks = [t for t in m2.group(1).split("|") if t]
+                mix = []
+                for a, b in zip(toks[::2], toks[1::2]):
+                    v = _num(b)
+                    if v is not None and -100 <= v <= 100 and not re.match(r"^[-0-9.,]+$", a):
+                        mix.append({"name": a.strip(), "pct": v})
+                if mix:
+                    out["sales_mix"] = mix[:8]
     except Exception:
         pass
     return out
@@ -208,11 +315,14 @@ def us_company(tk: str) -> dict:
     try:
         i = t.info
         if i.get("longBusinessSummary"):
-            out["overview"] = i["longBusinessSummary"][:600]
+            out["overview"] = i["longBusinessSummary"][:1200]
+        ins, inst = i.get("heldPercentInsiders"), i.get("heldPercentInstitutions")
+        if ins is not None or inst is not None:
+            out["holders_pct"] = {"insider": round((ins or 0) * 100, 2), "inst": round((inst or 0) * 100, 2)}
         if i.get("website"):
-            dom = re.sub(r"^https?://(www\.)?", "", i["website"]).split("/")[0]
             out["website"] = i["website"]
-            out["logo"] = f"https://logo.clearbit.com/{dom}"
+        # 로고: parqet(티커 기반) — clearbit 종료 대체
+        out["logo"] = f"https://assets.parqet.com/logos/symbol/{tk}?format=png"
         if i.get("industry"):
             out["industry"] = i["industry"]
         tgt = i.get("targetMeanPrice")
@@ -282,6 +392,148 @@ def us_company(tk: str) -> dict:
             out["fin_ext"] = ext[-5:]
     except Exception:
         pass
+    try:  # 투자지표 스냅샷 (info) — PER/PSR/PBR/EPS/BPS/ROE/EV/유동비율/이자보상/배당
+        i = t.info
+        m = {}
+        for src, en, mul in [("trailingPE", "per", 1), ("priceToSalesTrailing12Months", "psr", 1),
+                             ("priceToBook", "pbr", 1), ("trailingEps", "eps", 1), ("bookValue", "bps", 1),
+                             ("returnOnEquity", "roe", 100), ("currentRatio", "currentRatio", 100),
+                             ("payoutRatio", "payout", 100)]:
+            v = _num(i.get(src))
+            if v is not None:
+                m[en] = round(v * mul, 2)
+        if i.get("enterpriseValue"):
+            m["ev"] = int(i["enterpriseValue"])
+        if i.get("dividendRate"):
+            m["dps"] = _num(i["dividendRate"])
+        # 이자보상비율 = EBIT / 이자비용 (연간)
+        try:
+            fin2 = t.financials
+            ebit = next((_num(fin2.loc[r].iloc[0]) for r in ("EBIT", "Operating Income") if r in fin2.index), None)
+            ie = next((_num(fin2.loc[r].iloc[0]) for r in ("Interest Expense", "Interest Expense Non Operating") if r in fin2.index), None)
+            if ebit is not None and ie:
+                m["interestCoverage"] = round(ebit / abs(ie) * 100, 1)
+        except Exception:
+            pass
+        if m:
+            out["metrics"] = m
+    except Exception:
+        pass
+    try:  # 분기 손익 → fin_q (매출/영업이익/순이익 + 이익률)
+        qi = t.quarterly_income_stmt
+        rev = next((qi.loc[r] for r in ("Total Revenue", "Operating Revenue") if r in qi.index), None)
+        op = qi.loc["Operating Income"] if "Operating Income" in qi.index else None
+        ni = next((qi.loc[r] for r in ("Net Income", "Net Income Common Stockholders") if r in qi.index), None)
+        if rev is not None:
+            fq = []
+            for col in sorted(qi.columns):
+                r = _num(rev.get(col))
+                if r is None:
+                    continue
+                o = _num(op.get(col)) if op is not None else None
+                n = _num(ni.get(col)) if ni is not None else None
+                fq.append({"q": _qlabel_dt(col), "rev": round(r / 1e6), "op": round(o / 1e6) if o is not None else None,
+                           "np": round(n / 1e6) if n is not None else None,
+                           "opm": round(o / r * 100, 1) if o else None, "npm": round(n / r * 100, 1) if n else None,
+                           "est": False})
+            if fq:
+                out["fin_q"] = fq[-8:]
+    except Exception:
+        pass
+    try:  # 분기 재무상태 → stability_q (부채비율·유동비율)
+        qb = t.quarterly_balance_sheet
+        eq = next((qb.loc[r] for r in ("Stockholders Equity", "Common Stock Equity") if r in qb.index), None)
+        lb = next((qb.loc[r] for r in ("Total Liabilities Net Minority Interest",) if r in qb.index), None)
+        ca = qb.loc["Current Assets"] if "Current Assets" in qb.index else None
+        cl = qb.loc["Current Liabilities"] if "Current Liabilities" in qb.index else None
+        stab = []
+        for col in sorted(qb.columns):
+            q = _num(eq.get(col)) if eq is not None else None
+            row = {"q": _qlabel_dt(col), "est": False}
+            l = _num(lb.get(col)) if lb is not None else None
+            if q and l is not None:
+                row["debtRatio"] = round(l / q * 100, 1)
+            if q is not None:
+                row["equity"] = round(q / 1e6)
+            if l is not None:
+                row["debt"] = round(l / 1e6)
+            a, c = (_num(ca.get(col)) if ca is not None else None), (_num(cl.get(col)) if cl is not None else None)
+            if a and c:
+                row["currentRatio"] = round(a / c * 100, 1)
+            if len(row) > 2:
+                stab.append(row)
+        if stab:
+            out["stability_q"] = stab[-8:]
+            if out.get("metrics") is not None and stab[-1].get("debtRatio") is not None:
+                out["metrics"].setdefault("debtRatio", stab[-1]["debtRatio"])
+    except Exception:
+        pass
+    try:  # 애널리스트 목표주가(최고/최저/평균) + 의견 분포
+        i = t.info
+        an = {}
+        for src, en in [("targetHighPrice", "targetHigh"), ("targetLowPrice", "targetLow"),
+                        ("targetMeanPrice", "targetMean"), ("targetMedianPrice", "targetMedian"),
+                        ("numberOfAnalystOpinions", "n")]:
+            v = i.get(src)
+            if v is not None:
+                an[en] = _num(v)
+        try:
+            rc = t.recommendations
+            if rc is not None and len(rc):
+                r0 = rc.iloc[0]
+                an["opinion"] = {k: int(r0[k]) for k in ("strongBuy", "buy", "hold", "sell", "strongSell") if k in r0}
+        except Exception:
+            pass
+        if an:
+            out["analyst"] = an
+    except Exception:
+        pass
+    try:  # 실적 서프라이즈 (EPS 발표 vs 예상)
+        ed = t.get_earnings_dates(limit=12)
+        if ed is not None and len(ed):
+            eps = []
+            for idx, r in ed.iterrows():
+                act, est = _num(r.get("Reported EPS")), _num(r.get("EPS Estimate"))
+                if act is None or est is None:
+                    continue
+                eps.append({"q": _qlabel_dt(idx), "actual": round(act, 2), "est": round(est, 2),
+                            "pct": round((act - est) / abs(est) * 100, 1) if est else None})
+            eps = list(reversed(eps))[-8:]
+            if eps:
+                out["surprise"] = {"eps": eps}
+    except Exception:
+        pass
+    try:  # 배당 이력 (최근 3년)
+        i = t.info
+        dv = {}
+        if i.get("dividendRate"):
+            dv["dps"] = _num(i["dividendRate"])
+        if _num(i.get("payoutRatio")) is not None:
+            dv["payout"] = round(_num(i["payoutRatio"]) * 100, 1)
+        try:
+            ds = t.dividends
+            if ds is not None and len(ds):
+                cut = datetime.now(timezone.utc) - timedelta(days=1100)
+                hist = [{"d": idx.strftime("%Y-%m-%d"), "amt": round(float(v), 4)}
+                        for idx, v in ds.items() if idx.to_pydatetime().replace(tzinfo=timezone.utc) >= cut]
+                if hist:
+                    dv["history"] = hist[-12:]
+        except Exception:
+            pass
+        if dv:
+            out["dividend"] = dv
+    except Exception:
+        pass
+    try:  # 상위 기관 주주 5
+        ih = t.institutional_holders
+        if ih is not None and len(ih):
+            cols = {c.lower(): c for c in ih.columns}
+            hc, pc = cols.get("holder"), (cols.get("pctheld") or cols.get("% out"))
+            if hc and pc:
+                out["holders"] = [{"name": str(r[hc])[:40], "pct": round(float(r[pc]) * (100 if float(r[pc]) < 1 else 1), 2), "rel": "기관"}
+                                  for _, r in ih.head(5).iterrows() if r[pc] == r[pc]]
+    except Exception:
+        pass
     return out
 
 
@@ -345,16 +597,42 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
             if old.get("fin_src") == "DART" and any(r["y"] == target_year for r in old.get("fin", [])):
                 cmap[k]["fin"] = ([r for r in old["fin"] if not r.get("est")] + est)[-6:]
                 cmap[k]["fin_src"] = "DART"
-                continue  # 최신 사업연도 이미 보유 — 재호출 불필요
+                if old.get("holders"):  # 주주구성도 연 1회 변화 — 재사용
+                    cmap[k]["holders"] = old["holders"]
+                    if old.get("minor_pct") is not None:
+                        cmap[k]["minor_pct"] = old["minor_pct"]
+                    continue  # 최신 사업연도 fin+주주 모두 보유
             if fail_streak >= 5:
                 continue  # 쿨다운 감지 — 남은 종목은 다음 실행에서
             try:
-                dart = kr_fin_dart(_DART[1][code], _DART[0])
+                if not (old.get("fin_src") == "DART" and any(r["y"] == target_year for r in old.get("fin", []))):
+                    dart = kr_fin_dart(_DART[1][code], _DART[0])
+                    if dart:
+                        cmap[k]["fin"] = (dart + est)[-6:]
+                        cmap[k]["fin_src"] = "DART"
+                        fetched += 1
+                    time.sleep(0.25)
+                # 주주구성 (최대주주+특수관계인 상위 / 소액주주 비율)
+                hy = _getj(f"https://opendart.fss.or.kr/api/hyslrSttus.json?crtfc_key={_DART[0]}"
+                           f"&corp_code={_DART[1][code]}&bsns_year={target_year}&reprt_code=11011")
+                if hy.get("status") == "000":
+                    rows = {}
+                    for r in hy["list"]:
+                        pctv = _num(r.get("trmend_posesn_stock_qota_rt"))
+                        nm = (r.get("nm") or "").strip()
+                        if pctv and nm and nm != "계":
+                            rows[nm] = rows.get(nm, 0) + pctv
+                    top = sorted(rows.items(), key=lambda x: -x[1])[:6]
+                    if top:
+                        cmap[k]["holders"] = [{"name": n, "pct": round(v, 2), "rel": "최대주주측"} for n, v in top]
+                time.sleep(0.25)
+                mr = _getj(f"https://opendart.fss.or.kr/api/mrhlSttus.json?crtfc_key={_DART[0]}"
+                           f"&corp_code={_DART[1][code]}&bsns_year={target_year}&reprt_code=11011")
+                if mr.get("status") == "000" and mr.get("list"):
+                    mp = _num(str(mr["list"][0].get("hold_stock_rate", "")).replace("%", ""))
+                    if mp is not None:
+                        cmap[k]["minor_pct"] = round(mp, 2)
                 fail_streak = 0
-                if dart:
-                    cmap[k]["fin"] = (dart + est)[-6:]
-                    cmap[k]["fin_src"] = "DART"
-                    fetched += 1
             except Exception:
                 fail_streak += 1
             done += 1
@@ -542,7 +820,7 @@ def main():
                         kept += 1
                 if kept:
                     print(f"  DART 실적 보존: {kept}종목 (키 없음 — 추정행만 갱신됨)")
-            COMPANY.write_text(json.dumps({"generated": now, "map": cmap},
+            COMPANY.write_text(json.dumps({"generated": now, "map": _scrub(cmap)},
                                           ensure_ascii=False, allow_nan=False), encoding="utf-8")
         else:
             print("[1/2] company 스킵 (6일 이내)")

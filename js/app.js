@@ -53,6 +53,13 @@ function tickerLabel(mk, tk) {
   return tk;
 }
 
+// 회사 로고 URL — KR=네이버(코드), US=parqet(티커, clearbit 종료 대체). 실패 시 onerror로 숨김.
+function logoUrl(mk, tk) {
+  return mk === "kr"
+    ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${tk}.svg`
+    : `https://assets.parqet.com/logos/symbol/${encodeURIComponent(tk)}?format=png`;
+}
+
 /* ---------- 중분류(그룹) + 탭 ---------- */
 const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "holdings" };
 
@@ -965,6 +972,10 @@ function loadLookup(key) {
       renderLookupMetrics(st);
       renderLookupFin(st);
       renderLookupFinQ(st);
+      renderLookupStability(st);
+      renderLookupSurprise(st);
+      renderLookupDividend(st);
+      renderLookupPeers(st);
       renderLookupFeed(st);
     });
     document.querySelectorAll('input[name="sigfilter"]').forEach((r) => { r.onchange = drawLookupChart; });
@@ -1330,7 +1341,7 @@ function renderMovers() {
       ? `거래량 ${r.vol.toLocaleString()}주` : `거래대금 ${fmtMcap(r.value, homeMk)}`;
     return `<div class="mv-row" data-t="${r.t}">
       <span class="mv-rank">${i + 1}</span>
-      ${r.logo ? `<img class="mv-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
+      <img class="mv-logo" src="${logoUrl(homeMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span><br>
         <span class="mv-sub">${sub}</span></span>
       <span class="mv-price">${fmtPrice(r.last, homeMk)}
@@ -2048,7 +2059,7 @@ function renderLookupHead(st) {
   const { cur, chg, src } = freshQuote(st);
   const up = (chg ?? 0) >= 0;
   host.innerHTML = `
-    ${co.logo ? `<img class="lk-logo" src="${co.logo}" alt="" onerror="this.style.display='none'">` : ""}
+    <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
       <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span></div>
       <div class="lk-price">${fmtPrice(cur, st.market)}
@@ -2128,7 +2139,38 @@ function renderLookupCons(st) {
     ${upside != null ? `<div class="cons-bar"><div class="cons-bar-fill" style="width:${barPos}%"></div>
       <span class="cons-cur" style="left:${barPos}%">현재가</span></div>
     <div class="cons-bar-lab"><span>&nbsp;</span><span>목표가 ${fmtPrice(cons.target, st.market)}</span></div>` : ""}
+    ${renderConsAnalyst(st, co, cur)}
     <p class="sub-note" style="margin-top:6px">컨센서스는 증권사 추정 평균 — 매수·매도 판단이 아닌 참고 지표</p>`;
+}
+
+// 애널리스트 심화(미국): 목표가 최고/평균/최저 + 매수/중립/매도 의견 분포
+function renderConsAnalyst(st, co, cur) {
+  const a = co?.analyst;
+  if (!a) return "";
+  let html = "";
+  if (a.targetHigh != null && a.targetLow != null) {
+    const pu = (v) => (cur ? pct(v / cur - 1, 1) : "");
+    html += `<div class="an-tgt">
+      <div><span class="sub-note">최저</span><b class="neg">${fmtPrice(a.targetLow, st.market)}</b><span class="sub-note">${pu(a.targetLow)}</span></div>
+      <div><span class="sub-note">평균</span><b>${fmtPrice(a.targetMean, st.market)}</b><span class="sub-note">${pu(a.targetMean)}</span></div>
+      <div><span class="sub-note">최고</span><b class="pos">${fmtPrice(a.targetHigh, st.market)}</b><span class="sub-note">${pu(a.targetHigh)}</span></div>
+    </div>`;
+  }
+  const op = a.opinion;
+  if (op) {
+    const cats = [["strongBuy", "적극매수", "#d93036"], ["buy", "매수", "#e0575c"],
+                  ["hold", "중립", "#9aa4b2"], ["sell", "매도", "#5b8def"], ["strongSell", "적극매도", "#1e63e0"]];
+    const total = cats.reduce((s, [k]) => s + (op[k] || 0), 0) || 1;
+    const bars = cats.map(([k, lab, c]) => {
+      const v = op[k] || 0, h = Math.max(3, v / total * 60);
+      return `<div class="an-bar"><span class="an-n">${v}</span>
+        <span class="an-fill" style="height:${h}px;background:${c}"></span><span class="an-lab">${lab}</span></div>`;
+    }).join("");
+    const buys = (op.strongBuy || 0) + (op.buy || 0);
+    html += `<div class="an-dist-h sub-note">애널리스트 ${total}명 중 <b class="pos">${buys}명</b>이 매수 의견</div>
+      <div class="an-dist">${bars}</div>`;
+  }
+  return html;
 }
 
 // 투자 지표 카드 (가치평가·수익·배당) + 재무(부채·유동·이자보상) + 시총·EV
@@ -2154,7 +2196,8 @@ function renderLookupMetrics(st) {
   const earnBox = box("수익", [["EPS", money(m.eps)], m.bps != null && ["BPS", money(m.bps)], ["ROE", pctv(m.roe)]]);
   const divBox = (dps != null || yld != null) ? box("배당", [["주당배당금", money(dps)],
     yld != null && ["배당수익률", "연 " + yld.toFixed(2) + "%"], payout != null && ["배당성향", pctv(payout)]]) : "";
-  const finBox1 = box("부채비율", [["", pctv(m.debtRatio, true)]]);
+  const dRatio = m.debtRatio ?? co.stability_q?.[co.stability_q.length - 1]?.debtRatio ?? co.fin_ext?.[co.fin_ext.length - 1]?.debt;
+  const finBox1 = dRatio != null ? box("부채비율", [["", pctv(dRatio, true)]]) : "";
   const liqLabel = m.currentRatio != null ? "유동비율" : "당좌비율";
   const liqVal = m.currentRatio != null ? m.currentRatio : m.quickRatio;
   const finBox2 = liqVal != null ? box(liqLabel, [["", pctv(liqVal)]]) : "";
@@ -2168,7 +2211,7 @@ function renderLookupMetrics(st) {
   host.innerHTML = `<div class="fund-head">투자 지표 <span class="sub-note">(${kr ? "네이버 집계" : "Yahoo 집계"})</span></div>
     ${capRow}
     <div class="lk-mgrid">${valBox}${earnBox}${divBox}</div>
-    ${(m.debtRatio != null || finBox2 || finBox3) ? `<div class="fund-head" style="margin-top:14px">재무 안정성</div>
+    ${(finBox1 || finBox2 || finBox3) ? `<div class="fund-head" style="margin-top:14px">재무 안정성</div>
     <div class="lk-mgrid fin3">${finBox1}${finBox2}${finBox3}</div>` : ""}
     <p class="sub-note" style="margin-top:8px">부채비율=총부채/자기자본(한국식). ${kr ? "PSR·EV·이자보상비율은 미국 종목만 제공." : ""}</p>`;
 }
@@ -2314,6 +2357,146 @@ function renderLookupFinQ(st) {
     <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출 ·
       <span style="color:#3f6fb5">■</span> 순이익 · <span style="color:#e0912f">●─</span> 순이익률(%) · 옅은색 = 추정</p>
     ${table}`;
+}
+
+// 안정성 분기 추이: 부채비율·유동비율(당좌비율) 라인 (총자본/총부채 있으면 병기)
+function renderLookupStability(st) {
+  const host = $("#lookup-stability");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const sq = co?.stability_q;
+  if (!sq || sq.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const W = 660, H = 150, padL = 30, padT = 14, padB = 30, padR = 8;
+  const n = sq.length, gw = (W - padL - padR) / n;
+  const series = [["debtRatio", "부채비율", "#e0912f"],
+                  [sq.some((r) => r.currentRatio != null) ? "currentRatio" : "quickRatio",
+                   sq.some((r) => r.currentRatio != null) ? "유동비율" : "당좌비율", "#3f6fb5"]];
+  const allV = sq.flatMap((r) => series.map(([k]) => r[k]).filter((v) => v != null));
+  const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
+  const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * (H - padT - padB);
+  let lines = "", labels = "", legend = "";
+  series.forEach(([k, lab, c]) => {
+    const pts = sq.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yS(r[k])] : null)).filter(Boolean);
+    if (pts.length > 1) {
+      lines += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="${c}" stroke-width="2"/>` +
+        pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.3" fill="${c}"/>`).join("");
+      legend += `<span style="color:${c}">●─</span> ${lab} `;
+    }
+  });
+  sq.forEach((r, i) => {
+    labels += `<text x="${padL + gw * i + gw / 2}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}${r.est ? "(E)" : ""}</text>`;
+  });
+  // y축 눈금 2개
+  const yticks = [maxV, minV].map((v) => `<text x="2" y="${yS(v) + 3}" font-size="8" fill="#9aa4b2">${Math.round(v)}%</text>`).join("");
+  host.innerHTML = `<h3 class="lk-h3">🛡️ 재무 안정성 추이 <span class="sub-note">(분기별 · ${st.market === "kr" ? "네이버" : "Yahoo"})</span></h3>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${yticks}${lines}${labels}</svg>
+    <p class="legend">${legend}</p>`;
+}
+
+// 배당 이력 (미국): 분기 배당금 막대
+function renderLookupDividend(st) {
+  const host = $("#lookup-dividend");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const h = co?.dividend?.history;
+  if (!h || h.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const total = h.reduce((s, x) => s + (x.amt || 0), 0);
+  const W = 660, H = 130, padL = 8, padT = 12, padB = 30;
+  const n = h.length, gw = (W - padL * 2) / n;
+  const maxV = Math.max(...h.map((x) => x.amt || 0), 0.01);
+  let bars = "", labels = "";
+  h.forEach((x, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(20, gw * 0.5);
+    const bh = (x.amt || 0) / maxV * (H - padT - padB);
+    bars += `<rect x="${cx - bw / 2}" y="${H - padB - bh}" width="${bw}" height="${Math.max(1, bh)}" fill="#8b5cf6" rx="1.5"/>
+      <text x="${cx}" y="${H - padB - bh - 3}" font-size="8" text-anchor="middle" fill="#6b21a8">$${x.amt}</text>`;
+    if (i % 2 === 0 || n <= 8) labels += `<text x="${cx}" y="${H - 14}" font-size="8" text-anchor="middle" fill="#6b7280">${x.d.slice(2, 7)}</text>`;
+  });
+  host.innerHTML = `<h3 class="lk-h3">💰 배당금 지급 이력 <span class="sub-note">(최근 ${n}회 · 주당 총 $${total.toFixed(2)})</span></h3>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${labels}</svg>`;
+}
+
+// 실적 서프라이즈 (미국): EPS 발표치 vs 예상치 + 서프라이즈%
+function renderLookupSurprise(st) {
+  const host = $("#lookup-surprise");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const eps = co?.surprise?.eps;
+  if (!eps || eps.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const W = 660, H = 150, padL = 8, padT = 12, padB = 30;
+  const n = eps.length, gw = (W - padL * 2) / n;
+  const maxV = Math.max(...eps.flatMap((r) => [r.actual, r.est].filter((v) => v != null)), 0.1);
+  const minV = Math.min(0, ...eps.flatMap((r) => [r.actual, r.est]));
+  const yS = (v) => padT + (maxV - v) / (maxV - minV) * (H - padT - padB);
+  const y0 = yS(0);
+  let bars = "", labels = "";
+  eps.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(16, gw / 3);
+    [["est", "#c4cad6"], ["actual", "#3f6fb5"]].forEach(([k, c], j) => {
+      const v = r[k]; if (v == null) return;
+      const y = yS(Math.max(0, v)), yn = yS(Math.min(0, v));
+      const x = cx + (j === 0 ? -bw - 1 : 1);
+      bars += `<rect x="${x}" y="${v >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (v >= 0 ? y : yn)))}" fill="${c}" rx="1.5"/>`;
+    });
+    labels += `<text x="${cx}" y="${H - 14}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}</text>`;
+  });
+  const rows = [
+    ["발표치", (r) => (r.actual == null ? "-" : "$" + r.actual)],
+    ["예상치", (r) => (r.est == null ? "-" : "$" + r.est)],
+    ["서프라이즈", (r) => (r.pct == null ? "-" : `<span class="${r.pct >= 0 ? "pos" : "neg"}">${r.pct >= 0 ? "+" : ""}${r.pct}%</span>`)],
+  ];
+  host.innerHTML = `<h3 class="lk-h3">🎯 실적 서프라이즈 <span class="sub-note">(주당순이익 발표치 vs 애널리스트 예상치 · Yahoo)</span></h3>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg"><line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>${bars}${labels}</svg>
+    <p class="legend"><span style="color:#c4cad6">■</span> 예상치 · <span style="color:#3f6fb5">■</span> 발표치</p>
+    <div class="tablewrap" style="margin-top:6px"><table class="fin-ext">
+      <tr><th></th>${eps.map((r) => `<th>${r.q}</th>`).join("")}</tr>
+      ${rows.map(([nm, f]) => `<tr><td>${nm}</td>${eps.map((r) => `<td>${f(r)}</td>`).join("")}</tr>`).join("")}
+    </table></div>`;
+}
+
+// 동종업계 비교. KR=네이버 동일업종(주가·등락·3개월) / US=유니버스 내 동일 산업 시총 상위(PER·시총·주가)
+function renderLookupPeers(st) {
+  const host = $("#lookup-peers");
+  const key = `${st.market}_${st.ticker}`;
+  const co = EXTRAS.company?.map?.[key];
+  const goto = (mk, tk) => `data-goto="${mk}_${tk}"`;
+  if (st.market === "kr") {
+    const peers = co?.peers;
+    if (!peers?.length) { host.style.display = "none"; return; }
+    host.style.display = "";
+    const rows = peers.map((p) => `<tr ${goto("kr", p.ticker)}>
+      <td class="hld-name"><img class="mv-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${p.ticker}.svg" onerror="this.style.visibility='hidden'">
+        <span><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></span></td>
+      <td>${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
+      <td class="${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td>
+      <td class="${(p.ret3m || 0) >= 0 ? "pos" : "neg"}">${p.ret3m != null ? (p.ret3m >= 0 ? "+" : "") + p.ret3m + "%" : "-"}</td></tr>`).join("");
+    host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(네이버 동일업종)</span></h3>
+      <div class="tablewrap"><table class="hld-table peer-table">
+        <thead><tr><th>종목</th><th>주가</th><th>등락률</th><th>3개월</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } else {
+    const self = FUND?.map?.[key];
+    const ind = self?.industry;
+    if (!ind || !FUND?.map) { host.style.display = "none"; return; }
+    let list = Object.entries(FUND.map).filter(([k, v]) => k.startsWith("us_") && v.industry === ind && v.mcap)
+      .map(([k, v]) => ({ ticker: k.slice(3), name: v.name_full || k.slice(3), self: k === key,
+        per: v.per, mcap: v.mcap, price: (MARKET?.quotes?.[k] || [])[0] }))
+      .sort((a, b) => (b.mcap || 0) - (a.mcap || 0)).slice(0, 6);
+    if (list.length < 2) { host.style.display = "none"; return; }
+    host.style.display = "";
+    const rows = list.map((p) => `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("us", p.ticker)}>
+      <td class="hld-name"><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></td>
+      <td>${p.per != null ? p.per.toFixed(1) + "배" : "-"}</td>
+      <td>${p.mcap != null ? fmtMcap(p.mcap, "us") : "-"}</td>
+      <td>${p.price != null ? fmtPrice(p.price, "us") : "-"}</td></tr>`).join("");
+    host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(${ind} · 시총순)</span></h3>
+      <div class="tablewrap"><table class="hld-table peer-table">
+        <thead><tr><th>종목</th><th>PER</th><th>시가총액</th><th>주가</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  host.querySelectorAll("tr[data-goto]").forEach((tr) => tr.onclick = () => {
+    if (!lookupRendered) initLookup();
+    loadLookup(tr.dataset.goto);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
 }
 
 // 공시(6개월)·뉴스(1주일) 피드

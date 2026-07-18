@@ -377,6 +377,21 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-mrow b { font-size: .98rem; }
 .lk-mgrid.fin3 .lk-mrow { justify-content: center; }
 .lk-mgrid.fin3 .lk-mrow b { font-size: 1.25rem; }
+/* 애널리스트 목표가 range + 의견 분포 */
+.an-tgt { display: flex; gap: 8px; margin: 12px 0 4px; }
+.an-tgt > div { flex: 1; text-align: center; background: #f7f9fc; border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.an-tgt .sub-note { display: block; font-size: .7rem; }
+.an-tgt b { display: block; font-size: .96rem; margin: 1px 0; }
+.an-dist-h { margin: 12px 0 4px; }
+.an-dist { display: flex; align-items: flex-end; gap: 6px; height: 84px; padding: 0 4px; }
+.an-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.an-n { font-size: .72rem; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+.an-fill { width: 100%; max-width: 34px; border-radius: 4px 4px 0 0; }
+.an-lab { font-size: .68rem; color: var(--muted); margin-top: 4px; }
+/* 동종업계 비교 표 */
+.peer-table td, .peer-table th { padding: 8px 10px; }
+.peer-table tr.peer-self { background: #eef4ff; font-weight: 700; }
+.peer-table tr.peer-self td { color: var(--ink); }
 .perf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 8px 0 12px; }
 @media (max-width: 700px) { .perf-two, .cons-grid { grid-template-columns: 1fr; } }
 .perf-h { font-size: .78rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
