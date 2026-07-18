@@ -962,7 +962,9 @@ function loadLookup(key) {
       renderLookupHead(st);
       renderLookupOverview(st);
       renderLookupCons(st);
+      renderLookupMetrics(st);
       renderLookupFin(st);
+      renderLookupFinQ(st);
       renderLookupFeed(st);
     });
     document.querySelectorAll('input[name="sigfilter"]').forEach((r) => { r.onchange = drawLookupChart; });
@@ -2129,6 +2131,48 @@ function renderLookupCons(st) {
     <p class="sub-note" style="margin-top:6px">컨센서스는 증권사 추정 평균 — 매수·매도 판단이 아닌 참고 지표</p>`;
 }
 
+// 투자 지표 카드 (가치평가·수익·배당) + 재무(부채·유동·이자보상) + 시총·EV
+function renderLookupMetrics(st) {
+  const host = $("#lookup-metrics");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const m = co?.metrics;
+  if (!m) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const kr = st.market === "kr";
+  const { cur } = freshQuote(st);
+  const dps = m.dps ?? co.dividend?.dps;
+  const yld = dps && cur ? dps / cur * 100 : (co.dividend?.yield ?? null);
+  const payout = m.payout ?? co.dividend?.payout;
+  const mcap = (FUND?.map?.[`${st.market}_${st.ticker}`] || {}).mcap;
+  const mult = (v) => (v == null ? "-" : v.toFixed(1) + "배");
+  const pctv = (v, warn) => (v == null ? "-" : `<span class="${warn && v >= 200 ? "neg" : ""}">${v.toLocaleString(undefined, { maximumFractionDigits: v >= 1000 ? 0 : 1 })}%</span>`);
+  const money = (v) => (v == null ? "-" : kr ? Math.round(v).toLocaleString() + "원" : "$" + v.toFixed(2));
+  const box = (title, rows) => `<div class="lk-mbox"><div class="lk-mbox-h">${title}</div>${rows
+    .filter(Boolean).map(([k, v]) => `<div class="lk-mrow"><span>${k}</span><b>${v}</b></div>`).join("")}</div>`;
+
+  const valBox = box("가치평가", [["PER", mult(m.per)], m.psr != null && ["PSR", mult(m.psr)], ["PBR", mult(m.pbr)]]);
+  const earnBox = box("수익", [["EPS", money(m.eps)], m.bps != null && ["BPS", money(m.bps)], ["ROE", pctv(m.roe)]]);
+  const divBox = (dps != null || yld != null) ? box("배당", [["주당배당금", money(dps)],
+    yld != null && ["배당수익률", "연 " + yld.toFixed(2) + "%"], payout != null && ["배당성향", pctv(payout)]]) : "";
+  const finBox1 = box("부채비율", [["", pctv(m.debtRatio, true)]]);
+  const liqLabel = m.currentRatio != null ? "유동비율" : "당좌비율";
+  const liqVal = m.currentRatio != null ? m.currentRatio : m.quickRatio;
+  const finBox2 = liqVal != null ? box(liqLabel, [["", pctv(liqVal)]]) : "";
+  const finBox3 = m.interestCoverage != null ? box("이자보상비율", [["", pctv(m.interestCoverage)]]) : "";
+
+  const capRow = (mcap || m.ev) ? `<div class="lk-cap">
+    ${mcap ? `<div><span class="sub-note">시가총액</span><b>${fmtMcap(mcap, st.market)}</b></div>` : ""}
+    ${m.ev ? `<div><span class="sub-note">실제 기업가치(EV)</span><b>${fmtMcap(m.ev, "us")}</b></div>` : ""}
+  </div>` : "";
+
+  host.innerHTML = `<div class="fund-head">투자 지표 <span class="sub-note">(${kr ? "네이버 집계" : "Yahoo 집계"})</span></div>
+    ${capRow}
+    <div class="lk-mgrid">${valBox}${earnBox}${divBox}</div>
+    ${(m.debtRatio != null || finBox2 || finBox3) ? `<div class="fund-head" style="margin-top:14px">재무 안정성</div>
+    <div class="lk-mgrid fin3">${finBox1}${finBox2}${finBox3}</div>` : ""}
+    <p class="sub-note" style="margin-top:8px">부채비율=총부채/자기자본(한국식). ${kr ? "PSR·EV·이자보상비율은 미국 종목만 제공." : ""}</p>`;
+}
+
 // 연간 재무 차트: 매출·영업이익 막대 + 영업이익률 라인 (SVG)
 function finFmt(v, unit) {
   if (v == null) return "-";
@@ -2204,6 +2248,72 @@ function renderLookupFin(st) {
       <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#16a34a">●─</span> 영업이익률(%)
       · 옅은색 = 추정치</p>
     ${extTable}`;
+}
+
+// 분기 실적 추이: 매출·순이익 막대 + 순이익률 라인 + 성장률 표 (수익성/성장성)
+function renderLookupFinQ(st) {
+  const host = $("#lookup-finq");
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const fq = co?.fin_q;
+  if (!fq || fq.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const unit = co.fin_unit;
+  const W = 660, H = 220, padL = 8, padB = 34, padT = 26;
+  const n = fq.length, gw = (W - padL * 2) / n;
+  const maxV = Math.max(...fq.map((r) => Math.max(r.rev || 0, r.np || 0)), 1);
+  const minV = Math.min(0, ...fq.map((r) => r.np ?? 0));
+  const y0 = padT + (H - padT - padB) * (maxV / (maxV - minV));
+  const yS = (v) => padT + (maxV - v) / (maxV - minV) * (H - padT - padB);
+  const npms = fq.filter((r) => r.npm != null).map((r) => r.npm);
+  const npmMin = Math.min(...npms, 0), npmMax = Math.max(...npms, 1);
+  const npmY = (v) => padT + 2 + (npmMax - v) / (npmMax - npmMin || 1) * 50;
+  let bars = "", labels = "";
+  const pts = [];
+  fq.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(22, gw / 3);
+    if (r.rev != null) {
+      const y = yS(Math.max(0, r.rev));
+      bars += `<rect x="${cx - bw - 1}" y="${y}" width="${bw}" height="${Math.max(1, y0 - y)}" fill="${r.est ? "#c7d7f5" : "#7ba6e8"}" rx="1.5"/>`;
+    }
+    if (r.np != null) {
+      const y = yS(Math.max(0, r.np)), y2 = yS(Math.min(0, r.np));
+      bars += `<rect x="${cx + 1}" y="${r.np >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.np >= 0 ? y : y2)))}" fill="${r.np >= 0 ? (r.est ? "#b9c6dd" : "#3f6fb5") : "#dc2626"}" rx="1.5"/>`;
+    }
+    if (r.npm != null) pts.push([cx, npmY(r.npm), r.npm]);
+    labels += `<text x="${cx}" y="${H - 14}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}${r.est ? "(E)" : ""}</text>`;
+  });
+  let line = "";
+  if (pts.length > 1) {
+    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#e0912f" stroke-width="2"/>` +
+      pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.3" fill="#e0912f"/>`).join("");
+  }
+  // 성장률(직전 분기 대비) 계산
+  const grow = (arr, i, key) => {
+    if (i === 0) return null;
+    const c = arr[i][key], p = arr[i - 1][key];
+    return c != null && p ? (c - p) / Math.abs(p) * 100 : null;
+  };
+  const fmtN = (v) => (v == null ? "-" : finFmt(v, unit));
+  const fmtPct = (v) => (v == null ? "-" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>`);
+  const ROWS = [
+    ["매출", (r) => fmtN(r.rev)],
+    ["영업이익", (r) => fmtN(r.op)],
+    ["순이익", (r) => fmtN(r.np)],
+    ["영업이익률", (r) => (r.opm == null ? "-" : r.opm.toFixed(1) + "%")],
+    ["순이익률", (r) => (r.npm == null ? "-" : r.npm.toFixed(1) + "%")],
+    ["순이익 성장률", (r, i) => fmtPct(grow(fq, i, "np"))],
+  ];
+  const table = `<div class="tablewrap" style="margin-top:8px"><table class="fin-ext">
+    <tr><th></th>${fq.map((r) => `<th>${r.q}${r.est ? "(E)" : ""}</th>`).join("")}</tr>
+    ${ROWS.map(([nm, f]) => `<tr><td>${nm}</td>${fq.map((r, i) => `<td>${f(r, i)}</td>`).join("")}</tr>`).join("")}
+  </table></div>`;
+
+  host.innerHTML = `<h3 class="lk-h3">📈 분기 실적 추이 <span class="sub-note">(단위 ${unit === "억원" ? "조/억원" : "USD"} · 성장률=직전 분기 대비 · (E)=추정)</span></h3>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
+      <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>${bars}${line}${labels}</svg>
+    <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출 ·
+      <span style="color:#3f6fb5">■</span> 순이익 · <span style="color:#e0912f">●─</span> 순이익률(%) · 옅은색 = 추정</p>
+    ${table}`;
 }
 
 // 공시(6개월)·뉴스(1주일) 피드
