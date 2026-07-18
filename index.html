@@ -137,20 +137,17 @@
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
       </span>
-      <span class="mk-toggle" id="lookup-range">
-        <button data-n="250" class="active">1년</button><button data-n="750">3년</button><button data-n="1250">5년</button>
+      <span class="osc-checks" id="lookup-osc">보조지표
+        <label><input type="checkbox" value="rsi"> RSI</label>
+        <label><input type="checkbox" value="macd"> MACD</label>
+        <label><input type="checkbox" value="stoch"> 스토캐스틱</label>
+        <label><input type="checkbox" value="obv"> OBV</label>
+        <label><input type="checkbox" value="disp"> 이격도</label>
+        <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동)</span>
       </span>
-      <label>보조지표 <select id="lookup-osc">
-        <option value="">원칙 연동 (원칙 선택 시 자동)</option>
-        <option value="rsi">RSI (14)</option>
-        <option value="macd">MACD (12,26,9)</option>
-        <option value="stoch">스토캐스틱 (14,3)</option>
-        <option value="obv">OBV</option>
-        <option value="disp">이격도 (20일선)</option>
-      </select></label>
     </div>
     <div id="lookup-chart" class="chart" style="display:none"></div>
-    <div id="lookup-ind" class="chart vol" style="display:none"></div>
+    <div id="lookup-inds"></div>
     <p class="legend" id="lookup-legend" style="display:none"></p>
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>

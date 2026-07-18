@@ -32,7 +32,7 @@ let LOOKUP_ST = null;
 let chart = null;
 let indChart = null;
 let lookupChart = null;
-let lookupInd = null;
+let lookupInds = [];   // 보조지표 패널 차트들(복수)
 let lookupSupply = null;
 let simChart = null;
 let applyRendered = false;
@@ -539,6 +539,7 @@ function drawOscKind(el, kind, s, markerDates) {
     hline(main, 80, "#dc2626");
   }
   main.setMarkers((markerDates || []).map((d) => ({ time: d, position: "inBar", color: "#111827", shape: "circle" })));
+  c._syncSeries = main;  // 십자선 동기화용 시리즈 참조
   return c;
 }
 
@@ -954,10 +955,9 @@ function loadLookup(key) {
         tfbar.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x === b));
         drawLookupChart();
       });
-      $("#lookup-osc").onchange = () => { lookupOsc = $("#lookup-osc").value; drawLookupChart(); };
-      tfbar.querySelectorAll("#lookup-range button").forEach((b) => b.onclick = () => {
-        lookupRange = +b.dataset.n;
-        tfbar.querySelectorAll("#lookup-range button").forEach((x) => x.classList.toggle("active", x === b));
+      // 보조지표 체크박스 — 복수 선택, 변경 시 재그림
+      tfbar.querySelectorAll("#lookup-osc input[type=checkbox]").forEach((cb) => cb.onchange = () => {
+        lookupOscs = [...tfbar.querySelectorAll("#lookup-osc input:checked")].map((x) => x.value);
         drawLookupChart();
       });
     }
@@ -999,25 +999,26 @@ function loadLookup(key) {
 }
 
 let lookupTf = "d";   // 일/주/월봉
-let lookupOsc = "";   // 수동 선택 오실레이터 ("" = 원칙 연동)
+let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
 const TF_KO = { d: "일봉", w: "주봉", m: "월봉" };
-
-let lookupRange = 250;  // 표시 봉 수: 1년 250 / 3년 750 / 5년 1250
+const OSC_KO = { rsi: "RSI(14)", macd: "MACD", stoch: "스토캐스틱", obv: "OBV", disp: "이격도" };
+const DEFAULT_VIS = { d: 250, w: 130, m: 60 };  // 첫 화면 표시 봉 수(나머지는 좌우 스크롤)
 
 function drawLookupChart() {
   const st = LOOKUP_ST;
   if (!st._ta) { taEnrich(st.series); st._ta = true; }  // 지표는 클라이언트 계산(OHLCV 슬림 JSON)
   const tf = lookupTf;
-  const ranged = st.series.slice(-lookupRange);
-  const s = resampleBars(ranged, tf);
+  const s = resampleBars(st.series, tf);  // 5년 전체(슬라이스 없음) — 좌우 스크롤로 탐색
   const selRule = $("#lookup-rule").value;  // "" = 전체
   $("#lookup-info").innerHTML =
     `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · 기준일 ${st.asof} · ${TF_KO[tf]}`
-    + (tf === "d" ? " · 최근 1.5년" : " (1.5년 일봉 집계)")
+    + " · 최근 5년 (좌우로 드래그·스크롤)"
     + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`);
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
-  if (lookupInd) { lookupInd.remove(); lookupInd = null; }
+  (lookupInds || []).forEach((c) => { try { c.remove(); } catch (e) {} });
+  lookupInds = [];
+  $("#lookup-inds").innerHTML = "";
   const el = $("#lookup-chart");
   lookupChart = LightweightCharts.createChart(el, baseChartOpts(el, 420));
   const candles = lookupChart.addCandlestickSeries({
@@ -1025,6 +1026,7 @@ function drawLookupChart() {
     borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
   });
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
+  lookupChart._syncSeries = candles;  // 십자선 동기화용
 
   const line = (key2, color, width, dashed) => {
     const ser = lookupChart.addLineSeries({ color, lineWidth: width || 1,
@@ -1072,16 +1074,28 @@ function drawLookupChart() {
     };
   }).filter(Boolean));
 
-  // 보조지표 패널: 수동 선택 우선, 없으면 선택 원칙 연동
+  // 보조지표 패널: 체크박스 복수 선택 우선, 미선택 시 선택 원칙 연동
   let legendExtra = "";
-  const oscKind = lookupOsc || (selRule && IND_PANE[selRule]) || "";
-  if (oscKind) {
-    const dates = (!lookupOsc && selRule) ? shown.map((m) => snap(m.t)).filter(Boolean) : [];
-    lookupInd = drawOscKind($("#lookup-ind"), oscKind, s, dates);
-    legendExtra = " · " + IND_LEGEND[oscKind] + (dates.length ? " (●=신호일)" : "");
-  } else {
-    $("#lookup-ind").style.display = "none";
-  }
+  const indHost = $("#lookup-inds");
+  const ruleLinked = !lookupOscs.length && selRule && IND_PANE[selRule] ? IND_PANE[selRule] : null;
+  const kinds = lookupOscs.length ? lookupOscs : (ruleLinked ? [ruleLinked] : []);
+  kinds.forEach((kind, i) => {
+    const pane = document.createElement("div");
+    pane.className = "chart vol ind-pane";
+    indHost.appendChild(pane);
+    const dates = (ruleLinked && i === 0) ? shown.map((m) => snap(m.t)).filter(Boolean) : [];
+    const oc = drawOscKind(pane, kind, s, dates);
+    if (oc) {
+      lookupInds.push(oc);
+      // 지표명 라벨(패널 좌상단)
+      const tag = document.createElement("span");
+      tag.className = "ind-tag";
+      tag.textContent = OSC_KO[kind] || kind;
+      pane.appendChild(tag);
+    }
+  });
+  if (kinds.length) legendExtra = " · 보조지표: " + kinds.map((k) => OSC_KO[k] || k).join(", ")
+    + (ruleLinked ? " (●=신호일)" : "");
 
   const abbrLegend = st.stats.filter((s) => RULE_ABBR[s.rule_id])
     .map((s) => `<b>${RULE_ABBR[s.rule_id]}</b>=${s.name.replace(/\(.*\)/, "")}`).join(" · ");
@@ -1094,8 +1108,40 @@ function drawLookupChart() {
 
   const cw = chartWidth(el);
   lookupChart.applyOptions({ width: cw });
-  lookupChart.timeScale().fitContent();
-  if (lookupInd) { lookupInd.applyOptions({ width: cw }); lookupInd.timeScale().fitContent(); }
+  lookupInds.forEach((c) => c.applyOptions({ width: cw }));
+
+  // 첫 화면: 최근 N봉만 보이게(나머지는 좌우 스크롤로) — 메인 기준으로 전 패널 시간축 동기화
+  const n = s.length, vis = Math.min(n, DEFAULT_VIS[tf] || 250);
+  const range = { from: n - vis, to: n - 1 };
+  lookupChart.timeScale().setVisibleLogicalRange(range);
+  lookupInds.forEach((c) => c.timeScale().setVisibleLogicalRange(range));
+  syncCharts([lookupChart, ...lookupInds]);
+}
+
+// 여러 lightweight-charts 인스턴스의 시간축·십자선 연동 (좌우 스크롤/줌·날짜 커서 공유)
+function syncCharts(charts) {
+  if (charts.length < 2) return;
+  let guard = false;
+  charts.forEach((src) => {
+    src.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+      if (guard || !r) return;
+      guard = true;
+      charts.forEach((c) => { if (c !== src) c.timeScale().setVisibleLogicalRange(r); });
+      guard = false;
+    });
+    src.subscribeCrosshairMove((param) => {
+      if (guard) return;
+      guard = true;
+      charts.forEach((c) => {
+        if (c === src) return;
+        try {
+          if (param.time != null && c._syncSeries) c.setCrosshairPosition(0, param.time, c._syncSeries);
+          else c.clearCrosshairPosition();
+        } catch (e) {}
+      });
+      guard = false;
+    });
+  });
 }
 
 /* ---------- 시뮬레이션 ---------- */
