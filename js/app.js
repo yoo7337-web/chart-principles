@@ -518,7 +518,9 @@ function drawOscKind(el, kind, s, markerDates, minWidth) {
   const c = LightweightCharts.createChart(el, opts);
   c.timeScale().applyOptions({ visible: false });
 
-  const pts = (key) => s.filter((x) => x[key] != null).map((x) => ({ time: x.t, value: x[key] }));
+  // 워밍업(null) 구간도 whitespace({time})로 채워 메인 차트와 동일 길이·동일 논리인덱스 유지
+  // → 줌/스크롤 시 시간축 동기화(logical range)가 어긋나지 않음
+  const pts = (key) => s.map((x) => (x[key] != null ? { time: x.t, value: x[key] } : { time: x.t }));
   const addLine = (key, color, width = 2) => {
     const ser = c.addLineSeries({ color, lineWidth: width, priceLineVisible: false, lastValueVisible: false,
       priceFormat: OSC_PRICE_FMT });
@@ -535,8 +537,9 @@ function drawOscKind(el, kind, s, markerDates, minWidth) {
     hline(main, 70, "#dc2626");
   } else if (kind === "macd") {
     const hist = c.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false, priceFormat: OSC_PRICE_FMT });
-    hist.setData(s.filter((x) => x.macd != null && x.macds != null)
-      .map((x) => ({ time: x.t, value: x.macd - x.macds, color: x.macd - x.macds >= 0 ? "#fca5a5" : "#93c5fd" })));
+    hist.setData(s.map((x) => (x.macd != null && x.macds != null
+      ? { time: x.t, value: x.macd - x.macds, color: x.macd - x.macds >= 0 ? "#fca5a5" : "#93c5fd" }
+      : { time: x.t })));
     addLine("macds", "#f59e0b");
     main = addLine("macd", "#2563eb");
     hline(main, 0, "#9ca3af");
