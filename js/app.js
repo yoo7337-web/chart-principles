@@ -497,6 +497,16 @@ function resampleBars(series, tf) {
   return taEnrich(out);
 }
 
+// 축 라벨 컴팩트 포맷 (OBV 등 큰 수 → 5.0B/999M/4.7K, 작은 수는 소수) — 가격축 폭 억제·가독성
+function fmtCompact(v) {
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(1) + "B";
+  if (a >= 1e6) return (v / 1e6).toFixed(1) + "M";
+  if (a >= 1e3) return (v / 1e3).toFixed(1) + "K";
+  return a >= 10 ? v.toFixed(0) : v.toFixed(2);
+}
+const OSC_PRICE_FMT = { type: "custom", formatter: fmtCompact, minMove: 0.01 };
+
 // 오실레이터 패널 (종류 직접 지정 — 원칙 연동·수동 선택 공용)
 function drawOscKind(el, kind, s, markerDates) {
   if (!kind) { el.style.display = "none"; return null; }
@@ -507,7 +517,8 @@ function drawOscKind(el, kind, s, markerDates) {
 
   const pts = (key) => s.filter((x) => x[key] != null).map((x) => ({ time: x.t, value: x[key] }));
   const addLine = (key, color, width = 2) => {
-    const ser = c.addLineSeries({ color, lineWidth: width, priceLineVisible: false, lastValueVisible: false });
+    const ser = c.addLineSeries({ color, lineWidth: width, priceLineVisible: false, lastValueVisible: false,
+      priceFormat: OSC_PRICE_FMT });
     ser.setData(pts(key));
     return ser;
   };
@@ -520,7 +531,7 @@ function drawOscKind(el, kind, s, markerDates) {
     hline(main, 30, "#16a34a");
     hline(main, 70, "#dc2626");
   } else if (kind === "macd") {
-    const hist = c.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false });
+    const hist = c.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false, priceFormat: OSC_PRICE_FMT });
     hist.setData(s.filter((x) => x.macd != null && x.macds != null)
       .map((x) => ({ time: x.t, value: x.macd - x.macds, color: x.macd - x.macds >= 0 ? "#fca5a5" : "#93c5fd" })));
     addLine("macds", "#f59e0b");
@@ -1108,9 +1119,20 @@ function drawLookupChart() {
   const cw = chartWidth(el);
   lookupChart.applyOptions({ width: cw });
   lookupInds.forEach((c) => c.applyOptions({ width: cw }));
-  // 첫 화면 = 최근 봉(기본 뷰, 좌우 스크롤로 5년 탐색). 전 종목 동일 데이터·동일 배율이라 초기 정렬됨.
+  // 첫 화면 = 최근 봉(기본 뷰, 좌우 스크롤로 5년 탐색). 전 패널 동일 데이터·배율이라 초기 정렬됨.
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유).
-  syncCharts([lookupChart, ...lookupInds]);
+  const charts = [lookupChart, ...lookupInds];
+  syncCharts(charts);
+  // 가격축(우측 눈금) 너비를 전 패널 최댓값으로 통일 → 플롯 영역 폭 일치 → 같은 날짜가 같은 x에 정렬.
+  // width()는 레이아웃(다음 프레임) 후에야 실제 값 → rAF 후 측정.
+  requestAnimationFrame(() => requestAnimationFrame(() => alignPriceScales(charts)));
+}
+
+// 여러 차트의 우측 가격축 너비를 최댓값으로 통일 (플롯 폭·시간축 정렬). 레이아웃 후 호출할 것.
+function alignPriceScales(charts) {
+  let maxW = 0;
+  charts.forEach((c) => { try { const w = c.priceScale("right").width(); if (w > maxW) maxW = w; } catch (e) {} });
+  if (maxW > 0) charts.forEach((c) => { try { c.applyOptions({ rightPriceScale: { minimumWidth: maxW } }); } catch (e) {} });
 }
 
 // 여러 lightweight-charts 인스턴스의 시간축·십자선 연동 (좌우 스크롤/줌·날짜 커서 공유)
