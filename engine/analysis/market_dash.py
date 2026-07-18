@@ -38,6 +38,7 @@ MACRO = {
     "^IXIC":    ("나스닥", "지수", "", "기술주·성장주 방향 — 반도체 보유 시 필수"),
     "^SOX":     ("필라델피아 반도체", "지수", "", "삼성전자·하이닉스·NVDA의 선행 지표"),
     "^VIX":     ("VIX (공포지수)", "리스크", "", "20↑ 불안, 30↑ 공포 — 역발상 매수원칙의 사냥터"),
+    "IPO":      ("IPO ETF (신규상장·미국)", "리스크", "$", "Renaissance IPO ETF — 위험선호·유동성의 척도. 상승=유동성 풀림·낙관(리스크온), 하락=신규자금 위축·비관(리스크오프)"),
     "^TNX":     ("미국 10년물 금리", "금리", "%", "주식 밸류에이션의 할인율 — 급등 시 성장주 압박"),
     "DX-Y.NYB": ("달러인덱스", "통화", "", "달러 강세 = 위험자산·신흥국(한국) 자금 이탈 압력"),
     "KRW=X":    ("원/달러 환율", "통화", "원", "1,400↑ 외국인 순매도 압력·수출주 실적엔 우호"),
@@ -61,9 +62,9 @@ def fetch_macro() -> list:
         except Exception:
             pass
     new = pd.DataFrame(closes)
-    if MACRO_PARQUET.exists():  # 증분 병합(과거 보존)
+    if MACRO_PARQUET.exists():  # 증분 병합(과거 보존) — 기존 값 우선, 신규 티커 컬럼·신규 날짜는 new로 채움
         old = pd.read_parquet(MACRO_PARQUET)
-        merged = pd.concat([old, new[~new.index.isin(old.index)]]).sort_index()
+        merged = old.combine_first(new).sort_index()  # combine_first: 겹치면 old, 결측(신규 컬럼/날짜)은 new
     else:
         merged = new
     merged = merged[~merged.index.duplicated(keep="last")]
