@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=57">
-<script src="firebase-config.js?v=57"></script>
-<script src="js/auth.js?v=57"></script>
+<link rel="stylesheet" href="css/style.css?v=58">
+<script src="firebase-config.js?v=58"></script>
+<script src="js/auth.js?v=58"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -321,14 +321,22 @@
 
   <section id="tab-calendar" class="panel">
     <div class="criteria" id="cal-context"></div>
-    <div class="home-topbar">
+    <div class="home-topbar" style="align-items:center;gap:10px;flex-wrap:wrap">
       <div class="mk-toggle" id="cal-mk">
         <button data-mk="kr" class="active">🇰🇷 국내</button>
         <button data-mk="us">🇺🇸 미국</button>
       </div>
+      <span style="flex:1"></span>
+      <div class="cal-nav">
+        <button id="cal-prev" aria-label="이전 달">◀</button>
+        <b id="cal-month"></b>
+        <button id="cal-next" aria-label="다음 달">▶</button>
+        <button id="cal-today-btn">오늘</button>
+      </div>
     </div>
     <h2>📢 실적발표·IR 일정 <span class="sub-note" id="cal-src"></span></h2>
-    <div id="cal-earnings" class="card-flat cal-list"></div>
+    <div id="cal-grid" class="cal-grid card-flat"></div>
+    <div id="cal-daylist" class="card-flat" style="margin-top:12px"></div>
     <h2 style="margin-top:24px">📅 경제지표 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
     <div class="card-flat" style="height:450px;padding:0;overflow:hidden">
       <div class="tradingview-widget-container" style="height:100%">
@@ -507,6 +515,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=57"></script>
+<script src="js/app.js?v=58"></script>
 </body>
 </html>

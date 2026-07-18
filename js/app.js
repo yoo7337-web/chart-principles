@@ -1666,6 +1666,10 @@ function openWorldDialog(r) {
 
 /* ---------- 마켓: 경제일정 ---------- */
 let calMk = "kr";
+let calMonth = null;   // 표시 중인 달의 1일 (로컬 Date)
+let calSel = null;     // 선택된 날짜 문자열 YYYY-MM-DD
+const localDay = (dt) => new Date(dt.getTime() - dt.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+
 function renderCalendar() {
   calRendered = true;
   if (!CAL) {
@@ -1675,46 +1679,88 @@ function renderCalendar() {
   $("#cal-context").innerHTML =
     `<b>기준 시각 ${CAL.generated}</b> — ${relTime(CAL.generated)} 갱신 (하루 1회)<br>
      국내=한국거래소 KIND 기업설명회(IR) 공시 · 미국=yfinance 실적발표 예정일(EPS 컨센서스 병기).
-     일정은 회사 사정에 따라 변경될 수 있음`;
+     날짜를 클릭하면 그날 일정이 아래에 표시됩니다 · 일정은 회사 사정에 따라 변경될 수 있음`;
+  const now = new Date();
+  calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  calSel = localDay(now);
   $("#cal-mk").querySelectorAll("button").forEach((btn) => {
     btn.onclick = () => {
       calMk = btn.dataset.mk;
       $("#cal-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
-      drawCalList();
+      drawCalMonth();
     };
   });
-  drawCalList();
+  $("#cal-prev").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); drawCalMonth(); };
+  $("#cal-next").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); drawCalMonth(); };
+  $("#cal-today-btn").onclick = () => {
+    const t = new Date();
+    calMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    calSel = localDay(t);
+    drawCalMonth();
+  };
+  drawCalMonth();
 }
 
-function drawCalList() {
-  const host = $("#cal-earnings");
-  const rows = CAL?.earnings?.[calMk] || [];
+function calByDay() {
+  const byDay = {};
+  (CAL?.earnings?.[calMk] || []).forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
+  return byDay;
+}
+
+function drawCalMonth() {
   $("#cal-src").textContent = calMk === "kr"
     ? `(KIND 공시 · ${CAL.kr_updated ? relTime(CAL.kr_updated) + " 갱신" : "미수집"})`
     : `(yfinance · ${CAL.us_updated ? relTime(CAL.us_updated) + " 갱신" : "미수집"})`;
-  if (!rows.length) { host.innerHTML = `<p class="mini-note">예정된 일정 없음</p>`; return; }
-  const byDay = {};
-  rows.forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
-  const today = new Date().toISOString().slice(0, 10);
-  host.innerHTML = Object.entries(byDay).map(([d, items]) => {
-    const dt = new Date(d + "T00:00:00+09:00");
-    const yo = "일월화수목금토"[dt.getDay()];
-    const isToday = d === today;
-    return `<div class="cal-day${isToday ? " today" : ""}">
-      <div class="cal-date">${d.slice(5).replace("-", "/")} (${yo})${isToday ? " · 오늘" : ""}
-        <span class="sub-note">${items.length}건</span></div>
-      ${items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
-        ${r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`}
-        <span class="cal-name"><b>${r.name}</b>${r.t ? `<span class="sub-note"> ${r.t}</span>` : ""}</span>
-        <span class="cal-info">${calMk === "kr"
-          ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
-          : (r.eps_est != null ? `EPS 컨센서스 $${r.eps_est}` : "실적발표 예정")}</span>
-      </div>`).join("")}
-    </div>`;
+  const byDay = calByDay();
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  $("#cal-month").textContent = `${y}. ${String(m + 1).padStart(2, "0")}`;
+  const today = localDay(new Date());
+  const first = new Date(y, m, 1), startDow = first.getDay();
+  const dim = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(new Date(y, m, d));
+  while (cells.length % 7) cells.push(null);
+
+  const head = "일월화수목금토".split("").map((w, i) =>
+    `<div class="cal-hd${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</div>`).join("");
+  const body = cells.map((dt) => {
+    if (!dt) return `<div class="cal-cell empty"></div>`;
+    const ds = localDay(dt), items = byDay[ds] || [], dow = dt.getDay();
+    const cls = [ds === today ? "today" : "", ds === calSel ? "sel" : "", items.length ? "has" : "",
+      dow === 0 ? "sun" : dow === 6 ? "sat" : ""].filter(Boolean).join(" ");
+    const chips = items.slice(0, 2).map((r) =>
+      `<span class="cal-ev">${(r.name || "").slice(0, 6)}</span>`).join("");
+    const more = items.length > 2 ? `<span class="cal-ev more">+${items.length - 2}</span>` : "";
+    return `<div class="cal-cell ${cls}" data-d="${ds}">
+      <span class="cal-cell-d">${dt.getDate()}</span>${items.length ? `<span class="cal-cnt">${items.length}</span>` : ""}
+      <div class="cal-evs">${chips}${more}</div></div>`;
   }).join("");
+  $("#cal-grid").innerHTML = `<div class="cal-hdrow">${head}</div><div class="cal-cells">${body}</div>`;
+  $("#cal-grid").querySelectorAll(".cal-cell[data-d]").forEach((c) =>
+    c.onclick = () => { calSel = c.dataset.d; drawCalMonth(); });
+  drawCalDay();
+}
+
+function drawCalDay() {
+  const host = $("#cal-daylist");
+  const byDay = calByDay();
+  const items = byDay[calSel] || [];
+  const dt = calSel ? new Date(calSel + "T00:00:00") : null;
+  const yo = dt ? "일월화수목금토"[dt.getDay()] : "";
+  const head = `<div class="cal-date">${calSel ? calSel.replace(/-/g, ".") + ` (${yo})` : ""}
+    <span class="sub-note">${items.length}건</span></div>`;
+  if (!items.length) { host.innerHTML = head + `<p class="mini-note">이 날짜에 예정된 일정이 없습니다.</p>`; return; }
+  host.innerHTML = head + items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
+      ${r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`}
+      <span class="cal-name"><b>${r.name}</b>${r.t ? `<span class="sub-note"> ${r.t}</span>` : ""}</span>
+      <span class="cal-info">${calMk === "kr"
+        ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
+        : (r.eps_est != null ? `EPS 컨센서스 $${r.eps_est}` : "실적발표 예정")}</span>
+    </div>`).join("");
   host.querySelectorAll(".cal-row.clickable").forEach((el) => {
     el.onclick = () => {
-            gotoTabFull("lookup");
+      gotoTabFull("lookup");
       if (!lookupRendered) initLookup();
       loadLookup(`${calMk}_${el.dataset.t}`);
     };
