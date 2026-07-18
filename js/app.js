@@ -1002,7 +1002,6 @@ let lookupTf = "d";   // 일/주/월봉
 let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
 const TF_KO = { d: "일봉", w: "주봉", m: "월봉" };
 const OSC_KO = { rsi: "RSI(14)", macd: "MACD", stoch: "스토캐스틱", obv: "OBV", disp: "이격도" };
-const DEFAULT_VIS = { d: 250, w: 130, m: 60 };  // 첫 화면 표시 봉 수(나머지는 좌우 스크롤)
 
 function drawLookupChart() {
   const st = LOOKUP_ST;
@@ -1109,12 +1108,8 @@ function drawLookupChart() {
   const cw = chartWidth(el);
   lookupChart.applyOptions({ width: cw });
   lookupInds.forEach((c) => c.applyOptions({ width: cw }));
-
-  // 첫 화면: 최근 N봉만 보이게(나머지는 좌우 스크롤로) — 메인 기준으로 전 패널 시간축 동기화
-  const n = s.length, vis = Math.min(n, DEFAULT_VIS[tf] || 250);
-  const range = { from: n - vis, to: n - 1 };
-  lookupChart.timeScale().setVisibleLogicalRange(range);
-  lookupInds.forEach((c) => c.timeScale().setVisibleLogicalRange(range));
+  // 첫 화면 = 최근 봉(기본 뷰, 좌우 스크롤로 5년 탐색). 전 종목 동일 데이터·동일 배율이라 초기 정렬됨.
+  // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유).
   syncCharts([lookupChart, ...lookupInds]);
 }
 

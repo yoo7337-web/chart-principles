@@ -362,6 +362,15 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .cons-cur::after { content: ""; position: absolute; left: 50%; top: 14px; width: 2px; height: 12px; background: var(--ink); }
 .cons-bar-lab { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); }
 .fin-svg { width: 100%; height: auto; }
+/* 보조지표 체크박스 + 지표 패널 */
+.osc-checks { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: .82rem; font-weight: 600; color: var(--muted); }
+.osc-checks label { display: inline-flex; align-items: center; gap: 3px; font-weight: 500; color: var(--ink);
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; background: #fff; }
+.osc-checks label:has(input:checked) { background: #eef4ff; border-color: #93b4f0; color: #1e40af; font-weight: 600; }
+.osc-checks input { accent-color: #3b82f6; }
+.ind-pane { position: relative; margin-top: 2px; }
+.ind-tag { position: absolute; top: 4px; left: 8px; z-index: 3; font-size: .72rem; font-weight: 700;
+  color: #475569; background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 5px; pointer-events: none; }
 /* 투자 지표 카드 */
 .lk-cap { display: flex; gap: 10px; padding: 0 16px 6px; flex-wrap: wrap; }
 .lk-cap > div { flex: 1; min-width: 140px; background: #f7f9fc; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
