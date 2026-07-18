@@ -2455,7 +2455,7 @@ function renderLookupSurprise(st) {
   const eps = co?.surprise?.eps;
   if (!eps || eps.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
-  const W = 660, H = 150, padL = 8, padT = 12, padB = 30;
+  const W = 660, H = 172, padL = 8, padT = 30, padB = 30;
   const n = eps.length, gw = (W - padL * 2) / n;
   const maxV = Math.max(...eps.flatMap((r) => [r.actual, r.est].filter((v) => v != null)), 0.1);
   const minV = Math.min(0, ...eps.flatMap((r) => [r.actual, r.est]));
@@ -2470,6 +2470,14 @@ function renderLookupSurprise(st) {
       const x = cx + (j === 0 ? -bw - 1 : 1);
       bars += `<rect x="${x}" y="${v >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (v >= 0 ? y : yn)))}" fill="${c}" rx="1.5"/>`;
     });
+    // 발표치 $값(막대 위) + 서프라이즈 %(상단, pos/neg)
+    if (r.actual != null) {
+      const ay = yS(Math.max(0, r.actual));
+      bars += `<text x="${cx + bw / 2 + 1}" y="${ay - 4}" font-size="8" text-anchor="middle" fill="#274e86">$${r.actual}</text>`;
+    }
+    if (r.pct != null) {
+      bars += `<text x="${cx}" y="${padT - 16}" font-size="9" font-weight="700" text-anchor="middle" fill="${r.pct >= 0 ? "#d93036" : "#1e63e0"}">${r.pct >= 0 ? "+" : ""}${r.pct}%</text>`;
+    }
     labels += `<text x="${cx}" y="${H - 14}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}</text>`;
   });
   const rows = [

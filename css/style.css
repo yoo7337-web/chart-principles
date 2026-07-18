@@ -368,8 +368,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-cap .sub-note { display: block; font-size: .72rem; }
 .lk-cap b { font-size: 1.05rem; }
 .lk-mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 4px 16px 4px; }
+.lk-mgrid.four { grid-template-columns: repeat(4, 1fr); }
 .lk-mgrid.fin3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) { .lk-mgrid.four { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .lk-mgrid, .lk-mgrid.fin3 { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .lk-mgrid.four { grid-template-columns: 1fr; } }
 .lk-mbox { background: #f7f9fc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; }
 .lk-mbox-h { font-size: .8rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 .lk-mrow { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: .82rem; }
@@ -377,6 +380,10 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-mrow b { font-size: .98rem; }
 .lk-mgrid.fin3 .lk-mrow { justify-content: center; }
 .lk-mgrid.fin3 .lk-mrow b { font-size: 1.25rem; }
+/* 52주 위치 미니 바 */
+.lk-52bar { position: relative; height: 5px; border-radius: 3px; margin-top: 5px;
+  background: linear-gradient(90deg, #4f7de0, #edeff3, #d93036); }
+.lk-52bar i { position: absolute; top: -2px; width: 3px; height: 9px; background: var(--ink); border-radius: 2px; transform: translateX(-50%); }
 /* 애널리스트 목표가 range + 의견 분포 */
 .an-tgt { display: flex; gap: 8px; margin: 12px 0 4px; }
 .an-tgt > div { flex: 1; text-align: center; background: #f7f9fc; border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
