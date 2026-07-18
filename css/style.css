@@ -362,6 +362,28 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .cons-cur::after { content: ""; position: absolute; left: 50%; top: 14px; width: 2px; height: 12px; background: var(--ink); }
 .cons-bar-lab { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); }
 .fin-svg { width: 100%; height: auto; }
+/* 매크로 탭: 세계 지도 + 중앙은행 카드 */
+.world-wrap { padding: 8px; }
+.world-map { position: relative; min-width: 640px; }
+.world-wrap { overflow-x: auto; }
+.world-svg { width: 100%; height: auto; display: block; }
+.world-chip { position: absolute; transform: translate(-50%, -50%); z-index: 4;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  font-size: .68rem; font-weight: 600; color: var(--ink); cursor: pointer;
+  background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.world-chip b { font-size: .7rem; }
+.world-chip.up b { color: #d93036; }
+.world-chip.down b { color: #1e63e0; }
+.world-chip:hover { background: #fff; border-color: #93b4f0; z-index: 6; }
+.cb-card .cb-row { font-size: .82rem; margin-top: 6px; }
+.cb-imp { margin-top: 8px; border-radius: 8px; padding: 7px 10px; font-size: .82rem;
+  background: #f2f4f8; border: 1px solid var(--line); }
+.cb-imp.cut { background: #eef4ff; border-color: #bcd2f5; }
+.cb-imp.hike { background: #fdf0f0; border-color: #f2c5c7; }
+#world-dialog { border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
+  margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+#world-dialog::backdrop { background: rgba(17,24,39,.45); }
 /* 보조지표 체크박스 + 지표 패널 */
 .osc-checks { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: .82rem; font-weight: 600; color: var(--muted); }
 .osc-checks label { display: inline-flex; align-items: center; gap: 3px; font-weight: 500; color: var(--ink);

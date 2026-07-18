@@ -64,7 +64,7 @@ function logoUrl(mk, tk) {
 const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "holdings" };
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
-const TAB_KO = { heatmap: "홈", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
+const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
   calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
@@ -120,6 +120,7 @@ function activateTab(tabId) {
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
+  if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
   if (tabId === "rotation" && !rotationRendered) renderRotation();
   if (tabId === "gurus" && !gurusRendered) renderGurus();
@@ -1532,6 +1533,137 @@ function renderMacro() {
   }).join("");
 }
 
+/* ---------- 매크로 탭 (지표 카드 + 중앙은행 금리 + 세계 지도) ---------- */
+function renderMacroTab() {
+  renderMacro();       // 기존 매크로 카드 (macroRendered 세팅)
+  renderCbanks();
+  renderWorld();
+}
+
+// 중앙은행 기준금리 카드 — BIS 정책금리 + 다음 결정일 + 시장 내재 기대(US·KR)
+function renderCbanks() {
+  const host = $("#cb-cards");
+  const rows = MARKET?.cbanks;
+  if (!host) return;
+  if (!rows?.length) { $("#cb-context").textContent = "중앙은행 데이터 없음 — 다음 클라우드 갱신(30분) 후 표시됩니다."; return; }
+  $("#cb-context").innerHTML = `<b>정책금리(BIS)</b> 기준 · 최근 변경 방향이 그 나라의 금리 사이클입니다.
+    🇺🇸는 Fed 선물 내재금리, 🇰🇷는 국고채-기준금리 스프레드로 <b>시장이 가격에 반영한 기대</b>를 병기 — 참고용이며 결정 예측이 아닙니다.`;
+  const dday = (d) => {
+    if (!d) return "";
+    const n = Math.ceil((new Date(d + "T00:00:00+09:00") - Date.now()) / 864e5);
+    return n >= 0 ? `D-${n}` : "";
+  };
+  host.innerHTML = rows.map((r) => {
+    const ch = r.changed;
+    const cyc = ch ? (ch.bp > 0 ? `<span class="pos">▲ ${ch.bp}bp 인상</span>` : `<span class="neg">▼ ${Math.abs(ch.bp)}bp 인하</span>`) : "-";
+    const imp = r.implied;
+    return `<div class="card macro-card cb-card">
+      <div class="macro-head"><span class="macro-name">${r.flag} ${r.name}</span>
+        ${r.next ? `<span class="badge hero">${r.next.slice(5).replace("-", "/")} ${dday(r.next)}</span>` : `<span class="badge dim">일정 미정</span>`}</div>
+      <div class="macro-val"><b>${r.rate}%</b> <span class="sub-note">현재 기준금리</span></div>
+      <div class="cb-row">최근 변경: ${cyc} <span class="sub-note">${ch ? "(" + ch.d + ")" : ""}</span></div>
+      ${imp ? `<div class="cb-imp ${imp.diff_bp < 0 ? "cut" : imp.diff_bp > 0 ? "hike" : ""}">
+        <b>${imp.label}</b><div class="sub-note">${imp.src} ${imp.rate}%</div></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// 세계 증시 지도 — world.svg 인라인 + 국가 색칠 + 칩(getBBox 좌표) + 클릭 5년 차트 팝업
+const WORLD_SVG_IDS = {  // 야후티커 -> 색칠할 svg path id들 (칩 위치 = 첫 id의 bbox 중심)
+  "^GSPC": ["usa"], "^GSPTSE": ["canada"], "^BVSP": ["brazil"],
+  "^FTSE": ["britain"], "^FCHI": ["france"], "^GDAXI": ["germany"], "^STOXX50E": [],
+  "^BSESN": ["india"], "000001.SS": ["china"], "^HSI": [], "^TWII": ["taiwan"],
+  "^KS11": ["south korea"], "^N225": ["honshu", "hokkaido", "kyushu", "shikoku"], "^AXJO": ["australia"],
+};
+const WORLD_CHIP_FALLBACK = { "^STOXX50E": [48.5, 42], "^HSI": [77.5, 50.5] };  // path 없는 지역(% 좌표)
+let worldChart = null;
+
+function worldColor(chg) {
+  if (chg == null) return "#d8dce3";
+  if (chg >= 0.02) return "#d93036";
+  if (chg >= 0.003) return "#e8888c";
+  if (chg > -0.003) return "#c9ced8";
+  if (chg > -0.02) return "#8fb0e8";
+  return "#1e63e0";
+}
+
+async function renderWorld() {
+  const host = $("#world-map");
+  const rows = MARKET?.world;
+  if (!host) return;
+  if (!rows?.length) { host.innerHTML = `<p class="mini-note" style="padding:20px">세계 지수 데이터 없음 — 다음 클라우드 갱신(30분) 후 표시됩니다.</p>`; return; }
+  let svgTxt;
+  try {
+    svgTxt = await (await fetch("assets/world.svg" + _cb)).text();
+  } catch (e) { host.innerHTML = `<p class="mini-note">지도 로드 실패</p>`; return; }
+  host.innerHTML = svgTxt;
+  const svg = host.querySelector("svg");
+  if (!svg) return;
+  svg.removeAttribute("width"); svg.removeAttribute("height");
+  svg.classList.add("world-svg");
+  // 기본 육지 색
+  svg.querySelectorAll("path").forEach((p) => { p.style.fill = "#e7eaef"; p.style.stroke = "#fff"; p.style.strokeWidth = ".5"; });
+  const vb = (svg.getAttribute("viewBox") || "0 0 950 620").split(/\s+/).map(Number);
+  const byId = (id) => svg.querySelector(`path[id="${id}"]`);
+  rows.forEach((r) => {
+    const ids = WORLD_SVG_IDS[r.id] || [];
+    let cx = null, cy = null;
+    ids.forEach((pid, j) => {
+      const p = byId(pid);
+      if (!p) return;
+      p.style.fill = worldColor(r.chg);
+      p.style.cursor = "pointer";
+      p.addEventListener("click", () => openWorldDialog(r));
+      if (j === 0) {
+        try { const b = p.getBBox(); cx = (b.x + b.width / 2 - vb[0]) / vb[2] * 100; cy = (b.y + b.height / 2 - vb[1]) / vb[3] * 100; } catch (e) {}
+      }
+    });
+    if (cx == null) {
+      const fb = WORLD_CHIP_FALLBACK[r.id] || [r.x, r.y];
+      cx = fb[0]; cy = fb[1];
+    }
+    const chip = document.createElement("button");
+    chip.className = "world-chip " + ((r.chg ?? 0) >= 0 ? "up" : "down");
+    chip.style.left = cx + "%"; chip.style.top = cy + "%";
+    chip.innerHTML = `${r.flag} ${r.name} <b>${r.chg != null ? pct(r.chg, 1) : "-"}</b>`;
+    chip.onclick = () => openWorldDialog(r);
+    host.appendChild(chip);
+  });
+  // 닫기 바인딩(1회)
+  const dlg = $("#world-dialog");
+  if (dlg && !dlg.dataset.bound) {
+    dlg.dataset.bound = "1";
+    $("#wd-close").onclick = () => { dlg.close(); if (worldChart) { worldChart.remove(); worldChart = null; } };
+  }
+}
+
+function openWorldDialog(r) {
+  const dlg = $("#world-dialog");
+  $("#wd-title").textContent = `${r.flag} ${r.country} — ${r.name}`;
+  const w5 = r.w5 || [];
+  let stats = "";
+  if (w5.length > 1) {
+    const ret5 = w5[w5.length - 1] / w5[0] - 1;
+    const hi = Math.max(...w5), lo = Math.min(...w5);
+    stats = `현재 <b>${(r.last ?? w5[w5.length - 1]).toLocaleString()}</b>
+      ${r.chg != null ? `<span class="${r.chg >= 0 ? "pos" : "neg"}">(${pct(r.chg, 2)})</span>` : ""}
+      · 5년 수익률 <b class="${ret5 >= 0 ? "pos" : "neg"}">${pct(ret5, 0)}</b>
+      · 5년 최고 ${hi.toLocaleString()} · 최저 ${lo.toLocaleString()}`;
+  }
+  $("#wd-stats").innerHTML = stats;
+  dlg.showModal();
+  if (worldChart) { worldChart.remove(); worldChart = null; }
+  const el = $("#wd-chart");
+  el.innerHTML = "";
+  if (w5.length > 1) {
+    worldChart = LightweightCharts.createChart(el, baseChartOpts(el, 300));
+    const ser = worldChart.addAreaSeries({ lineColor: "#1e63e0", topColor: "rgba(30,99,224,.25)",
+      bottomColor: "rgba(30,99,224,.02)", lineWidth: 2 });
+    ser.setData(r.w5d.map((d, i) => ({ time: d, value: w5[i] })).filter((x) => x.value != null));
+    worldChart.timeScale().fitContent();
+  }
+}
+
 /* ---------- 마켓: 경제일정 ---------- */
 let calMk = "kr";
 function renderCalendar() {
@@ -1682,7 +1814,6 @@ function lineChart(hostSel, series, color, refLine) {
 function renderInternals() {
   if (!MPRO) { $("#int-context").textContent = "market_pro.json 없음 — python analysis\\market_pro.py 실행 필요"; return; }
   internalsRendered = true;
-  if (!macroRendered) renderMacro();  // 매크로 카드(흡수 섹션)
 
   if (MPRO.brief) {
     $("#int-brief").style.display = "";

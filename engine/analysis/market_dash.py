@@ -267,6 +267,182 @@ def build_home_extras(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> 
     return featured, movers, quotes
 
 
+# ---------- 중앙은행 정책금리 (BIS 무키 API) + 시장 내재 기대 (US=Fed선물, KR=국고1년 스프레드) ----------
+CBANKS = [  # (BIS 코드, 이름, 국기)
+    ("US", "미국 연준 (Fed)", "🇺🇸"), ("KR", "한국은행 (BOK)", "🇰🇷"), ("XM", "유럽 ECB", "🇪🇺"),
+    ("JP", "일본은행 (BOJ)", "🇯🇵"), ("GB", "영란은행 (BOE)", "🇬🇧"), ("CN", "중국 인민은행", "🇨🇳"),
+    ("CA", "캐나다 BOC", "🇨🇦"), ("AU", "호주 RBA", "🇦🇺"),
+]
+# 2026 남은 금리결정일 (결정 발표일 기준, 공식 일정 — 연 1회 수동 갱신)
+CB_MEETINGS = {
+    "US": ["2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09"],   # FOMC (2일차)
+    "KR": ["2026-08-27", "2026-10-22", "2026-11-26"],                  # 금통위
+    "XM": ["2026-07-23", "2026-09-10", "2026-10-29", "2026-12-17"],   # ECB
+    "JP": ["2026-07-31", "2026-09-18", "2026-10-30", "2026-12-18"],   # BOJ (2일차)
+    "GB": ["2026-07-30"],                                              # BOE (이후 일정은 확정분만)
+}
+CBANKS_CACHE = DATA_DIR / "cbanks_cache.json"
+
+
+def fetch_cbanks() -> list:
+    """BIS 정책금리 + 최근 변경 + 다음 회의 + 시장 내재 기대(US·KR). 20h 가드·실패 시 캐시."""
+    from datetime import date as _date
+    if CBANKS_CACHE.exists():
+        try:
+            c = json.loads(CBANKS_CACHE.read_text(encoding="utf-8"))
+            age_h = (datetime.now(KST) - datetime.fromisoformat(c["at"]).replace(tzinfo=KST)).total_seconds() / 3600
+            if age_h < 20:
+                return c["rows"]
+        except Exception:
+            pass
+    try:
+        import io
+        import urllib.request
+        codes = "+".join(c[0] for c in CBANKS)
+        url = (f"https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/D.{codes}"
+               f"?lastNObservations=400&format=csv")
+        raw = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}),
+                                     timeout=30).read().decode("utf-8", "ignore")
+        df = pd.read_csv(io.StringIO(raw))[["REF_AREA", "TIME_PERIOD", "OBS_VALUE"]].dropna()
+        rows = []
+        today = _date.today().isoformat()
+        for code, name, flag in CBANKS:
+            s = df[df.REF_AREA == code].sort_values("TIME_PERIOD")
+            if not len(s):
+                continue
+            rate = float(s.OBS_VALUE.iloc[-1])
+            # 최근 변경: 값이 바뀐 마지막 시점
+            chg_d, chg_bp = None, None
+            vals = s.OBS_VALUE.values
+            for i in range(len(vals) - 1, 0, -1):
+                if vals[i] != vals[i - 1]:
+                    chg_d = str(s.TIME_PERIOD.iloc[i])
+                    chg_bp = round((float(vals[i]) - float(vals[i - 1])) * 100)
+                    break
+            nxt = next((d for d in CB_MEETINGS.get(code, []) if d >= today), None)
+            rows.append({"code": code, "name": name, "flag": flag, "rate": round(rate, 3),
+                         "changed": ({"d": chg_d, "bp": chg_bp} if chg_d else None),
+                         "next": nxt, "asof": str(s.TIME_PERIOD.iloc[-1])})
+        # --- 시장 내재 기대 ---
+        by = {r["code"]: r for r in rows}
+        try:  # US: 30일 Fed Funds 선물(front) 내재금리 vs 현재 목표 midpoint
+            import yfinance as yf
+            zq = yf.Ticker("ZQ=F").history(period="5d")["Close"].dropna()
+            if len(zq) and "US" in by:
+                implied = round(100 - float(zq.iloc[-1]), 3)
+                diff = round((implied - by["US"]["rate"]) * 100)  # bp
+                prob = min(100, max(0, round(abs(diff) / 25 * 100)))
+                lab = ("동결 우세" if abs(diff) < 5 else
+                       f"25bp {'인하' if diff < 0 else '인상'} 확률 ~{prob}%")
+                by["US"]["implied"] = {"rate": implied, "diff_bp": diff, "label": lab,
+                                       "src": "Fed Funds 선물(ZQ) 내재금리"}
+        except Exception:
+            pass
+        try:  # KR: 국고채 3년 − 기준금리 스프레드 (네이버 시장지표 메인, euc-kr)
+            raw_kr = urllib.request.urlopen(urllib.request.Request(
+                "https://finance.naver.com/marketindex/",
+                headers={"User-Agent": "Mozilla/5.0"}), timeout=15).read()
+            html = raw_kr.decode("euc-kr", "ignore")
+            i = html.find("국고채 (3년)")
+            m = re.search(r"([0-9]+\.[0-9]+)", re.sub(r"<[^>]+>", " ", html[i:i + 300])) if i > 0 else None
+            if m and "KR" in by:
+                y3 = float(m.group(1))
+                diff = round((y3 - by["KR"]["rate"]) * 100)  # bp (기간프리미엄 포함 → ±50bp 임계)
+                lab = ("동결 기대 우세" if abs(diff) < 50 else
+                       f"시장금리가 {'인상' if diff > 0 else '인하'} 기대 반영 ({diff:+d}bp)")
+                by["KR"]["implied"] = {"rate": y3, "diff_bp": diff, "label": lab,
+                                       "src": "국고채 3년 − 기준금리 (기간프리미엄 포함 참고치)"}
+        except Exception:
+            pass
+        CBANKS_CACHE.write_text(json.dumps(
+            {"at": datetime.now(KST).strftime("%Y-%m-%dT%H:%M:%S"), "rows": rows},
+            ensure_ascii=False), encoding="utf-8")
+        return rows
+    except Exception as e:
+        print(f"  cbanks 실패({e}) — 캐시 재사용", file=sys.stderr)
+        try:
+            return json.loads(CBANKS_CACHE.read_text(encoding="utf-8"))["rows"]
+        except Exception:
+            return []
+
+
+# ---------- 세계 지수 (지도용) — 당일 등락 매 실행 + 5년 주봉 20h 가드 ----------
+WORLD_IDX = [  # (야후티커, 국가, 지수명, 국기, 지도 x%, y%)
+    ("^GSPC",     "미국",   "S&P 500",    "🇺🇸", 18, 42),
+    ("^GSPTSE",   "캐나다", "TSX",        "🇨🇦", 17, 30),
+    ("^BVSP",     "브라질", "Bovespa",    "🇧🇷", 32, 68),
+    ("^FTSE",     "영국",   "FTSE 100",   "🇬🇧", 45, 30),
+    ("^FCHI",     "프랑스", "CAC 40",     "🇫🇷", 47, 36),
+    ("^GDAXI",    "독일",   "DAX",        "🇩🇪", 50, 32),
+    ("^STOXX50E", "유럽",   "STOXX 50",   "🇪🇺", 52, 39),
+    ("^BSESN",    "인도",   "SENSEX",     "🇮🇳", 67, 52),
+    ("000001.SS", "중국",   "상해종합",    "🇨🇳", 76, 42),
+    ("^HSI",      "홍콩",   "항셍",       "🇭🇰", 78, 49),
+    ("^TWII",     "대만",   "가권",       "🇹🇼", 81, 47),
+    ("^KS11",     "한국",   "코스피",     "🇰🇷", 81.5, 40),
+    ("^N225",     "일본",   "닛케이 225", "🇯🇵", 86, 41),
+    ("^AXJO",     "호주",   "ASX 200",    "🇦🇺", 85, 72),
+]
+WORLD_CACHE = DATA_DIR / "world_cache.json"
+
+
+def fetch_world() -> list:
+    """세계 지수: last/chg는 매 실행(2d), 5년 주봉 시리즈는 20h 가드 캐시."""
+    import yfinance as yf
+    tickers = [w[0] for w in WORLD_IDX]
+    # 5년 주봉 (20h 가드)
+    weekly = None
+    if WORLD_CACHE.exists():
+        try:
+            c = json.loads(WORLD_CACHE.read_text(encoding="utf-8"))
+            age_h = (datetime.now(KST) - datetime.fromisoformat(c["at"]).replace(tzinfo=KST)).total_seconds() / 3600
+            if age_h < 20:
+                weekly = c["weekly"]
+        except Exception:
+            pass
+    if weekly is None:
+        try:
+            w = yf.download(tickers, period="5y", interval="1wk", progress=False, threads=True)["Close"]
+            weekly = {}
+            for t in tickers:
+                try:
+                    s = w[t].dropna()
+                    weekly[t] = {"d": [d.strftime("%Y-%m-%d") for d in s.index],
+                                 "c": [round(float(v), 2) for v in s]}
+                except Exception:
+                    pass
+            WORLD_CACHE.write_text(json.dumps(
+                {"at": datetime.now(KST).strftime("%Y-%m-%dT%H:%M:%S"), "weekly": weekly}), encoding="utf-8")
+        except Exception as e:
+            print(f"  world weekly 실패({e})", file=sys.stderr)
+            weekly = {}
+    # 당일 등락 (매 실행)
+    last_chg = {}
+    try:
+        d2 = yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)["Close"]
+        for t in tickers:
+            try:
+                s = d2[t].dropna()
+                if len(s) >= 2:
+                    last_chg[t] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    out = []
+    for t, country, name, flag, x, y in WORLD_IDX:
+        wk = weekly.get(t)
+        lc = last_chg.get(t)
+        if not wk and not lc:
+            continue
+        last = lc[0] if lc else (wk["c"][-1] if wk and wk["c"] else None)
+        chg = lc[1] if lc else None
+        out.append({"id": t, "country": country, "name": name, "flag": flag, "x": x, "y": y,
+                    "last": last, "chg": chg,
+                    "w5d": wk["d"] if wk else [], "w5": wk["c"] if wk else []})
+    return out
+
+
 def main():
     print("[1/4] 매크로 지표 (yfinance)...")
     macro = fetch_macro()
@@ -281,10 +457,13 @@ def main():
     reg = regime_map(data)
     regime = {mk: (str(r[r != "na"].iloc[-1]) if len(r[r != "na"]) else "neutral") for mk, r in reg.items()}
 
-    print("[3/4] 섹터 히트맵 + 홈(featured/movers)...")
+    print("[3/4] 섹터 히트맵 + 홈(featured/movers) + 중앙은행/세계지수...")
     smap = build_sector_map(data, kr_names)
     heatmap = build_heatmap(data, kr_names, smap, chg_map)
     featured, movers, quotes = build_home_extras(data, kr_names, smap, chg_map)
+    cbanks = fetch_cbanks()
+    world = fetch_world()
+    print(f"  cbanks {len(cbanks)}행 · world {len(world)}지수")
 
     print("[4/4] 저장...")
     asof = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
@@ -293,6 +472,7 @@ def main():
         "asof": asof, "regime": regime,
         "macro": macro, "breadth": breadth, "hot": hot, "heatmap": heatmap,
         "featured": featured, "movers": movers, "quotes": quotes,
+        "cbanks": cbanks, "world": world,
     }
     (APP_DATA / "market.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     ks = breadth["kr"]

@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=56">
-<script src="firebase-config.js?v=56"></script>
-<script src="js/auth.js?v=56"></script>
+<link rel="stylesheet" href="css/style.css?v=57">
+<script src="firebase-config.js?v=57"></script>
+<script src="js/auth.js?v=57"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -39,6 +39,7 @@
 </nav>
 <nav class="tabs" data-group-tabs="market">
   <button class="tab active" data-tab="heatmap">홈</button>
+  <button class="tab" data-tab="macro">매크로</button>
   <button class="tab" data-tab="internals">시장 진단</button>
   <button class="tab" data-tab="rotation">섹터 로테이션</button>
   <button class="tab" data-tab="news">뉴스·딜</button>
@@ -263,9 +264,31 @@
     <div id="int-nhnl" class="chart" style="height:200px"></div>
     <h2 style="margin-top:18px">MA50/MA200 상회 종목 비율(%) <span class="sub-note">추세 참여도 — 50% 아래는 절반이 하락추세</span></h2>
     <div id="int-ma" class="chart" style="height:200px"></div>
+  </section>
+
+  <section id="tab-macro" class="panel">
+    <h2>🌍 세계 증시 지도 <span class="sub-note">(당일 등락 — 상승 빨강·하락 파랑 · 국가 클릭 = 5년 차트)</span></h2>
+    <div id="world-wrap" class="card-flat world-wrap">
+      <div id="world-map" class="world-map"><p class="mini-note" style="padding:20px">지도 로드 중...</p></div>
+      <p class="sub-note" style="margin:6px 10px">지도: Wikimedia Commons (CC BY-SA 3.0) · 시세: Yahoo Finance (지연) · 클라우드 30분 갱신</p>
+    </div>
+
+    <h2 style="margin-top:26px">🏦 중앙은행 기준금리 <span class="sub-note">(BIS 정책금리 · 하루 1회 갱신 — 인상/인하 사이클과 다음 결정일)</span></h2>
+    <div class="criteria" id="cb-context"></div>
+    <div id="cb-cards" class="cards macro"></div>
+
     <h2 style="margin-top:28px">🌐 매크로·지표 <span class="sub-note">(지수·금리·환율·원자재 — 60일 스파크)</span></h2>
     <div class="criteria" id="macro-context"></div>
     <div id="macro-cards" class="cards macro"></div>
+
+    <dialog id="world-dialog">
+      <div class="jr-form" style="gap:8px">
+        <div class="jr-head"><b id="wd-title">지수</b>
+          <button type="button" class="jr-x" id="wd-close">✕</button></div>
+        <div id="wd-stats" class="sub-note"></div>
+        <div id="wd-chart" style="width:100%;height:300px"></div>
+      </div>
+    </dialog>
   </section>
 
   <section id="tab-rotation" class="panel">
@@ -484,6 +507,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=56"></script>
+<script src="js/app.js?v=57"></script>
 </body>
 </html>
