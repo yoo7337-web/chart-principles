@@ -2653,12 +2653,84 @@ function jrRenderList() {
   });
 }
 
+// 토스 체결내역(FILLED) → 매매일지 자동 기록.
+// BUY=신규 진행중 거래 / SELL=동일 종목·동일 수량의 가장 오래된 진행중 매수를 청산(FIFO),
+// 짝이 없으면 손익 0의 단독 기록으로 보존. dedup은 주문 id("toss_…") 기준 — 재가져오기 시 0건.
+function jrImportToss(orders) {
+  const arr = jrLoad();
+  const ids = new Set(arr.flatMap((r) => [r.id, r.tossExit].filter(Boolean)));
+  let added = 0, closed = 0, solo = 0, dup = 0;
+  const sorted = [...orders].sort((a, b) => (a.filledAt || "").localeCompare(b.filledAt || ""));
+  sorted.forEach((o) => {
+    if (!o.oid || !o.ticker || !(o.qty > 0)) return;
+    const id = "toss_" + String(o.oid).slice(0, 16);
+    if (ids.has(id)) { dup++; return; }
+    ids.add(id);
+    const tk = String(o.ticker);
+    const hit = LOOKUP_INDEX?.find((x) => x.ticker.toUpperCase() === tk.toUpperCase());
+    const name = hit?.name || tk;
+    const t16 = (o.filledAt || "").slice(0, 16);
+    const feeTxt = `수수료 ${o.fee ?? 0}${o.tax ? ` · 세금 ${o.tax}` : ""}`;
+    if (o.side === "BUY") {
+      arr.unshift({ id, ticker: tk, name, side: "buy", qty: o.qty, entry: o.price,
+        exit: null, etime: t16, xtime: null,
+        reason: `[토스 자동기록] 매수 체결 · ${feeTxt}`, emotion: "", note: "" });
+      added++;
+    } else {  // SELL
+      const tgt = arr.filter((r) => r.ticker === tk && r.side === "buy" && r.exit == null && r.qty === o.qty)
+        .sort((a, b) => (a.etime || "").localeCompare(b.etime || ""))[0];
+      if (tgt) {
+        tgt.exit = o.price; tgt.xtime = t16; tgt.tossExit = id;
+        tgt.note = ((tgt.note || "") + `\n[토스 자동기록] 매도 체결 · ${feeTxt}`).trim();
+        closed++;
+      } else {
+        arr.unshift({ id, ticker: tk, name, side: "buy", qty: o.qty, entry: o.price,
+          exit: o.price, etime: t16, xtime: t16,
+          reason: `[토스 자동기록] 매도 단독 체결 · ${feeTxt}`, emotion: "",
+          note: "짝이 되는 매수 기록이 없어 손익 0으로 보존(진입가는 수기 보정)" });
+        solo++;
+      }
+    }
+  });
+  jrSave(arr);
+  jrRender();
+  return { added, closed, solo, dup };
+}
+
 /* ---------- 포트폴리오 점검 (localStorage — 서버 전송 없음) ---------- */
 const PF_KEY = "cp_portfolio_v1";
+const TOSS_KEY = "cp_toss_v1";   // 토스 동기화 스냅샷(현금·요약·경고·체결·시장 수급) — 브라우저에만 저장
 const pfStockCache = new Map();  // key -> stocks/{key}.json
+let pfConc = null;               // pfRenderStats → pfRenderList로 넘기는 섹터 집중도 [비중, 섹터명]
+let pfMkSel = "kospi";           // 수급 컨텍스트 토글 상태
 
 function pfLoad() { try { return JSON.parse(localStorage.getItem(PF_KEY)) || []; } catch (e) { return []; } }
 function pfSave(a) { localStorage.setItem(PF_KEY, JSON.stringify(a)); }
+
+let _toss;  // undefined=미로드, null=없음
+function tossLoad() {
+  if (_toss === undefined) { try { _toss = JSON.parse(localStorage.getItem(TOSS_KEY)); } catch (e) { _toss = null; } }
+  return _toss;
+}
+function tossSave(d) { _toss = d; localStorage.setItem(TOSS_KEY, JSON.stringify(d)); }
+
+// 토스 매수유의 유형: [라벨, 배지색, 감점]
+const TOSS_WARN = {
+  LIQUIDATION_TRADING: ["정리매매", "red", -2],
+  INVESTMENT_RISK: ["투자위험", "red", -2],
+  INVESTMENT_WARNING: ["투자경고", "org", -1],
+  OVERHEATED: ["단기과열", "org", -1],
+  VI_STATIC: ["VI 정적", "dim", 0],
+  VI_DYNAMIC: ["VI 동적", "dim", 0],
+  VI_STATIC_AND_DYNAMIC: ["VI 정+동", "dim", 0],
+  STOCK_WARRANTS: ["신주인수권", "dim", 0],
+};
+function tossActiveWarns(ticker) {
+  const w = tossLoad()?.warnings?.[ticker];
+  if (!w) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  return w.filter((x) => TOSS_WARN[x.type] && (!x.end || x.end >= today));
+}
 
 function pfResolve(raw) {
   const m = raw.match(/\(([A-Za-z0-9.]+)\)\s*$/);
@@ -2700,7 +2772,18 @@ function initPortfolio() {
           else { cur.push({ ticker: x.ticker, name: x.name || x.ticker, mk, qty: x.qty, avg: x.avg || 0 }); added++; }
         });
         pfSave(cur);
-        alert(`동기화 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (토스 기준 ${d.synced})` : ""}`);
+        let extraTxt = "";
+        if (d.ver >= 2) {  // v2 풀 패키지: 스냅샷 통째 저장(현금·요약·경고·수급 렌더에 사용)
+          tossSave(d);
+          const got = ["cash", "warnings", "orders", "market"].filter((k) => d[k]);
+          if (got.length) extraTxt = "\n확장 데이터: " + got.join(" · ");
+        }
+        alert(`동기화 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (토스 기준 ${d.synced})` : ""}${extraTxt}`);
+        if (d.ver >= 2 && Array.isArray(d.orders) && d.orders.length &&
+            confirm(`토스 체결내역 ${d.orders.length}건을 매매일지에도 기록할까요? (이미 기록된 건은 건너뜁니다)`)) {
+          const r = jrImportToss(d.orders);
+          alert(`매매일지 기록 완료 — 신규 매수 ${r.added}건 · 청산 반영 ${r.closed}건 · 단독 매도 ${r.solo}건 · 중복 제외 ${r.dup}건`);
+        }
         pfRender();
       } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 [{ticker,qty,avg}] 배열)"); }
       e.target.value = "";
@@ -2770,10 +2853,16 @@ function pfCheck(h) {
     score -= 1; reasons.push("외국인·기관 20일 동반 순매도");
   }
   if (p.rel_m1 != null && p.rel_m1 < -0.10) { score -= 1; reasons.push(`1개월 시장 대비 ${pct(p.rel_m1, 0)} 뒤처짐`); }
+  const warns = tossActiveWarns(h.ticker);
+  warns.forEach((w) => {
+    const [label, , pen] = TOSS_WARN[w.type];
+    if (pen) { score += pen; reasons.push(`거래소 ${label} 지정${w.end ? `(~${w.end.slice(5)})` : ""}`); }
+  });
+  const toss = tossLoad()?.holdings?.find?.((x) => x.ticker === h.ticker) || null;
   const grade = score <= -3 ? "bad" : score < 0 ? "warn" : "good";
   const gradeTxt = grade === "bad" ? "🔴 논거 재점검" : grade === "warn" ? "🟡 점검 필요" : "🟢 흐름 양호";
   if (!reasons.length) reasons.push(recentBuy.length ? `매수신호 ${recentBuy.length}건(30일) — 원칙상 우호적` : "감점 요인 없음");
-  return { st, cur, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons };
+  return { st, cur, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons, warns, toss };
 }
 
 function pfRenderStats(arr) {
