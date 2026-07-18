@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=50">
-<script src="firebase-config.js?v=50"></script>
-<script src="js/auth.js?v=50"></script>
+<link rel="stylesheet" href="css/style.css?v=51">
+<script src="firebase-config.js?v=51"></script>
+<script src="js/auth.js?v=51"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -32,6 +32,7 @@
   <button class="tab" data-tab="lookup">종목 조회</button>
 </nav>
 <nav class="tabs" data-group-tabs="journal" style="display:none">
+  <button class="tab" data-tab="holdings">보유 포트폴리오</button>
   <button class="tab" data-tab="portfolio">포트폴리오 점검</button>
   <button class="tab" data-tab="journal">매매일지</button>
 </nav>
@@ -363,23 +364,57 @@
     <div id="guru-agg" style="display:none"></div>
   </section>
 
+  <section id="tab-holdings" class="panel">
+    <div class="criteria">💼 <b>보유 포트폴리오</b> — 토스증권 보유내역을 국내/해외로 나눠 보여줍니다.
+      보유내역은 <b>이 브라우저에만</b> 저장(서버·공개 저장소 전송 없음).<br>
+      🔗 <b>토스증권 동기화</b>: 로컬에서 <code>python analysis\toss_sync.py</code> 실행(조회 전용, 키는 로컬 .env)
+      → 생성된 <code>data\my_portfolio.json</code>을 <b>📂 파일 가져오기</b>로 선택. 수기 입력도 가능합니다
+      (해외주식도 토스 화면 그대로 <b>원화 환산가</b>로 입력).</div>
+    <div class="controls" style="align-items:center;gap:10px">
+      <button class="jr-new" id="hld-add">＋ 종목 추가</button>
+      <button class="today-chart-btn" id="hld-import">📥 매매일지 진행중 불러오기</button>
+      <button class="today-chart-btn" id="hld-file">📂 파일 가져오기 (토스/수기)</button>
+      <input type="file" id="hld-file-input" accept=".json" style="display:none">
+      <span style="flex:1"></span>
+      <button class="today-chart-btn" id="hld-clear" style="color:#b91c1c">전체 삭제</button>
+    </div>
+    <div class="idx-cards" id="hld-summary" style="display:none;margin-top:14px"></div>
+    <div id="hld-list" style="margin-top:14px"></div>
+
+    <dialog id="hld-modal">
+      <form class="jr-form" id="hld-form">
+        <div class="jr-head"><b id="hld-modal-title">종목 추가</b>
+          <button type="button" class="jr-x" id="hld-close">✕</button></div>
+        <div class="jr-grid3">
+          <label>종목 <input type="text" id="hld-ticker" placeholder="예: 삼성전자, NVDA" list="lookup-list" autocomplete="off" required></label>
+          <label>시장 <select id="hld-mk"><option value="kr">🇰🇷 국내</option><option value="us">🇺🇸 해외</option></select></label>
+          <label>보유수량 (주) <input type="number" id="hld-qty" min="0" step="any" placeholder="10" required></label>
+        </div>
+        <div class="jr-grid3">
+          <label>1주 평균금액 (원) <input type="number" id="hld-avg" min="0" step="any" placeholder="103077" required></label>
+          <label>현재가 (원) <input type="number" id="hld-price" min="0" step="any" placeholder="69300" required></label>
+          <label>일간 수익금 (원) <span class="sub-note">(선택)</span> <input type="number" id="hld-daypl" step="any" placeholder="-3700"></label>
+        </div>
+        <div class="jr-grid2">
+          <label>수수료 (원) <span class="sub-note">(선택)</span> <input type="number" id="hld-fee" min="0" step="any" placeholder="10"></label>
+          <label>세금 (원) <span class="sub-note">(선택)</span> <input type="number" id="hld-tax" min="0" step="any" placeholder="138"></label>
+        </div>
+        <p class="mini-note">해외주식도 토스 화면 그대로 <b>원화 환산가</b>로 입력하세요. 평가금·총수익률은 자동 계산됩니다.</p>
+        <div class="jr-actions">
+          <button type="button" class="jr-del" id="hld-delete" style="display:none">삭제</button>
+          <span style="flex:1"></span>
+          <button type="button" class="today-chart-btn" id="hld-cancel">취소</button>
+          <button type="submit" class="jr-new" id="hld-save">저장</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
   <section id="tab-portfolio" class="panel">
-    <div class="criteria">🩺 <b>포트폴리오 점검</b> — 보유종목이 지금 산업·시장 흐름에 제대로 실려 있는지
-      룰 기반으로 진단합니다. 보유내역은 <b>이 브라우저에만</b> 저장(서버 전송 없음).
+    <div class="criteria">🩺 <b>포트폴리오 점검</b> — <b>보유 포트폴리오</b> 탭에 입력한 종목이 지금 산업·시장 흐름에
+      제대로 실려 있는지 룰 기반으로 진단합니다. 보유내역은 <b>이 브라우저에만</b> 저장(서버 전송 없음).
       시세 30분 · 뉴스/공시 일 1회 · 판정은 참고용(매수·매도 지시 아님).<br>
-      🔗 <b>토스증권 자동 동기화</b>: 로컬에서 <code>python analysis\toss_sync.py</code> 실행(조회 전용,
-      키는 로컬 .env) → 생성된 <code>data\my_portfolio.json</code>을 아래 <b>📂 파일 가져오기</b>로 선택.
       풀 패키지 동기화 시 <b>현금·오늘의 손익·거래소 경고배지·시장 수급·체결내역(매매일지 자동 기록)</b>까지
       반영됩니다 — 토스 수치는 <b>동기화한 시점 기준</b>입니다.</div>
-    <div class="controls pf-input">
-      <label>종목 <input type="text" id="pf-ticker" placeholder="이름 또는 티커" list="lookup-list" autocomplete="off"></label>
-      <label>수량 <input type="number" id="pf-qty" min="0" step="any" placeholder="10" style="width:90px"></label>
-      <label>평균단가 <input type="number" id="pf-avg" min="0" step="any" placeholder="매수 평단" style="width:120px"></label>
-      <button class="jr-new" id="pf-add">＋ 추가</button>
-      <button class="today-chart-btn" id="pf-import">📥 매매일지 진행중 불러오기</button>
-      <button class="today-chart-btn" id="pf-file">📂 파일 가져오기 (토스 동기화)</button>
-      <input type="file" id="pf-file-input" accept=".json" style="display:none">
-    </div>
     <div class="idx-cards" id="pf-stats" style="display:none"></div>
     <div id="pf-market" style="display:none;margin-top:14px"></div>
     <div id="pf-list" style="margin-top:14px"></div>
@@ -446,6 +481,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=50"></script>
+<script src="js/app.js?v=51"></script>
 </body>
 </html>

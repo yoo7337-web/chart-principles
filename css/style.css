@@ -423,10 +423,10 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .jr-new { border: none; background: #b91c1c; color: #fff; border-radius: 999px; padding: 8px 18px;
   font-size: .88rem; font-weight: 700; cursor: pointer; }
 .jr-new:hover { background: #991b1b; }
-#jr-modal { border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
+#jr-modal, #hld-modal { border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
   margin: auto; max-height: 90vh; overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,.25); }
-#jr-modal::backdrop { background: rgba(17,24,39,.45); }
+#jr-modal::backdrop, #hld-modal::backdrop { background: rgba(17,24,39,.45); }
 .jr-form { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
 .jr-head { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
 .jr-x { border: none; background: none; font-size: 1.1rem; cursor: pointer; color: var(--muted); }
@@ -479,6 +479,23 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .pf-warn-badge.dim { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 .pf-invbar { width: 100%; height: 120px; display: block; margin-top: 10px;
   background: #fbfcfe; border: 1px solid var(--line); border-radius: 8px; }
+
+/* 보유 포트폴리오 (토스식 표) */
+#hld-summary.idx-cards { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 760px) { #hld-summary.idx-cards { grid-template-columns: repeat(2, 1fr); } }
+.hld-sec { margin-top: 16px; }
+.hld-sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  flex-wrap: wrap; padding: 6px 2px; font-size: 1.0rem; }
+.hld-sec-head > span { font-size: .92rem; color: var(--muted); }
+.hld-table { width: 100%; border-collapse: collapse; font-size: .84rem; white-space: nowrap; }
+.hld-table th { text-align: right; padding: 8px 10px; color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--line); font-size: .78rem; }
+.hld-table td { text-align: right; padding: 9px 10px; border-bottom: 1px solid #f1f3f7; }
+.hld-table th:first-child, .hld-table td:first-child { text-align: left; }
+.hld-table tbody tr { cursor: pointer; }
+.hld-table tbody tr:hover { background: #f7f9fc; }
+.hld-name { display: flex; align-items: center; gap: 9px; min-width: 150px; }
+.hld-name .sub-note { font-size: .72rem; }
 
 .fin-ext td, .fin-ext th { font-size: .8rem; padding: 5px 8px; }
 .fin-ext td:first-child { color: var(--muted); font-weight: 600; }

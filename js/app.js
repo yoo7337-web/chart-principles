@@ -43,6 +43,7 @@ let simRendered = false;
 let lookupRendered = false;
 let journalRendered = false;
 let portfolioRendered = false;
+let holdingsRendered = false;
 
 const $ = (s) => document.querySelector(s);
 const pct = (x, d = 2) => (x == null ? "-" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
@@ -53,12 +54,13 @@ function tickerLabel(mk, tk) {
 }
 
 /* ---------- 중분류(그룹) + 탭 ---------- */
-const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "portfolio" };
+const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "holdings" };
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
   calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회",
-  portfolio: "포트폴리오 점검", journal: "매매일지", rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
+  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지",
+  rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
 let navSuppress = false;
 let currentTab = "heatmap";
@@ -105,6 +107,7 @@ function activateTab(tabId) {
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
   if (tabId === "journal" && !journalRendered) initJournal();
+  if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "calendar" && !calRendered) renderCalendar();
@@ -2707,6 +2710,54 @@ let pfMkSel = "kospi";           // 수급 컨텍스트 토글 상태
 function pfLoad() { try { return JSON.parse(localStorage.getItem(PF_KEY)) || []; } catch (e) { return []; } }
 function pfSave(a) { localStorage.setItem(PF_KEY, JSON.stringify(a)); }
 
+// 보유 포트폴리오 rich 저장소 (v2, 항상 원화 통일 — 해외주식도 원화 환산가)
+const PF2_KEY = "cp_portfolio_v2";
+function pf2Load() {
+  try { const d = JSON.parse(localStorage.getItem(PF2_KEY)); if (d && Array.isArray(d.holdings)) return d; } catch (e) {}
+  return null;
+}
+function pf2Save(d) { localStorage.setItem(PF2_KEY, JSON.stringify(d)); }
+// 점검·보유 탭 공통 보유목록 (rich). v2 우선, 없으면 legacy v1을 승격.
+function pfHoldings() {
+  const d = pf2Load();
+  if (d) return d.holdings;
+  return pfLoad().map((x) => ({ ...x }));
+}
+// 누락 필드 파생 (평가금·원금·손익·손익률). 입력값 우선, 없으면 계산.
+function pfDerive(h) {
+  const qty = +h.qty || 0, avg = +h.avg || 0, price = +h.price || 0;
+  const fee = h.fee == null || h.fee === "" ? null : +h.fee;
+  const tax = h.tax == null || h.tax === "" ? null : +h.tax;
+  const cost = h.cost != null ? +h.cost : Math.round(avg * qty);
+  const val = h.val != null ? +h.val : Math.round(price * qty - (fee || 0) - (tax || 0));
+  const pl = h.pl != null ? +h.pl : val - cost;
+  const plRate = h.plRate != null ? +h.plRate : (cost ? pl / cost : null);
+  const dayPl = h.dayPl == null || h.dayPl === "" ? null : +h.dayPl;
+  const dayRate = h.dayRate != null ? +h.dayRate : (dayPl != null && val - dayPl ? dayPl / (val - dayPl) : null);
+  return { ticker: h.ticker, name: h.name || h.ticker, mk: h.mk, lev: h.lev || null,
+    qty, avg, price, cost, val, pl, plRate, dayPl, dayRate, fee, tax };
+}
+// 가져오기 정규화 → 원화 통일 rich (manual=krw 그대로 / API=native면 fx로 환산)
+function pfNormalizeImport(d) {
+  const krwUnified = d.krw === true;
+  const fx = d.fx || null;
+  return (d.holdings || []).filter((x) => x.ticker && +x.qty > 0).map((x) => {
+    const mk = x.mk || (/^\d{6}$/.test(String(x.ticker)) ? "kr" : "us");
+    const k = (v) => (v == null ? null : (!krwUnified && mk === "us" && fx ? v * fx : v));
+    return pfDerive({ ticker: String(x.ticker), name: x.name || x.ticker, mk, lev: x.lev || null,
+      qty: +x.qty, avg: k(x.avg), price: k(x.last != null ? x.last : x.price),
+      val: k(x.val), cost: k(x.cost), pl: k(x.pl), plRate: x.plRate,
+      dayPl: k(x.dayPl), dayRate: x.dayRate, fee: k(x.fee), tax: k(x.tax) });
+  });
+}
+// 원화 금액 포맷 (signed=부호 강제)
+function won(v, signed) {
+  if (v == null || isNaN(v)) return "-";
+  const s = signed ? (v > 0 ? "+" : v < 0 ? "-" : "") : (v < 0 ? "-" : "");
+  return s + Math.round(Math.abs(v)).toLocaleString() + "원";
+}
+function pfToday() { return new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16).replace("T", " "); }
+
 let _toss;  // undefined=미로드, null=없음
 function tossLoad() {
   if (_toss === undefined) { try { _toss = JSON.parse(localStorage.getItem(TOSS_KEY)); } catch (e) { _toss = null; } }
@@ -2740,82 +2791,212 @@ function pfResolve(raw) {
   return hit ? { ticker: hit.ticker, name: hit.name, mk: hit.market } : null;
 }
 
-function initPortfolio() {
-  portfolioRendered = true;
+/* ===== 보유 포트폴리오 탭 (토스 스타일 표) ===== */
+let hldEditTicker = null;
+
+function initHoldings() {
+  holdingsRendered = true;
   if (!LOOKUP_INDEX) initLookup();
-  $("#pf-add").onclick = () => {
-    const r = pfResolve($("#pf-ticker").value);
-    if (!r) { alert("유니버스에서 종목을 찾지 못했습니다 — 자동완성 목록에서 선택해 주세요"); return; }
-    const arr = pfLoad();
-    if (arr.some((x) => x.ticker === r.ticker)) { alert("이미 보유 목록에 있습니다"); return; }
-    arr.push({ ...r, qty: +$("#pf-qty").value || 0, avg: +$("#pf-avg").value || 0 });
-    pfSave(arr);
-    $("#pf-ticker").value = $("#pf-qty").value = $("#pf-avg").value = "";
-    pfRender();
+  $("#hld-add").onclick = () => hldOpenModal(null);
+  $("#hld-close").onclick = $("#hld-cancel").onclick = () => $("#hld-modal").close();
+  $("#hld-form").onsubmit = (e) => { e.preventDefault(); hldSubmit(); };
+  $("#hld-delete").onclick = () => {
+    if (!hldEditTicker || !confirm("이 종목을 목록에서 삭제할까요?")) return;
+    const d = pf2Load() || { holdings: [] };
+    d.holdings = d.holdings.filter((x) => x.ticker !== hldEditTicker);
+    d.krw = true; d.updated = pfToday();
+    pf2Save(d); $("#hld-modal").close(); hldRefresh();
   };
-  $("#pf-file").onclick = () => $("#pf-file-input").click();
-  $("#pf-file-input").onchange = (e) => {
+  $("#hld-clear").onclick = () => {
+    if (!pfHoldings().length || !confirm("보유 포트폴리오를 전부 삭제할까요?")) return;
+    localStorage.removeItem(PF2_KEY); pfSave([]); hldRefresh();
+  };
+  $("#hld-import").onclick = () => {
+    const open = (typeof jrLoad === "function" ? jrLoad() : []).filter((t) => t.exit == null && t.side === "buy");
+    if (!open.length) { alert("매매일지에 진행중(매수) 거래가 없습니다"); return; }
+    const d = pf2Load() || { krw: true, holdings: [] };
+    let added = 0;
+    open.forEach((t) => {
+      if (!d.holdings.some((x) => x.ticker === t.ticker)) {
+        d.holdings.push(pfDerive({ ticker: t.ticker, name: t.name, mk: /^\d{6}$/.test(t.ticker) ? "kr" : "us",
+          qty: t.qty, avg: t.entry, price: t.entry }));
+        added++;
+      }
+    });
+    d.krw = true; d.updated = pfToday(); pf2Save(d);
+    alert(added + "종목 불러옴 (중복 제외) — 현재가는 종목 편집에서 갱신하세요");
+    hldRefresh();
+  };
+  $("#hld-file").onclick = () => $("#hld-file-input").click();
+  $("#hld-file-input").onchange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     f.text().then((txt) => {
       try {
-        const d = JSON.parse(txt);
-        const arr = Array.isArray(d) ? d : d.holdings;
-        if (!Array.isArray(arr)) throw new Error("bad");
-        const cur = pfLoad();
+        const raw = JSON.parse(txt);
+        const d = Array.isArray(raw) ? { holdings: raw } : raw;
+        const incoming = pfNormalizeImport(d);
+        if (!incoming.length) throw new Error("empty");
+        const cur = pf2Load() || { krw: true, holdings: [] };
         let added = 0, updated = 0;
-        arr.forEach((x) => {
-          if (!x.ticker || !(x.qty > 0)) return;
-          const mk = x.mk || (/^\d{6}$/.test(x.ticker) ? "kr" : "us");
-          const i = cur.findIndex((c) => c.ticker === x.ticker);
-          if (i >= 0) { cur[i].qty = x.qty; cur[i].avg = x.avg ?? cur[i].avg; updated++; }
-          else { cur.push({ ticker: x.ticker, name: x.name || x.ticker, mk, qty: x.qty, avg: x.avg || 0 }); added++; }
+        incoming.forEach((x) => {
+          const i = cur.holdings.findIndex((c) => c.ticker === x.ticker);
+          if (i >= 0) { cur.holdings[i] = x; updated++; } else { cur.holdings.push(x); added++; }
         });
-        pfSave(cur);
+        cur.krw = true; cur.updated = d.synced || pfToday();
+        pf2Save(cur);
         let extraTxt = "";
-        if (d.ver >= 2) {  // v2 풀 패키지: 스냅샷 통째 저장(현금·요약·경고·수급 렌더에 사용)
+        if (d.ver >= 2 && (d.cash || d.warnings || d.market || d.orders)) {  // API 확장(현금·경고·수급)은 점검 탭에서 사용
           tossSave(d);
           const got = ["cash", "warnings", "orders", "market"].filter((k) => d[k]);
           if (got.length) extraTxt = "\n확장 데이터: " + got.join(" · ");
         }
-        alert(`동기화 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (토스 기준 ${d.synced})` : ""}${extraTxt}`);
+        alert(`가져오기 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (기준 ${d.synced})` : ""}${extraTxt}`);
         if (d.ver >= 2 && Array.isArray(d.orders) && d.orders.length &&
-            confirm(`토스 체결내역 ${d.orders.length}건을 매매일지에도 기록할까요? (이미 기록된 건은 건너뜁니다)`)) {
+            confirm(`체결내역 ${d.orders.length}건을 매매일지에도 기록할까요? (이미 기록된 건은 건너뜁니다)`)) {
           const r = jrImportToss(d.orders);
           alert(`매매일지 기록 완료 — 신규 매수 ${r.added}건 · 청산 반영 ${r.closed}건 · 단독 매도 ${r.solo}건 · 중복 제외 ${r.dup}건`);
         }
-        pfRender();
-      } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 [{ticker,qty,avg}] 배열)"); }
+        hldRefresh();
+      } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 {holdings:[...]} / [{ticker,qty,avg}] 배열)"); }
       e.target.value = "";
     });
   };
-  $("#pf-import").onclick = () => {
-    const open = (typeof jrLoad === "function" ? jrLoad() : []).filter((t) => t.exit == null && t.side === "buy");
-    if (!open.length) { alert("매매일지에 진행중(매수) 거래가 없습니다"); return; }
-    const arr = pfLoad();
-    let added = 0;
-    open.forEach((t) => {
-      if (!arr.some((x) => x.ticker === t.ticker)) {
-        arr.push({ ticker: t.ticker, name: t.name, mk: /^\d{6}$/.test(t.ticker) ? "kr" : "us", qty: t.qty, avg: t.entry });
-        added++;
-      }
-    });
-    pfSave(arr);
-    alert(added + "종목 불러옴 (중복 제외)");
-    pfRender();
-  };
+  hldRender();
+}
+
+// 보유 변경 후: 보유 탭 + (열려 있으면) 점검 탭 동시 갱신
+function hldRefresh() {
+  if (holdingsRendered) hldRender();
+  if (portfolioRendered) pfRender();
+}
+
+function hldOpenModal(h) {
+  hldEditTicker = h?.ticker || null;
+  $("#hld-modal-title").textContent = h ? "종목 편집" : "종목 추가";
+  $("#hld-ticker").value = h ? (h.mk === "kr" ? `${h.name} (${h.ticker})` : h.ticker) : "";
+  $("#hld-mk").value = h?.mk || "us";
+  $("#hld-qty").value = h?.qty ?? "";
+  $("#hld-avg").value = h?.avg ?? "";
+  $("#hld-price").value = h?.price ?? "";
+  $("#hld-daypl").value = h?.dayPl ?? "";
+  $("#hld-fee").value = h?.fee ?? "";
+  $("#hld-tax").value = h?.tax ?? "";
+  $("#hld-delete").style.display = h ? "" : "none";
+  $("#hld-modal").showModal();
+}
+
+function hldResolve() {
+  const raw = $("#hld-ticker").value.trim();
+  const m = raw.match(/\(([A-Za-z0-9.]+)\)\s*$/);
+  const tk = (m ? m[1] : raw).toUpperCase();
+  const hit = LOOKUP_INDEX?.find((x) => x.ticker.toUpperCase() === tk || x.name === raw ||
+    (x.name + " (" + x.ticker + ")") === raw);
+  const name = hit ? hit.name : (m ? raw.replace(/\s*\(.*\)$/, "") : tk);
+  return { ticker: hit ? hit.ticker : tk, name, mk: $("#hld-mk").value };
+}
+
+function hldSubmit() {
+  const r = hldResolve();
+  if (!r.ticker || !(+$("#hld-qty").value > 0)) { alert("종목과 보유수량을 입력해 주세요"); return; }
+  const rec = pfDerive({ ...r, qty: +$("#hld-qty").value, avg: +$("#hld-avg").value, price: +$("#hld-price").value,
+    dayPl: $("#hld-daypl").value, fee: $("#hld-fee").value, tax: $("#hld-tax").value });
+  let list = (pf2Load()?.holdings || []).slice();
+  if (hldEditTicker) list = list.filter((x) => x.ticker !== hldEditTicker);
+  const j = list.findIndex((x) => x.ticker === rec.ticker);
+  if (j >= 0) list[j] = rec; else list.push(rec);
+  pf2Save({ krw: true, updated: pfToday(), holdings: list });
+  $("#hld-modal").close();
+  hldRefresh();
+}
+
+function hldRender() {
+  const host = $("#hld-list"), sumEl = $("#hld-summary");
+  const all = pfHoldings();
+  if (!all.length) {
+    sumEl.style.display = "none";
+    host.innerHTML = `<div class="card-flat" style="text-align:center;padding:40px 16px;color:var(--muted)">
+      보유종목이 없습니다 — <b>＋ 종목 추가</b>로 입력하거나 <b>📂 파일 가져오기</b>로 토스 동기화 파일을 불러오세요.<br>
+      <span class="sub-note">입력한 종목은 <b>포트폴리오 점검</b> 탭에서 산업·시장 흐름까지 진단됩니다.</span></div>`;
+    return;
+  }
+  const secs = [["kr", "🇰🇷 국내주식"], ["us", "🇺🇸 해외주식"]];
+  let gVal = 0, gCost = 0, gDay = 0, gDayHas = false;
+  const secHtml = secs.map(([mk, label]) => {
+    const rows = all.filter((h) => h.mk === mk);
+    if (!rows.length) return "";
+    const sVal = rows.reduce((a, h) => a + (h.val || 0), 0);
+    const sCost = rows.reduce((a, h) => a + (h.cost || 0), 0);
+    const sPl = sVal - sCost;
+    gVal += sVal; gCost += sCost;
+    rows.forEach((h) => { if (h.dayPl != null) { gDay += h.dayPl; gDayHas = true; } });
+    const rowsHtml = rows.map((h) => {
+      const logo = h.mk === "kr" ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${h.ticker}.svg`
+        : (EXTRAS.company?.map?.[`us_${h.ticker}`]?.logo || "");
+      const rc = (v) => (v >= 0 ? "pos" : "neg");
+      return `<tr data-tk="${h.ticker}">
+        <td class="hld-name">${logo ? `<img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="mv-logo"></span>`}
+          <span><b>${h.name}</b>${h.lev ? ` <span class="pf-warn-badge dim">${h.lev}</span>` : ""}<br><span class="sub-note">${h.ticker}</span></span></td>
+        <td class="${rc(h.plRate)}">${pct(h.plRate, 2)}</td>
+        <td class="${rc(h.pl)}">${won(h.pl, true)}</td>
+        <td>${won(h.avg)}</td>
+        <td>${won(h.price)}</td>
+        <td>${h.qty}주</td>
+        <td><b>${won(h.val)}</b></td>
+        <td>${won(h.cost)}</td>
+        <td class="${rc(h.dayRate)}">${h.dayRate != null ? pct(h.dayRate, 2) : "-"}</td>
+        <td class="${rc(h.dayPl)}">${h.dayPl != null ? won(h.dayPl, true) : "-"}</td>
+        <td>${h.fee != null ? won(h.fee) : "-"}</td>
+        <td>${h.tax ? won(h.tax) : "-"}</td></tr>`;
+    }).join("");
+    return `<div class="hld-sec">
+      <div class="hld-sec-head"><b>${label}</b>
+        <span>${won(sVal)} <b class="${sPl >= 0 ? "pos" : "neg"}">${won(sPl, true)} (${pct(sCost ? sPl / sCost : 0, 2)})</b></span></div>
+      <div class="tablewrap"><table class="hld-table">
+        <thead><tr><th>종목</th><th>총수익률</th><th>총수익금</th><th>평균가</th><th>현재가</th><th>수량</th>
+          <th>평가금</th><th>원금</th><th>일간%</th><th>일간액</th><th>수수료</th><th>세금</th></tr></thead>
+        <tbody>${rowsHtml}</tbody></table></div></div>`;
+  }).join("");
+
+  const gPl = gVal - gCost;
+  const toss = tossLoad();
+  const cashKrw = toss?.cash ? (toss.cash.krw || 0) + (toss.fx ? (toss.cash.usd || 0) * toss.fx : 0) : 0;
+  sumEl.style.display = "";
+  sumEl.innerHTML = `
+    <div class="idx-card"><div class="sub-note">총 평가금${cashKrw ? " (주식)" : ""}</div>
+      <div class="lk-name" style="font-size:1.02rem">${won(gVal)}</div>
+      <div class="sub-note">${cashKrw ? "현금 " + won(cashKrw) + " · " : ""}원금 ${won(gCost)}</div></div>
+    <div class="idx-card"><div class="sub-note">총 손익</div>
+      <div class="pf-day ${gPl >= 0 ? "pos" : "neg"}">${won(gPl, true)}</div>
+      <div class="sub-note">${pct(gCost ? gPl / gCost : 0, 2)}</div></div>
+    ${gDayHas ? `<div class="idx-card"><div class="sub-note">오늘 손익 (동기 시점)</div>
+      <div class="pf-day ${gDay >= 0 ? "pos" : "neg"}">${won(gDay, true)}</div>
+      <div class="sub-note">${pct(gVal - gDay ? gDay / (gVal - gDay) : 0, 2)}</div></div>` : ""}
+    <div class="idx-card"><div class="sub-note">보유 종목</div>
+      <div class="lk-name">${all.length}<span class="sub-note"> 국내 ${all.filter((h) => h.mk === "kr").length} · 해외 ${all.filter((h) => h.mk === "us").length}</span></div>
+      <div class="sub-note">${toss ? "동기 " + (pf2Load()?.updated || "") : "수기 입력"}</div></div>`;
+
+  host.innerHTML = secHtml + `<p class="sub-note" style="margin-top:10px">해외주식 금액은 토스 화면과 동일한 <b>원화 환산</b> 기준입니다.
+    행을 클릭하면 편집·삭제할 수 있어요. 산업·수급·원칙 진단은 <b>포트폴리오 점검</b> 탭에서 확인하세요.</p>`;
+  host.querySelectorAll(".hld-table tbody tr").forEach((tr) => tr.onclick = () =>
+    hldOpenModal(pfHoldings().find((h) => h.ticker === tr.dataset.tk)));
+}
+
+function initPortfolio() {
+  portfolioRendered = true;
+  if (!LOOKUP_INDEX) initLookup();
   pfRender();
 }
 
 async function pfRender() {
-  const arr = pfLoad();
+  const arr = pfHoldings();
   const statsEl = $("#pf-stats"), listEl = $("#pf-list");
   pfMarketRender();  // 수급 컨텍스트는 보유 여부와 무관(토스 스냅샷 존재 시)
   if (!arr.length) {
     statsEl.style.display = "none";
     listEl.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
-      보유종목을 추가하면 뉴스·수급·섹터 흐름·원칙 신호를 종합 점검합니다.<br>
-      <span class="sub-note">매매일지의 진행중 거래를 한 번에 불러올 수도 있습니다.</span></div>`;
+      <b>보유 포트폴리오</b> 탭에서 종목을 입력하면 뉴스·수급·섹터 흐름·원칙 신호를 종합 점검합니다.<br>
+      <span class="sub-note">파일 가져오기(토스 동기화)로 한 번에 불러올 수도 있습니다.</span></div>`;
     return;
   }
   listEl.innerHTML = `<p class="mini-note">점검 데이터 로드 중...</p>`;
@@ -2890,7 +3071,9 @@ function pfCheck(h) {
   const key = h.mk + "_" + h.ticker;
   const st = pfStockCache.get(key);
   const q = MARKET?.quotes?.[key];
-  const cur = q ? q[0] : st?.series?.[st.series.length - 1]?.c;
+  const nativeCur = q ? q[0] : st?.series?.[st.series.length - 1]?.c;  // 유니버스 원통화 시세(컨센 괴리 계산용)
+  const rich = h.val != null;                       // 보유 포트폴리오 rich 항목(원화 통일)
+  const cur = rich ? h.price : nativeCur;            // 표시용 현재가
   const tile = MARKET?.heatmap?.find((t) => t.m === h.mk && t.t === h.ticker);
   const sector = tile?.sector || st?.profile?.sector;
   const rs = MPRO?.rotation?.[h.mk]?.sectors?.find((x) => x.sector === sector);
@@ -2914,63 +3097,52 @@ function pfCheck(h) {
     const [label, , pen] = TOSS_WARN[w.type];
     if (pen) { score += pen; reasons.push(`거래소 ${label} 지정${w.end ? `(~${w.end.slice(5)})` : ""}`); }
   });
-  const toss = tossLoad()?.holdings?.find?.((x) => x.ticker === h.ticker) || null;
+  const toss = rich ? h : null;  // rich 항목이면 오늘손익·수수료 등을 그대로 사용
   const grade = score <= -3 ? "bad" : score < 0 ? "warn" : "good";
   const gradeTxt = grade === "bad" ? "🔴 논거 재점검" : grade === "warn" ? "🟡 점검 필요" : "🟢 흐름 양호";
   if (!reasons.length) reasons.push(recentBuy.length ? `매수신호 ${recentBuy.length}건(30일) — 원칙상 우호적` : "감점 요인 없음");
-  return { st, cur, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons, warns, toss };
+  return { st, cur, nativeCur, rich, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons, warns, toss };
 }
 
 function pfRenderStats(arr) {
   const statsEl = $("#pf-stats");
   statsEl.style.display = "";
-  let krVal = 0, krCost = 0, usVal = 0, usCost = 0;
+  let stockKrw = 0, costKrw = 0, dayKrw = 0, hasDay = false;
   const secW = {};
   let nBad = 0, nWarn = 0;
   arr.forEach((h) => {
     const c = pfCheck(h);
-    const v = (c.cur || 0) * h.qty;
-    if (h.mk === "kr") { krVal += v; krCost += h.avg * h.qty; } else { usVal += v; usCost += h.avg * h.qty; }
-    if (c.sector) secW[c.sector] = (secW[c.sector] || 0) + v;
+    const valK = h.val != null ? h.val : (c.cur || 0) * h.qty;  // rich=원화 평가금, legacy=시세×수량
+    stockKrw += valK;
+    costKrw += h.cost != null ? h.cost : (h.avg || 0) * h.qty;
+    if (h.dayPl != null) { dayKrw += h.dayPl; hasDay = true; }
+    if (c.sector) secW[c.sector] = (secW[c.sector] || 0) + valK;
     if (c.grade === "bad") nBad++;
     if (c.grade === "warn") nWarn++;
   });
-  const totV = krVal + usVal;
   const topSec = Object.entries(secW).sort((a, b) => b[1] - a[1])[0];
-  pfConc = topSec && totV ? [topSec[1] / totV, topSec[0]] : null;  // 집중도는 리스트 상단 배지로
-  const ret = (v, c) => (c ? v / c - 1 : null);
-  const fmtR = (r) => r == null ? "" : `<span class="${r >= 0 ? "pos" : "neg"}">${pct(r, 1)}</span>`;
+  pfConc = topSec && stockKrw ? [topSec[1] / stockKrw, topSec[0]] : null;  // 집중도는 리스트 상단 배지로
+  const totRet = costKrw ? (stockKrw - costKrw) / costKrw : null;
   const rg = MARKET?.regime || {};
-  const valTxt = [krVal ? Math.round(krVal).toLocaleString() + "원" : null,
-                  usVal ? "$" + usVal.toLocaleString(undefined, { maximumFractionDigits: 0 }) : null]
-    .filter(Boolean).join(" · ") || "-";
   const toss = tossLoad();
-  const fx = toss?.fx || null;
+  const cashKrw = toss?.cash ? (toss.cash.krw || 0) + (toss.fx ? (toss.cash.usd || 0) * toss.fx : 0) : 0;
+  const asof = pf2Load()?.updated || toss?.synced;
 
-  // 카드1: 총 자산(토스 현금 포함) — 스냅샷 없으면 기존 평가액 카드
-  let card1;
-  if (toss?.cash) {
-    const cashKrw = (toss.cash.krw || 0) + (fx ? (toss.cash.usd || 0) * fx : 0);
-    const stockKrw = krVal + (fx ? usVal * fx : usVal ? NaN : 0);
-    const totTxt = isNaN(stockKrw) ? valTxt : Math.round(stockKrw + cashKrw).toLocaleString() + "원";
-    card1 = `<div class="idx-card"><div class="sub-note">총 자산 (주식+현금${fx ? " · 원화 환산" : ""})</div>
-      <div class="lk-name" style="font-size:.98rem">${totTxt}</div>
-      <div class="sub-note">주식 ${valTxt} · 현금 ${Math.round(cashKrw).toLocaleString()}원<br>토스 동기 ${toss.synced || "-"}</div></div>`;
-  } else {
-    card1 = `<div class="idx-card"><div class="sub-note">평가액 (30분 시세)</div>
-      <div class="lk-name" style="font-size:.98rem">${valTxt}</div>
-      <div class="sub-note">수익률 🇰🇷${fmtR(ret(krVal, krCost)) || "-"} 🇺🇸${fmtR(ret(usVal, usCost)) || "-"}</div></div>`;
-  }
+  // 카드1: 총 자산(현금 있으면 합산) — 없으면 평가액
+  const card1 = cashKrw
+    ? `<div class="idx-card"><div class="sub-note">총 자산 (주식+현금)</div>
+        <div class="lk-name" style="font-size:1.0rem">${won(stockKrw + cashKrw)}</div>
+        <div class="sub-note">주식 ${won(stockKrw)} · 현금 ${won(cashKrw)}${asof ? `<br>기준 ${asof}` : ""}</div></div>`
+    : `<div class="idx-card"><div class="sub-note">평가액</div>
+        <div class="lk-name" style="font-size:1.0rem">${won(stockKrw)}</div>
+        <div class="sub-note">총수익률 <span class="${totRet >= 0 ? "pos" : "neg"}">${pct(totRet, 1)}</span> · 원금 ${won(costKrw)}</div></div>`;
 
-  // 카드2: 오늘의 손익(토스 동기 시점) — 없으면 생략(시장 국면이 그 자리로)
-  let card2 = "";
-  const s = toss?.summary;
-  if (s && (s.krw?.dayPl != null || s.usd?.dayPl != null)) {
-    const dayKrw = (s.krw?.dayPl || 0) + (fx ? (s.usd?.dayPl || 0) * fx : 0);
-    card2 = `<div class="idx-card"><div class="sub-note">오늘의 손익 (동기 시점)</div>
-      <div class="pf-day ${dayKrw >= 0 ? "pos" : "neg"}">${jrMoney(dayKrw, true)}</div>
-      <div class="sub-note">${s.dayRate != null ? `일간 ${pct(s.dayRate, 2)}` : ""}${s.plRate != null ? ` · 총 ${pct(s.plRate, 1)}` : ""}${s.plRateAfterCost != null ? ` (실현 시 ${pct(s.plRateAfterCost, 1)})` : ""}</div></div>`;
-  }
+  // 카드2: 오늘의 손익 (rich dayPl 합) — 없으면 생략
+  const card2 = hasDay
+    ? `<div class="idx-card"><div class="sub-note">오늘의 손익 (동기 시점)</div>
+        <div class="pf-day ${dayKrw >= 0 ? "pos" : "neg"}">${won(dayKrw, true)}</div>
+        <div class="sub-note">일간 ${pct(stockKrw - dayKrw ? dayKrw / (stockKrw - dayKrw) : 0, 2)} · 총 <span class="${totRet >= 0 ? "pos" : "neg"}">${pct(totRet, 1)}</span></div></div>`
+    : "";
 
   statsEl.innerHTML = card1 + card2 + `
     <div class="idx-card"><div class="sub-note">시장 국면</div>
@@ -2989,19 +3161,24 @@ function pfRenderList(arr) {
     const c = pfCheck(h);
     const logo = h.mk === "kr" ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${h.ticker}.svg`
       : (EXTRAS.company?.map?.[key]?.logo || "");
-    const ret = h.avg && c.cur ? c.cur / h.avg - 1 : null;
+    const rich = c.rich;
+    const ret = rich ? h.plRate : (h.avg && c.cur ? c.cur / h.avg - 1 : null);
     const fd = EXTRAS.feed?.map?.[key];
     const rsArrow = c.rs ? (c.rs.rs_w1 > c.rs.rs_m1 ? "↗ 가속" : "↘ 감속") : "";
-    const upside = c.cons?.target && c.cur ? c.cons.target / c.cur - 1 : null;
-    const tossRow = c.toss && c.toss.dayPl != null ? `
-        <div class="prof-row"><span>토스 기준 (동기 시점)</span>
-          <span>오늘 <b class="${c.toss.dayPl >= 0 ? "pos" : "neg"}">${jrMoney(c.toss.dayPl, h.mk === "kr")}</b>
-            ${c.toss.plRateAfterCost != null ? ` · 실현 시 수익률 <b class="${c.toss.plRateAfterCost >= 0 ? "pos" : "neg"}">${pct(c.toss.plRateAfterCost, 1)}</b>` : ""}
-            ${c.toss.fee != null ? ` · 수수료·세금 ${(h.mk === "kr" ? Math.round((c.toss.fee || 0) + (c.toss.tax || 0)).toLocaleString() + "원" : "$" + ((c.toss.fee || 0) + (c.toss.tax || 0)).toFixed(2))}` : ""}</span></div>` : "";
+    const upside = c.cons?.target && c.nativeCur ? c.cons.target / c.nativeCur - 1 : null;
+    const wonNote = h.mk === "us" ? ' <span class="sub-note">(원화환산)</span>' : "";
+    const valRow = rich ? `
+        <div class="prof-row"><span>평가금 · 손익</span>
+          <span><b>${won(h.val)}</b> <b class="${h.pl >= 0 ? "pos" : "neg"}">${won(h.pl, true)}</b> (${pct(ret, 1)})</span></div>
+        <div class="prof-row"><span>평균가 → 현재가${wonNote}</span>
+          <span>${won(h.avg)} → ${won(h.price)} · ${h.qty}주</span></div>${h.dayPl != null ? `
+        <div class="prof-row"><span>오늘 손익 (동기 시점)</span>
+          <span><b class="${h.dayPl >= 0 ? "pos" : "neg"}">${won(h.dayPl, true)}</b>${h.dayRate != null ? ` (${pct(h.dayRate, 2)})` : ""}
+            ${h.fee != null ? ` · 수수료 ${won(h.fee)}` : ""}${h.tax ? ` · 세금 ${won(h.tax)}` : ""}</span></div>` : ""}`
+      : `<div class="prof-row"><span>보유 손익 (평단 ${h.avg ? fmtPrice(h.avg, h.mk) : "-"})</span>
+          <span>${c.cur ? fmtPrice(c.cur, h.mk) : "-"} ${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span></div>`;
     const rowsHtml = `
-      <div class="prof-grid wide" style="margin-top:8px">
-        <div class="prof-row"><span>보유 손익 (평단 ${h.avg ? fmtPrice(h.avg, h.mk) : "-"})</span>
-          <span>${c.cur ? fmtPrice(c.cur, h.mk) : "-"} ${ret != null ? `<b class="${ret >= 0 ? "pos" : "neg"}">${pct(ret, 1)}</b>` : ""}</span></div>${tossRow}
+      <div class="prof-grid wide" style="margin-top:8px">${valRow}
         <div class="prof-row"><span>시장 대비 성과</span>
           <span>1개월 ${c.p.rel_m1 != null ? `<b class="${c.p.rel_m1 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m1, 1)}</b>` : "-"}
             · 3개월 ${c.p.rel_m3 != null ? `<b class="${c.p.rel_m3 >= 0 ? "pos" : "neg"}">${pct(c.p.rel_m3, 1)}</b>` : "-"}</span></div>
@@ -3041,8 +3218,7 @@ function pfRenderList(arr) {
       <div style="margin-top:10px;display:flex;gap:14px">
         <a href="#" class="goto-lookup pf-goto" data-key="${key}">종목 조회에서 상세 분석 →</a>
         <span style="flex:1"></span>
-        <a href="#" class="pf-edit" data-i="${idx}">수정</a>
-        <a href="#" class="pf-del" data-i="${idx}" style="color:#b91c1c">삭제</a>
+        <a href="#" class="pf-edit" data-tk="${h.ticker}">보유 포트폴리오에서 편집 →</a>
       </div>
     </details>`;
   }).join("") + `<p class="sub-note" style="margin-top:10px">판정 룰: 유효 매도신호(-2) · 섹터 전기간 약세(-1) ·
@@ -3055,22 +3231,11 @@ function pfRenderList(arr) {
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   }));
-  listEl.querySelectorAll(".pf-del").forEach((a) => a.addEventListener("click", (e) => {
-    e.preventDefault();
-    const arr = pfLoad();
-    if (!confirm(arr[+a.dataset.i].name + " 을(를) 목록에서 삭제할까요?")) return;
-    arr.splice(+a.dataset.i, 1);
-    pfSave(arr); pfRender();
-  }));
   listEl.querySelectorAll(".pf-edit").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
-    const arr = pfLoad(), it = arr[+a.dataset.i];
-    const qty = prompt(`${it.name} 수량(주)`, it.qty);
-    if (qty == null) return;
-    const avg = prompt(`${it.name} 평균단가`, it.avg);
-    if (avg == null) return;
-    it.qty = +qty || 0; it.avg = +avg || 0;
-    pfSave(arr); pfRender();
+    gotoTabFull("holdings");
+    if (!holdingsRendered) initHoldings();
+    hldOpenModal(pfHoldings().find((h) => h.ticker === a.dataset.tk));
   }));
 }
 
