@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=53">
-<script src="firebase-config.js?v=53"></script>
-<script src="js/auth.js?v=53"></script>
+<link rel="stylesheet" href="css/style.css?v=54">
+<script src="firebase-config.js?v=54"></script>
+<script src="js/auth.js?v=54"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -30,6 +30,7 @@
 <nav class="tabs" data-group-tabs="discover" style="display:none">
   <button class="tab" data-tab="today">오늘의 신호</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
+  <button class="tab" data-tab="value">내재가치</button>
 </nav>
 <nav class="tabs" data-group-tabs="journal" style="display:none">
   <button class="tab" data-tab="holdings">보유 포트폴리오</button>
@@ -177,12 +178,12 @@
     </div>
     <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙별 10년 성적</h2>
     <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none"><table id="lookup-stats"></table></div>
-    <details class="card-flat" id="value-inline" style="margin-top:18px">
-      <summary>💰 내재가치 계산기 <span class="sub-note">(RIM·DCF — 가정 슬라이더 즉시 재계산)</span></summary>
-      <div style="padding:4px 8px 10px">
+  </section>
+
+  <section id="tab-value" class="panel">
     <div class="criteria" id="val-context"></div>
     <div class="controls">
-      <label>종목 검색 <input type="text" id="val-q" placeholder="이름 또는 티커" list="lookup-list" autocomplete="off"></label>
+      <label>종목 검색 <input type="text" id="val-q" placeholder="이름 또는 티커 (예: 삼성전자, AAPL)" list="lookup-list" autocomplete="off"></label>
       <label id="val-model-wrap" style="display:none">모델 <select id="val-model"></select></label>
     </div>
     <div id="val-body" style="display:none">
@@ -198,8 +199,6 @@
       <div class="criteria" id="val-notes" style="margin-top:12px"></div>
     </div>
     <p id="val-empty" class="mini-note" style="display:none">이 종목은 필요한 재무 데이터가 부족해 산출할 수 없습니다.</p>
-      </div>
-    </details>
   </section>
 
   <section id="tab-heatmap" class="panel active">
@@ -488,6 +487,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=53"></script>
+<script src="js/app.js?v=54"></script>
 </body>
 </html>

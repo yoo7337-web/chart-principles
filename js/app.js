@@ -65,7 +65,7 @@ const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap",
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
-  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회",
+  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -113,6 +113,7 @@ function activateTab(tabId) {
   if (tabId === "apply" && !applyRendered) renderApply();
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
+  if (tabId === "value" && !valRendered) initValue();
   if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
@@ -1919,12 +1920,11 @@ function renderLookupProfile(st) {
   const gv = document.getElementById("goto-value");
   if (gv) gv.addEventListener("click", (e) => {
     e.preventDefault();
-    const box = document.getElementById("value-inline");
-    box.open = true;
+    gotoTabFull("value");
     if (!valRendered) initValue();
-    loadValue(`${st.market}_${st.ticker}`, st.name);
     $("#val-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
-    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    loadValue(`${st.market}_${st.ticker}`, st.name);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
