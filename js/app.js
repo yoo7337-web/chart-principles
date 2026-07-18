@@ -507,12 +507,14 @@ function fmtCompact(v) {
 }
 const OSC_PRICE_FMT = { type: "custom", formatter: fmtCompact, minMove: 0.01 };
 
-// 오실레이터 패널 (종류 직접 지정 — 원칙 연동·수동 선택 공용)
-function drawOscKind(el, kind, s, markerDates) {
+// 오실레이터 패널 (종류 직접 지정 — 원칙 연동·수동 선택 공용). minWidth=메인과 가격축 폭 통일용(선택).
+function drawOscKind(el, kind, s, markerDates, minWidth) {
   if (!kind) { el.style.display = "none"; return null; }
   el.style.display = "block";
   el.style.height = "160px";
-  const c = LightweightCharts.createChart(el, baseChartOpts(el, 160));
+  const opts = baseChartOpts(el, 160);
+  if (minWidth) opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: minWidth };
+  const c = LightweightCharts.createChart(el, opts);
   c.timeScale().applyOptions({ visible: false });
 
   const pts = (key) => s.filter((x) => x[key] != null).map((x) => ({ time: x.t, value: x[key] }));
@@ -1030,7 +1032,14 @@ function drawLookupChart() {
   lookupInds = [];
   $("#lookup-inds").innerHTML = "";
   const el = $("#lookup-chart");
-  lookupChart = LightweightCharts.createChart(el, baseChartOpts(el, 420));
+  // 가격축(우측 눈금) 폭을 주가 최대 라벨 기준으로 산정 → 전 패널 동일 minimumWidth로 고정
+  // → 플롯 폭 일치 → 같은 날짜가 같은 x에 정렬(스크롤 중에도 유지, 지표는 fmtCompact로 폭 억제).
+  const maxAbs = Math.max(1, ...s.map((x) => Math.abs(x.h ?? x.c ?? 0)));
+  const decCh = st.market === "us" ? 3 : 0;  // 미국 소수점 여유
+  const psW = Math.max(56, 16 + (Math.round(maxAbs).toLocaleString().length + decCh) * 7);
+  const opts = baseChartOpts(el, 420);
+  opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: psW };
+  lookupChart = LightweightCharts.createChart(el, opts);
   const candles = lookupChart.addCandlestickSeries({
     upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
     borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
@@ -1094,7 +1103,7 @@ function drawLookupChart() {
     pane.className = "chart vol ind-pane";
     indHost.appendChild(pane);
     const dates = (ruleLinked && i === 0) ? shown.map((m) => snap(m.t)).filter(Boolean) : [];
-    const oc = drawOscKind(pane, kind, s, dates);
+    const oc = drawOscKind(pane, kind, s, dates, psW);  // 메인과 동일 가격축 폭
     if (oc) {
       lookupInds.push(oc);
       // 지표명 라벨(패널 좌상단)
@@ -1121,18 +1130,8 @@ function drawLookupChart() {
   lookupInds.forEach((c) => c.applyOptions({ width: cw }));
   // 첫 화면 = 최근 봉(기본 뷰, 좌우 스크롤로 5년 탐색). 전 패널 동일 데이터·배율이라 초기 정렬됨.
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유).
-  const charts = [lookupChart, ...lookupInds];
-  syncCharts(charts);
-  // 가격축(우측 눈금) 너비를 전 패널 최댓값으로 통일 → 플롯 영역 폭 일치 → 같은 날짜가 같은 x에 정렬.
-  // width()는 레이아웃(다음 프레임) 후에야 실제 값 → rAF 후 측정.
-  requestAnimationFrame(() => requestAnimationFrame(() => alignPriceScales(charts)));
-}
-
-// 여러 차트의 우측 가격축 너비를 최댓값으로 통일 (플롯 폭·시간축 정렬). 레이아웃 후 호출할 것.
-function alignPriceScales(charts) {
-  let maxW = 0;
-  charts.forEach((c) => { try { const w = c.priceScale("right").width(); if (w > maxW) maxW = w; } catch (e) {} });
-  if (maxW > 0) charts.forEach((c) => { try { c.applyOptions({ rightPriceScale: { minimumWidth: maxW } }); } catch (e) {} });
+  // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유). 가격축 폭은 위에서 동일 고정.
+  syncCharts([lookupChart, ...lookupInds]);
 }
 
 // 여러 lightweight-charts 인스턴스의 시간축·십자선 연동 (좌우 스크롤/줌·날짜 커서 공유)
