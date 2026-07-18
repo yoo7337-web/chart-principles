@@ -2681,6 +2681,31 @@ function initPortfolio() {
     $("#pf-ticker").value = $("#pf-qty").value = $("#pf-avg").value = "";
     pfRender();
   };
+  $("#pf-file").onclick = () => $("#pf-file-input").click();
+  $("#pf-file-input").onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    f.text().then((txt) => {
+      try {
+        const d = JSON.parse(txt);
+        const arr = Array.isArray(d) ? d : d.holdings;
+        if (!Array.isArray(arr)) throw new Error("bad");
+        const cur = pfLoad();
+        let added = 0, updated = 0;
+        arr.forEach((x) => {
+          if (!x.ticker || !(x.qty > 0)) return;
+          const mk = x.mk || (/^\d{6}$/.test(x.ticker) ? "kr" : "us");
+          const i = cur.findIndex((c) => c.ticker === x.ticker);
+          if (i >= 0) { cur[i].qty = x.qty; cur[i].avg = x.avg ?? cur[i].avg; updated++; }
+          else { cur.push({ ticker: x.ticker, name: x.name || x.ticker, mk, qty: x.qty, avg: x.avg || 0 }); added++; }
+        });
+        pfSave(cur);
+        alert(`동기화 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (토스 기준 ${d.synced})` : ""}`);
+        pfRender();
+      } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 [{ticker,qty,avg}] 배열)"); }
+      e.target.value = "";
+    });
+  };
   $("#pf-import").onclick = () => {
     const open = (typeof jrLoad === "function" ? jrLoad() : []).filter((t) => t.exit == null && t.side === "buy");
     if (!open.length) { alert("매매일지에 진행중(매수) 거래가 없습니다"); return; }
