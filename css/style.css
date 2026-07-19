@@ -430,6 +430,39 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-memo-itxt { font-size: .9rem; color: var(--ink); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .lk-memo-meta { display: flex; align-items: center; margin-top: 6px; }
 .lk-memo-meta a, .lk-memo-edit, .lk-memo-del { font-size: .8rem; }
+/* 주식찾기(스크리너) */
+.scr-filters { padding: 14px 16px; display: flex; flex-direction: column; gap: 13px; }
+.scr-frow { display: flex; align-items: center; gap: 12px; }
+.scr-frow-top { align-items: flex-start; }
+.scr-label { flex: 0 0 62px; font-weight: 700; font-size: .9rem; color: var(--ink); padding-top: 2px; }
+.scr-sec-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.scr-sectors { display: flex; flex-wrap: wrap; gap: 6px 14px; max-height: 168px; overflow-y: auto;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.scr-sec { font-size: .86rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.scr-mcap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scr-num { width: 92px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 9px; font: inherit; font-size: .88rem; }
+.scr-tilde { color: var(--muted); }
+.scr-tiers { display: inline-flex; gap: 6px; margin-left: 6px; }
+.scr-tier { font-size: .82rem; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); cursor: pointer; color: var(--ink); }
+.scr-tier.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.scr-bar { display: flex; align-items: center; justify-content: space-between; margin: 14px 2px 8px; gap: 12px; flex-wrap: wrap; }
+.scr-summary { font-size: 1rem; }
+.scr-sortlbl { font-size: .86rem; color: var(--muted); }
+.scr-sortlbl select { font: inherit; font-size: .86rem; padding: 4px 6px; }
+#scr-table { width: 100%; border-collapse: collapse; }
+#scr-table th, #scr-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: .9rem; text-align: left; }
+#scr-table th { font-size: .8rem; color: var(--muted); font-weight: 700; }
+#scr-table .scr-r { text-align: right; white-space: nowrap; }
+#scr-table .scr-row { cursor: pointer; }
+#scr-table .scr-row:hover { background: var(--hover, rgba(37,99,235,.06)); }
+#scr-table .scr-name { display: flex; align-items: center; gap: 8px; }
+#scr-table .scr-name .mv-logo { width: 20px; height: 20px; flex: none; }
+@media (max-width: 640px) {
+  .scr-label { flex-basis: 48px; }
+  #scr-table td:nth-child(3), #scr-table th:nth-child(3) { display: none; }
+}
 /* 보조지표 체크박스 + 지표 패널 */
 .osc-checks { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: .82rem; font-weight: 600; color: var(--muted); }
 .osc-checks label { display: inline-flex; align-items: center; gap: 3px; font-weight: 500; color: var(--ink);

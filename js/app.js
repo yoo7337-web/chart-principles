@@ -48,6 +48,7 @@ let journalRendered = false;
 let portfolioRendered = false;
 let holdingsRendered = false;
 let memoRendered = false;
+let screenerRendered = false;
 
 const $ = (s) => document.querySelector(s);
 const pct = (x, d = 2) => (x == null ? "-" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
@@ -69,7 +70,7 @@ const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap",
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
-  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", value: "내재가치",
+  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -117,6 +118,7 @@ function activateTab(tabId) {
   if (tabId === "apply" && !applyRendered) renderApply();
   if (tabId === "today" && !todayRendered) renderToday();
   if (tabId === "lookup" && !lookupRendered) initLookup();
+  if (tabId === "screener" && !screenerRendered) initScreener();
   if (tabId === "value" && !valRendered) initValue();
   if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
@@ -1453,6 +1455,157 @@ function renderMemo() {
     ent.items = (ent.items || []).filter((x) => x.id !== a.dataset.id);
     if (!ent.items.length) delete o[a.dataset.key];
     memoSaveAll(o); renderMemo();
+  });
+}
+
+/* ---------- 주식찾기 (스크리너) — 국가/산업/시가총액 ---------- */
+// 데이터 소스: MARKET.heatmap = [{m,t,name,sector,mcap,chg}] (국내+미국 유니버스)
+const SCR_FX = 1350;  // '전체' 국가 비교 시 미국 시총 원화 환산(1$≈1,350원) — 대략치
+const scrState = { country: "", sectors: null, min: null, max: null, sort: "mcap" };  // sectors=null → 전체 선택
+
+function scrUnit() { return scrState.country === "us" ? "$B" : "조원"; }  // 시총 입력 단위
+function scrMcapVal(t) {  // 현재 단위(조원 or $B)로 변환한 시총값
+  if (scrState.country === "us") return t.mcap / 1e9;                    // $B
+  return (t.m === "us" ? t.mcap * SCR_FX : t.mcap) / 1e12;              // 조원(미국주 환산)
+}
+function scrTiers() {  // 국가별 시총 티어(현재 단위 하한/상한)
+  return scrState.country === "us"
+    ? [{ k: "대형주", min: 10 }, { k: "중형주", min: 2, max: 10 }, { k: "소형주", max: 2 }]     // $B
+    : [{ k: "대형주", min: 2 }, { k: "중형주", min: 0.3, max: 2 }, { k: "소형주", max: 0.3 }];  // 조원
+}
+function scrPool() {
+  const all = (MARKET && MARKET.heatmap) || [];
+  return all.filter((t) => t.mcap > 0 && (!scrState.country || t.m === scrState.country));
+}
+function scrSectorsFor(country) {
+  const cnt = {};
+  ((MARKET && MARKET.heatmap) || []).filter((t) => t.mcap > 0 && (!country || t.m === country))
+    .forEach((t) => cnt[t.sector] = (cnt[t.sector] || 0) + 1);
+  return Object.entries(cnt).sort((a, b) => b[1] - a[1]);  // [name, n] 내림차순
+}
+
+function initScreener() {
+  if (!MARKET || !MARKET.heatmap) return;  // 데이터 로딩 전 — 다음 진입 시 재시도
+  screenerRendered = true;
+  $("#scr-context").innerHTML = `<b>주식찾기</b> — 국내·미국 유니버스에서 <b>국가·산업·시가총액</b>으로 종목을 걸러냅니다. (세부 지표 필터는 추가 예정)`;
+  // 국가 토글
+  document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
+    scrState.country = b.dataset.c;
+    scrState.sectors = null; scrState.min = scrState.max = null;
+    $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = "";
+    buildScrSectors(); buildScrTiers(); setScrUnitLabel();
+    renderScreener();
+  });
+  // 시총 직접 입력
+  const onMcap = () => {
+    scrState.min = $("#scr-mcap-min").value === "" ? null : parseFloat($("#scr-mcap-min").value);
+    scrState.max = $("#scr-mcap-max").value === "" ? null : parseFloat($("#scr-mcap-max").value);
+    document.querySelectorAll("#scr-tiers .scr-tier").forEach((x) => x.classList.remove("active"));
+    renderScreener();
+  };
+  $("#scr-mcap-min").addEventListener("input", onMcap);
+  $("#scr-mcap-max").addEventListener("input", onMcap);
+  // 산업 전체선택/해제
+  $("#scr-sec-all").onclick = () => { scrState.sectors = null; syncScrSecChecks(); renderScreener(); };
+  $("#scr-sec-none").onclick = () => { scrState.sectors = new Set(); syncScrSecChecks(); renderScreener(); };
+  // 정렬
+  $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
+
+  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScreener();
+}
+
+function setScrUnitLabel() {
+  $("#scr-mcap-unit").textContent = scrState.country === "us" ? "$B(십억달러)"
+    : scrState.country === "kr" ? "조원" : "조원 · 미국주 1$≈1,350원 환산";
+}
+
+function buildScrSectors() {
+  const host = $("#scr-sectors");
+  const secs = scrSectorsFor(scrState.country);
+  host.innerHTML = secs.map(([name, n]) =>
+    `<label class="scr-sec"><input type="checkbox" value="${name.replace(/"/g, "&quot;")}"> ${name}<span class="sub-note"> ${n}</span></label>`).join("");
+  host.querySelectorAll("input").forEach((cb) => {
+    cb.checked = scrState.sectors === null || scrState.sectors.has(cb.value);
+    cb.onchange = () => {
+      if (scrState.sectors === null) scrState.sectors = new Set(secs.map(([nm]) => nm));  // null→명시적 집합
+      if (cb.checked) scrState.sectors.add(cb.value); else scrState.sectors.delete(cb.value);
+      updateScrSecCount(); renderScreener();
+    };
+  });
+  updateScrSecCount();
+}
+function syncScrSecChecks() {
+  $("#scr-sectors").querySelectorAll("input").forEach((cb) =>
+    cb.checked = scrState.sectors === null || scrState.sectors.has(cb.value));
+  updateScrSecCount();
+}
+function updateScrSecCount() {
+  const total = scrSectorsFor(scrState.country).length;
+  const sel = scrState.sectors === null ? total : scrState.sectors.size;
+  $("#scr-sec-count").textContent = `${sel}/${total} 산업`;
+}
+
+function buildScrTiers() {
+  const host = $("#scr-tiers");
+  host.innerHTML = scrTiers().map((t) =>
+    `<button class="scr-tier" data-min="${t.min == null ? "" : t.min}" data-max="${t.max == null ? "" : t.max}">${t.k}</button>`).join("");
+  host.querySelectorAll(".scr-tier").forEach((b) => b.onclick = () => {
+    const on = b.classList.contains("active");
+    host.querySelectorAll(".scr-tier").forEach((x) => x.classList.remove("active"));
+    if (on) { scrState.min = scrState.max = null; $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = ""; }
+    else {
+      b.classList.add("active");
+      scrState.min = b.dataset.min === "" ? null : parseFloat(b.dataset.min);
+      scrState.max = b.dataset.max === "" ? null : parseFloat(b.dataset.max);
+      $("#scr-mcap-min").value = scrState.min == null ? "" : scrState.min;
+      $("#scr-mcap-max").value = scrState.max == null ? "" : scrState.max;
+    }
+    renderScreener();
+  });
+}
+
+function renderScreener() {
+  if (!MARKET || !MARKET.heatmap) return;
+  let rows = scrPool().filter((t) => {
+    if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
+    const v = scrMcapVal(t);
+    if (scrState.min != null && v < scrState.min) return false;
+    if (scrState.max != null && v > scrState.max) return false;
+    return true;
+  });
+  const s = scrState.sort;
+  rows.sort((a, b) => {
+    switch (s) {
+      case "mcap_asc": return scrMcapVal(a) - scrMcapVal(b);
+      case "chg": return b.chg - a.chg;
+      case "chg_asc": return a.chg - b.chg;
+      case "name": return (a.name || "").localeCompare(b.name || "");
+      default: return scrMcapVal(b) - scrMcapVal(a);
+    }
+  });
+  $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}</span>`;
+  const tb = $("#scr-table");
+  if (!rows.length) {
+    tb.innerHTML = `<tbody><tr><td style="padding:26px;text-align:center;color:var(--muted)">조건에 맞는 종목이 없습니다.</td></tr></tbody>`;
+    return;
+  }
+  const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th></tr></thead>`;
+  const body = rows.map((t) => {
+    const col = t.chg >= 0 ? "#d93036" : "#1e63e0";
+    return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
+      <td class="scr-name"><img class="mv-logo" src="${logoUrl(t.m, t.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${t.name}</b> <span class="sub-note">${t.t}</span></td>
+      <td>${t.m === "kr" ? "🇰🇷" : "🇺🇸"}</td>
+      <td>${t.sector}</td>
+      <td class="scr-r">${fmtMcap(t.mcap, t.m)}</td>
+      <td class="scr-r" style="color:${col}">${pct(t.chg, 2)}</td>
+    </tr>`;
+  }).join("");
+  tb.innerHTML = head + `<tbody>${body}</tbody>`;
+  tb.querySelectorAll(".scr-row").forEach((tr) => tr.onclick = () => {
+    gotoTabFull("lookup");
+    if (!lookupRendered) initLookup();
+    loadLookup(tr.dataset.key);
   });
 }
 
