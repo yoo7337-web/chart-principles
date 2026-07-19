@@ -1525,15 +1525,18 @@ function sparkSvg(vals, color) {
     stroke="${color}" stroke-width="1.6"/></svg>`;
 }
 
+const MACRO_HIDE = new Set(["^KS11", "^KQ11", "^GSPC", "^IXIC"]);  // 홈에 이미 있는 지수 → 매크로 탭에서 제외
 function renderMacro() {
   if (!MARKET) { $("#macro-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   macroRendered = true;
   $("#macro-context").innerHTML =
-    `<b>기준 시각 ${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신 (<b>클라우드 30분 주기</b>)<br>
-     각 지표 아래 줄 = <b>트레이더 관점 한 줄</b> — 시장 대응 시 왜 보는가`;
-  $("#macro-cards").innerHTML = MARKET.macro.map((m) => {
+    `<b>기준 시각 ${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신 (<b>클라우드 30분 주기</b>) ·
+     카드 아래 줄 = <b>트레이더 관점 한 줄</b> · 카드 클릭 = <b>5년 차트</b>`;
+  const items = MARKET.macro.filter((m) => !MACRO_HIDE.has(m.id));
+  $("#macro-cards").innerHTML = items.map((m) => {
     const up = m.chg >= 0;
-    return `<div class="card macro-card">
+    const clk = m.w5 && m.w5.length > 1;
+    return `<div class="card macro-card${clk ? " clickable" : ""}" ${clk ? `data-mid="${m.id}"` : ""}>
       <div class="macro-head"><span class="macro-name">${m.name}</span>
         <span class="badge dim">${m.group}</span></div>
       <div class="macro-val"><b>${m.last.toLocaleString()}${m.unit}</b>
@@ -1542,41 +1545,14 @@ function renderMacro() {
       <div class="desc">${m.note}</div>
     </div>`;
   }).join("");
+  $("#macro-cards").querySelectorAll(".macro-card.clickable").forEach((c) =>
+    c.onclick = () => openMacroDialog(MARKET.macro.find((m) => m.id === c.dataset.mid)));
 }
 
-/* ---------- 매크로 탭 (지표 카드 + 중앙은행 금리 + 세계 지도) ---------- */
+/* ---------- 매크로 탭 (지표 카드 + 세계 지도[증시/기준금리]) ---------- */
 function renderMacroTab() {
-  renderMacro();       // 기존 매크로 카드 (macroRendered 세팅)
-  renderCbanks();
-  renderWorld();
-}
-
-// 중앙은행 기준금리 카드 — BIS 정책금리 + 다음 결정일 + 시장 내재 기대(US·KR)
-function renderCbanks() {
-  const host = $("#cb-cards");
-  const rows = MARKET?.cbanks;
-  if (!host) return;
-  if (!rows?.length) { $("#cb-context").textContent = "중앙은행 데이터 없음 — 다음 클라우드 갱신(30분) 후 표시됩니다."; return; }
-  $("#cb-context").innerHTML = `<b>정책금리(BIS)</b> 기준 · 최근 변경 방향이 그 나라의 금리 사이클입니다.
-    🇺🇸는 Fed 선물 내재금리, 🇰🇷는 국고채-기준금리 스프레드로 <b>시장이 가격에 반영한 기대</b>를 병기 — 참고용이며 결정 예측이 아닙니다.`;
-  const dday = (d) => {
-    if (!d) return "";
-    const n = Math.ceil((new Date(d + "T00:00:00+09:00") - Date.now()) / 864e5);
-    return n >= 0 ? `D-${n}` : "";
-  };
-  host.innerHTML = rows.map((r) => {
-    const ch = r.changed;
-    const cyc = ch ? (ch.bp > 0 ? `<span class="pos">▲ ${ch.bp}bp 인상</span>` : `<span class="neg">▼ ${Math.abs(ch.bp)}bp 인하</span>`) : "-";
-    const imp = r.implied;
-    return `<div class="card macro-card cb-card">
-      <div class="macro-head"><span class="macro-name">${r.flag} ${r.name}</span>
-        ${r.next ? `<span class="badge hero">${r.next.slice(5).replace("-", "/")} ${dday(r.next)}</span>` : `<span class="badge dim">일정 미정</span>`}</div>
-      <div class="macro-val"><b>${r.rate}%</b> <span class="sub-note">현재 기준금리</span></div>
-      <div class="cb-row">최근 변경: ${cyc} <span class="sub-note">${ch ? "(" + ch.d + ")" : ""}</span></div>
-      ${imp ? `<div class="cb-imp ${imp.diff_bp < 0 ? "cut" : imp.diff_bp > 0 ? "hike" : ""}">
-        <b>${imp.label}</b><div class="sub-note">${imp.src} ${imp.rate}%</div></div>` : ""}
-    </div>`;
-  }).join("");
+  renderMacro();       // 매크로 카드 (macroRendered 세팅)
+  renderWorld();       // 세계 지도 — 증시/기준금리 토글 (중앙은행 금리는 MARKET.cbanks)
 }
 
 // 세계 증시 지도 — world.svg 인라인 + 국가 색칠 + 칩(getBBox 좌표) + 클릭 5년 차트 팝업
@@ -1587,7 +1563,14 @@ const WORLD_SVG_IDS = {  // 야후티커 -> 색칠할 svg path id들 (칩 위치
   "^KS11": ["south korea"], "^N225": ["honshu", "hokkaido", "kyushu", "shikoku"], "^AXJO": ["australia"],
 };
 const WORLD_CHIP_FALLBACK = { "^STOXX50E": [48.5, 42], "^HSI": [77.5, 50.5] };  // path 없는 지역(% 좌표)
+// 중앙은행 코드 → svg path id (기준금리 모드). ECB(XM)는 유로존 대표국 색칠 + 유럽 좌표 칩.
+const CB_SVG = { US: ["usa"], KR: ["south korea"], JP: ["honshu", "hokkaido", "kyushu", "shikoku"],
+  GB: ["britain"], CN: ["china"], CA: ["canada"], AU: ["australia"],
+  XM: ["france", "germany", "italy", "spain", "poland"] };
+const CB_CHIP = { XM: [49, 36] };
 let worldChart = null;
+let worldMode = "stocks";   // "stocks" | "rates"
+let worldSvgLoaded = false;
 
 function worldColor(chg) {
   if (chg == null) return "#d8dce3";
@@ -1597,82 +1580,140 @@ function worldColor(chg) {
   if (chg > -0.02) return "#8fb0e8";
   return "#1e63e0";
 }
+function rateColor(bp) {  // 최근 변경 방향: 인상=빨강 / 인하=파랑 / 동결=회색
+  if (bp == null || bp === 0) return "#c9ced8";
+  return bp > 0 ? "#e0888c" : "#8fb0e8";
+}
 
 async function renderWorld() {
   const host = $("#world-map");
-  const rows = MARKET?.world;
   if (!host) return;
-  if (!rows?.length) { host.innerHTML = `<p class="mini-note" style="padding:20px">세계 지수 데이터 없음 — 다음 클라우드 갱신(30분) 후 표시됩니다.</p>`; return; }
-  let svgTxt;
-  try {
-    svgTxt = await (await fetch("assets/world.svg" + _cb)).text();
-  } catch (e) { host.innerHTML = `<p class="mini-note">지도 로드 실패</p>`; return; }
-  host.innerHTML = svgTxt;
-  const svg = host.querySelector("svg");
-  if (!svg) return;
-  svg.removeAttribute("width"); svg.removeAttribute("height");
-  svg.classList.add("world-svg");
-  // 기본 육지 색
-  svg.querySelectorAll("path").forEach((p) => { p.style.fill = "#e7eaef"; p.style.stroke = "#fff"; p.style.strokeWidth = ".5"; });
-  const vb = (svg.getAttribute("viewBox") || "0 0 950 620").split(/\s+/).map(Number);
-  const byId = (id) => svg.querySelector(`path[id="${id}"]`);
-  rows.forEach((r) => {
-    const ids = WORLD_SVG_IDS[r.id] || [];
-    let cx = null, cy = null;
-    ids.forEach((pid, j) => {
-      const p = byId(pid);
-      if (!p) return;
-      p.style.fill = worldColor(r.chg);
-      p.style.cursor = "pointer";
-      p.addEventListener("click", () => openWorldDialog(r));
-      if (j === 0) {
-        try { const b = p.getBBox(); cx = (b.x + b.width / 2 - vb[0]) / vb[2] * 100; cy = (b.y + b.height / 2 - vb[1]) / vb[3] * 100; } catch (e) {}
-      }
+  if (!MARKET?.world?.length && !MARKET?.cbanks?.length) {
+    host.innerHTML = `<p class="mini-note" style="padding:20px">세계 데이터 없음 — 다음 클라우드 갱신(30분) 후 표시됩니다.</p>`; return;
+  }
+  if (!worldSvgLoaded) {
+    let svgTxt;
+    try { svgTxt = await (await fetch("assets/world.svg" + _cb)).text(); }
+    catch (e) { host.innerHTML = `<p class="mini-note">지도 로드 실패</p>`; return; }
+    host.innerHTML = svgTxt;
+    const svg = host.querySelector("svg");
+    if (!svg) return;
+    svg.removeAttribute("width"); svg.removeAttribute("height");
+    svg.classList.add("world-svg");
+    worldSvgLoaded = true;
+  }
+  const tg = $("#world-mode");
+  if (tg && !tg.dataset.bound) {
+    tg.dataset.bound = "1";
+    tg.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      worldMode = b.dataset.mode;
+      tg.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      paintWorld();
     });
-    if (cx == null) {
-      const fb = WORLD_CHIP_FALLBACK[r.id] || [r.x, r.y];
-      cx = fb[0]; cy = fb[1];
-    }
-    const chip = document.createElement("button");
-    chip.className = "world-chip " + ((r.chg ?? 0) >= 0 ? "up" : "down");
-    chip.style.left = cx + "%"; chip.style.top = cy + "%";
-    chip.innerHTML = `${r.flag} ${r.name} <b>${r.chg != null ? pct(r.chg, 1) : "-"}</b>`;
-    chip.onclick = () => openWorldDialog(r);
-    host.appendChild(chip);
-  });
-  // 닫기 바인딩(1회)
+  }
   const dlg = $("#world-dialog");
   if (dlg && !dlg.dataset.bound) {
     dlg.dataset.bound = "1";
     $("#wd-close").onclick = () => { dlg.close(); if (worldChart) { worldChart.remove(); worldChart = null; } };
   }
+  paintWorld();
 }
 
-function openWorldDialog(r) {
-  const dlg = $("#world-dialog");
-  $("#wd-title").textContent = `${r.flag} ${r.country} — ${r.name}`;
-  const w5 = r.w5 || [];
-  let stats = "";
-  if (w5.length > 1) {
-    const ret5 = w5[w5.length - 1] / w5[0] - 1;
-    const hi = Math.max(...w5), lo = Math.min(...w5);
-    stats = `현재 <b>${(r.last ?? w5[w5.length - 1]).toLocaleString()}</b>
-      ${r.chg != null ? `<span class="${r.chg >= 0 ? "pos" : "neg"}">(${pct(r.chg, 2)})</span>` : ""}
-      · 5년 수익률 <b class="${ret5 >= 0 ? "pos" : "neg"}">${pct(ret5, 0)}</b>
-      · 5년 최고 ${hi.toLocaleString()} · 최저 ${lo.toLocaleString()}`;
+function paintWorld() {
+  const host = $("#world-map"), svg = host.querySelector("svg");
+  if (!svg) return;
+  host.querySelectorAll(".world-chip").forEach((c) => c.remove());
+  svg.querySelectorAll("path").forEach((p) => {
+    p.style.fill = "#e7eaef"; p.style.stroke = "#fff"; p.style.strokeWidth = ".5"; p.style.cursor = ""; p.onclick = null;
+  });
+  const vb = (svg.getAttribute("viewBox") || "0 0 950 620").split(/\s+/).map(Number);
+  const byId = (id) => svg.querySelector(`path[id="${id}"]`);
+  const place = (ids, fb, color, labelHtml, chipClass, onClick) => {
+    let cx = null, cy = null;
+    (ids || []).forEach((pid) => {
+      const p = byId(pid); if (!p) return;
+      p.style.fill = color; p.style.cursor = "pointer"; p.onclick = onClick;
+      if (cx == null) { try { const b = p.getBBox(); cx = (b.x + b.width / 2 - vb[0]) / vb[2] * 100; cy = (b.y + b.height / 2 - vb[1]) / vb[3] * 100; } catch (e) {} }
+    });
+    if (cx == null && fb) { cx = fb[0]; cy = fb[1]; }
+    if (cx == null) return;
+    const chip = document.createElement("button");
+    chip.className = "world-chip " + (chipClass || "");
+    chip.style.left = cx + "%"; chip.style.top = cy + "%";
+    chip.innerHTML = labelHtml;
+    chip.onclick = onClick;
+    host.appendChild(chip);
+  };
+  $("#world-context").innerHTML = worldMode === "stocks"
+    ? `<b>세계 증시 당일 등락</b> — 상승 빨강·하락 파랑. 국가/칩 클릭 = <b>5년 지수 차트</b>.`
+    : `<b>중앙은행 정책금리(BIS)</b> — 색: 최근 <span class="pos">인상(빨강)</span>·<span class="neg">인하(파랑)</span>·동결(회색).
+       국가/칩 클릭 = <b>상세</b>(금리 이력·다음 결정일·시장 기대).`;
+  if (worldMode === "stocks") {
+    (MARKET.world || []).forEach((r) => place(
+      WORLD_SVG_IDS[r.id] || [], WORLD_CHIP_FALLBACK[r.id] || [r.x, r.y], worldColor(r.chg),
+      `${r.flag} ${r.name} <b>${r.chg != null ? pct(r.chg, 1) : "-"}</b>`,
+      (r.chg ?? 0) >= 0 ? "up" : "down", () => openIndexDialog(r)));
+  } else {
+    (MARKET.cbanks || []).forEach((cb) => place(
+      CB_SVG[cb.code] || [], CB_CHIP[cb.code], rateColor(cb.changed?.bp),
+      `${cb.flag} <b>${cb.rate}%</b>`, "rate", () => openCbDialog(cb)));
   }
-  $("#wd-stats").innerHTML = stats;
+}
+
+// 5년 차트 팝업 공용 (지수·매크로) — dates/values + area 차트
+function openChartDialog(title, statsHtml, dates, values, opts) {
+  opts = opts || {};
+  const dlg = $("#world-dialog");
+  $("#wd-title").textContent = title;
+  $("#wd-stats").innerHTML = statsHtml;
   dlg.showModal();
   if (worldChart) { worldChart.remove(); worldChart = null; }
-  const el = $("#wd-chart");
-  el.innerHTML = "";
-  if (w5.length > 1) {
+  const el = $("#wd-chart"); el.innerHTML = "";
+  const pts = (dates || []).map((d, i) => ({ time: d, value: values[i] })).filter((x) => x.value != null);
+  if (pts.length > 1) {
     worldChart = LightweightCharts.createChart(el, baseChartOpts(el, 300));
-    const ser = worldChart.addAreaSeries({ lineColor: "#1e63e0", topColor: "rgba(30,99,224,.25)",
-      bottomColor: "rgba(30,99,224,.02)", lineWidth: 2 });
-    ser.setData(r.w5d.map((d, i) => ({ time: d, value: w5[i] })).filter((x) => x.value != null));
+    const stepType = (LightweightCharts.LineType && LightweightCharts.LineType.WithSteps) ?? 1;
+    const ser = opts.step
+      ? worldChart.addLineSeries({ color: "#e0912f", lineWidth: 2, lineType: stepType, priceLineVisible: false })
+      : worldChart.addAreaSeries({ lineColor: "#1e63e0", topColor: "rgba(30,99,224,.25)", bottomColor: "rgba(30,99,224,.02)", lineWidth: 2 });
+    ser.setData(pts);
     worldChart.timeScale().fitContent();
+  } else {
+    el.innerHTML = `<p class="mini-note" style="padding:20px">차트 데이터가 아직 없습니다(다음 갱신 후 표시).</p>`;
   }
+}
+
+function _fiveYrStats(last, chg, w5, unit) {
+  if (!(w5 && w5.length > 1)) return last != null ? `현재 <b>${last.toLocaleString()}${unit || ""}</b>` : "";
+  const ret5 = w5[w5.length - 1] / w5[0] - 1, hi = Math.max(...w5), lo = Math.min(...w5);
+  return `현재 <b>${(last ?? w5[w5.length - 1]).toLocaleString()}${unit || ""}</b>
+    ${chg != null ? `<span class="${chg >= 0 ? "pos" : "neg"}">(${pct(chg, 2)})</span>` : ""}
+    · 5년 변화 <b class="${ret5 >= 0 ? "pos" : "neg"}">${pct(ret5, 0)}</b>
+    · 5년 최고 ${hi.toLocaleString()} · 최저 ${lo.toLocaleString()}`;
+}
+
+function openIndexDialog(r) {
+  openChartDialog(`${r.flag} ${r.country} — ${r.name}`, _fiveYrStats(r.last, r.chg, r.w5), r.w5d, r.w5);
+}
+function openMacroDialog(m) {
+  if (!m) return;
+  openChartDialog(m.name, _fiveYrStats(m.last, m.chg, m.w5, m.unit), m.w5d, m.w5);
+}
+
+// 중앙은행 상세 팝업 — 현재 금리·최근 변경 사이클·다음 결정일·시장 기대 + 금리 이력 스텝차트
+function openCbDialog(cb) {
+  const ch = cb.changed;
+  const cyc = ch ? (ch.bp > 0 ? `<span class="pos">▲ ${ch.bp}bp 인상</span>` : `<span class="neg">▼ ${Math.abs(ch.bp)}bp 인하</span>`) + ` <span class="sub-note">(${ch.d})</span>` : "변경 이력 없음";
+  const n = cb.next ? Math.ceil((new Date(cb.next + "T00:00:00+09:00") - Date.now()) / 864e5) : null;
+  const imp = cb.implied;
+  const stats = `<div class="cb-detail">
+    <div>현재 기준금리 <b style="font-size:1.15rem">${cb.rate}%</b> <span class="sub-note">(${cb.asof} 기준)</span></div>
+    <div>최근 변경: ${cyc}</div>
+    <div>다음 결정: <b>${cb.next || "일정 미정"}</b> ${n != null && n >= 0 ? `<span class="badge hero">D-${n}</span>` : ""}</div>
+    ${imp ? `<div class="cb-imp ${imp.diff_bp < 0 ? "cut" : imp.diff_bp > 0 ? "hike" : ""}" style="margin-top:6px">
+      시장 기대: <b>${imp.label}</b><div class="sub-note">${imp.src} ${imp.rate}%</div></div>` : ""}
+  </div>`;
+  openChartDialog(`${cb.flag} ${cb.name}`, stats, cb.rhistd, cb.rhist, { step: true });
 }
 
 /* ---------- 마켓: 경제일정 ---------- */

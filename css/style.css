@@ -400,7 +400,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .world-chip b { font-size: .7rem; }
 .world-chip.up b { color: #d93036; }
 .world-chip.down b { color: #1e63e0; }
+.world-chip.rate b { color: #7c3aed; }
 .world-chip:hover { background: #fff; border-color: #93b4f0; z-index: 6; }
+.macro-card.clickable { cursor: pointer; transition: box-shadow .12s, transform .12s; }
+.macro-card.clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,.12); transform: translateY(-1px); }
+.cb-detail > div { padding: 3px 0; font-size: .9rem; }
 .cb-card .cb-row { font-size: .82rem; margin-top: 6px; }
 .cb-imp { margin-top: 8px; border-radius: 8px; padding: 7px 10px; font-size: .82rem;
   background: #f2f4f8; border: 1px solid var(--line); }

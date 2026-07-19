@@ -48,6 +48,37 @@ MACRO = {
 SPARK_DAYS = 60
 
 
+MACRO5Y_CACHE = DATA_DIR / "macro5y_cache.json"
+
+
+def _macro_5y(tickers: list) -> dict:
+    """매크로 티커 5년 주봉(카드 클릭 시 팝업 차트용). 20h 가드 캐시."""
+    if MACRO5Y_CACHE.exists():
+        try:
+            c = json.loads(MACRO5Y_CACHE.read_text(encoding="utf-8"))
+            age_h = (datetime.now(KST) - datetime.fromisoformat(c["at"]).replace(tzinfo=KST)).total_seconds() / 3600
+            if age_h < 20:
+                return c["weekly"]
+        except Exception:
+            pass
+    import yfinance as yf
+    weekly = {}
+    try:
+        w = yf.download(tickers, period="5y", interval="1wk", progress=False, threads=True)["Close"]
+        for t in tickers:
+            try:
+                s = (w[t] if len(tickers) > 1 else w).dropna()
+                weekly[t] = {"d": [d.strftime("%Y-%m-%d") for d in s.index],
+                             "c": [round(float(v), 2) for v in s]}
+            except Exception:
+                pass
+        MACRO5Y_CACHE.write_text(json.dumps(
+            {"at": datetime.now(KST).strftime("%Y-%m-%dT%H:%M:%S"), "weekly": weekly}), encoding="utf-8")
+    except Exception as e:
+        print(f"  macro 5y 실패({e})", file=sys.stderr)
+    return weekly
+
+
 def fetch_macro() -> list:
     import yfinance as yf
 
@@ -70,6 +101,7 @@ def fetch_macro() -> list:
     merged = merged[~merged.index.duplicated(keep="last")]
     merged.to_parquet(MACRO_PARQUET)
 
+    weekly = _macro_5y(tickers)
     out = []
     for t, (name, group, unit, note) in MACRO.items():
         if t not in merged.columns:
@@ -78,12 +110,14 @@ def fetch_macro() -> list:
         if len(s) < 2:
             continue
         spark = s.tail(SPARK_DAYS)
+        wk = weekly.get(t) or {}
         out.append({
             "id": t, "name": name, "group": group, "unit": unit, "note": note,
             "last": round(float(s.iloc[-1]), 2),
             "chg": round(float(s.iloc[-1] / s.iloc[-2] - 1), 4),
             "spark": [round(float(v), 2) for v in spark],
             "asof": s.index[-1].strftime("%Y-%m-%d"),
+            "w5": wk.get("c", []), "w5d": wk.get("d", []),
         })
     return out
 
@@ -320,9 +354,17 @@ def fetch_cbanks() -> list:
                     chg_bp = round((float(vals[i]) - float(vals[i - 1])) * 100)
                     break
             nxt = next((d for d in CB_MEETINGS.get(code, []) if d >= today), None)
+            # 금리 이력(팝업 스텝차트용) — 다운샘플 ~90포인트, 마지막 관측 포함
+            step = max(1, len(s) // 90)
+            rh = s.iloc[::step]
+            rhistd = [str(x)[:10] for x in rh.TIME_PERIOD]
+            rhist = [round(float(v), 3) for v in rh.OBS_VALUE]
+            if rhistd and rhistd[-1] != str(s.TIME_PERIOD.iloc[-1])[:10]:
+                rhistd.append(str(s.TIME_PERIOD.iloc[-1])[:10]); rhist.append(round(rate, 3))
             rows.append({"code": code, "name": name, "flag": flag, "rate": round(rate, 3),
                          "changed": ({"d": chg_d, "bp": chg_bp} if chg_d else None),
-                         "next": nxt, "asof": str(s.TIME_PERIOD.iloc[-1])})
+                         "next": nxt, "asof": str(s.TIME_PERIOD.iloc[-1]),
+                         "rhist": rhist, "rhistd": rhistd})
         # --- 시장 내재 기대 ---
         by = {r["code"]: r for r in rows}
         try:  # US: 30일 Fed Funds 선물(front) 내재금리 vs 현재 목표 midpoint
