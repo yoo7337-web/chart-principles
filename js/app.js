@@ -1614,7 +1614,9 @@ function initScreener() {
   if (rb) rb.onclick = () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]);
     document.querySelectorAll("#scr-metrics .scr-bk.active").forEach((x) => x.classList.remove("active")); renderScreener(); };
 
-  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScrMetrics(); renderScreener();
+  const cc = $("#scr-chain-clear");
+  if (cc) cc.onclick = () => { scrChainSel.clear(); renderScrChain(); renderScreener(); };
+  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScrChain(); renderScrMetrics(); renderScreener();
   // 세부 지표는 company.json(연도별 재무) 로드 후 활성화
   loadExtras().then(() => { scrBuildVals(); const n = $("#scr-detail-note"); if (n) n.style.display = "none"; renderScreener(); });
 }
@@ -1640,6 +1642,38 @@ const SCR_GROUPS = [
 const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
 let scrOpenGroup = null;  // 펼쳐진 그룹(아코디언)
+
+// 반도체 밸류체인(시범) — company.json 사업개요 기반 수작업 큐레이션. codes=국내 종목코드.
+const SEMI_CHAIN = [
+  { key: "design", icon: "🎨", name: "설계 (팹리스)", desc: "반도체 설계·디자인하우스", codes: ["399720", "200710", "080220"] },
+  { key: "foundry", icon: "🏭", name: "종합·파운드리", desc: "IDM·위탁생산(메모리/파운드리)", codes: ["005930", "000660", "000990"] },
+  { key: "fe_equip", icon: "⚙️", name: "전공정 장비", desc: "증착·식각·세정 등 Fab 장비", codes: ["036930", "240810", "403870", "095610", "089970", "084370", "319660", "281820", "039030", "144960", "160980", "417840", "122640", "083450", "045100", "030530"] },
+  { key: "fe_mat", icon: "🧪", name: "전공정 소재·부품", desc: "포토레지스트·특수가스·석영·마스크 등", codes: ["005290", "357780", "014680", "093370", "064760", "183300", "074600", "059090", "166090", "170920", "101490"] },
+  { key: "osat", icon: "📦", name: "후공정 OSAT·테스트", desc: "외주 패키징·테스트(OSAT)", codes: ["067310", "036540", "131970", "330860"] },
+  { key: "be_equip", icon: "🔬", name: "후공정 장비·소재", desc: "테스트·본딩·검사 장비/소재", codes: ["042700", "058470", "095340", "089030", "131290", "003160", "025560", "232140", "252990", "064290", "420770", "089890", "033160", "077360", "098460", "327260"] },
+  { key: "substrate", icon: "🔲", name: "기판·패키징", desc: "PCB·Substrate·리드프레임", codes: ["009150", "011070", "353200", "007660", "195870", "222800", "007810", "356860", "323280"] },
+];
+const scrChainSel = new Set();  // 선택된 공정단계 key
+function scrChainKeys() { const s = new Set(); SEMI_CHAIN.forEach((st) => { if (scrChainSel.has(st.key)) st.codes.forEach((c) => s.add("kr_" + c)); }); return s; }
+function renderScrChain() {
+  const host = $("#scr-chain-flow"); if (!host) return;
+  const uni = new Set(((MARKET && MARKET.heatmap) || []).map((t) => t.m + "_" + t.t));
+  host.innerHTML = SEMI_CHAIN.map((st, i) => {
+    const n = st.codes.filter((c) => uni.has("kr_" + c)).length;
+    const on = scrChainSel.has(st.key);
+    return `${i ? '<span class="scr-arrow">›</span>' : ""}<button class="scr-stage ${on ? "on" : ""}" data-k="${st.key}" title="${st.desc}"><span class="scr-si">${st.icon}</span><span class="scr-sn">${st.name}</span><span class="scr-sc">${n}</span></button>`;
+  }).join("");
+  host.querySelectorAll(".scr-stage").forEach((b) => b.onclick = () => {
+    const k = b.dataset.k;
+    if (scrChainSel.has(k)) scrChainSel.delete(k); else scrChainSel.add(k);
+    if (scrChainSel.size && scrState.country === "us") {  // 밸류체인은 국내 종목 → 미국 선택 시 전체로 전환
+      scrState.country = ""; document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === ""));
+      scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); buildScrTiers(); setScrUnitLabel();
+    }
+    renderScrChain(); renderScreener();
+  });
+  const clr = $("#scr-chain-clear"); if (clr) clr.style.display = scrChainSel.size ? "" : "none";
+}
 
 function buildScrSectors() {
   const host = $("#scr-sectors");
@@ -1744,7 +1778,9 @@ function renderScreener() {
   if (!MARKET || !MARKET.heatmap) return;
   const active = Object.keys(scrMetricSel).filter((id) => scrMetricSel[id] && scrMetricSel[id].size);
   const useDetail = scrValsReady && active.length > 0;
+  const chainKeys = scrChainSel.size ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
   let rows = scrPool().filter((t) => {
+    if (chainKeys && !chainKeys.has(t.m + "_" + t.t)) return false;
     if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
     const v = scrMcapVal(t);
     if (scrState.min != null && v < scrState.min) return false;
