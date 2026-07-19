@@ -1567,7 +1567,10 @@ const WORLD_CHIP_FALLBACK = { "^STOXX50E": [48.5, 42], "^HSI": [77.5, 50.5] };  
 const CB_SVG = { US: ["usa"], KR: ["south korea"], JP: ["honshu", "hokkaido", "kyushu", "shikoku"],
   GB: ["britain"], CN: ["china"], CA: ["canada"], AU: ["australia"],
   XM: ["france", "germany", "italy", "spain", "poland"] };
-const CB_CHIP = { XM: [49, 36] };
+// 중앙은행 칩 위치(% 좌표, 수기 — 동아시아 겹침 방지). 한국 포함.
+const CB_XY = { US: [18, 44], CA: [17, 30], XM: [49, 36], GB: [45, 29], KR: [83, 39],
+  JP: [88, 43], CN: [75, 44], AU: [85, 74] };
+const CB_SHORT = { US: "미국", KR: "한국", XM: "유로존", JP: "일본", GB: "영국", CN: "중국", CA: "캐나다", AU: "호주" };
 let worldChart = null;
 let worldMode = "stocks";   // "stocks" | "rates"
 let worldSvgLoaded = false;
@@ -1626,20 +1629,17 @@ function paintWorld() {
   svg.querySelectorAll("path").forEach((p) => {
     p.style.fill = "#e7eaef"; p.style.stroke = "#fff"; p.style.strokeWidth = ".5"; p.style.cursor = ""; p.onclick = null;
   });
-  const vb = (svg.getAttribute("viewBox") || "0 0 950 620").split(/\s+/).map(Number);
   const byId = (id) => svg.querySelector(`path[id="${id}"]`);
-  const place = (ids, fb, color, labelHtml, chipClass, onClick) => {
-    let cx = null, cy = null;
+  // 국가 path는 id로 색칠, 칩 위치는 수기 xy(%)로 고정 → 동아시아(한국·일본·중국 등) 칩 겹침 방지
+  const place = (ids, xy, color, labelHtml, chipClass, onClick) => {
     (ids || []).forEach((pid) => {
       const p = byId(pid); if (!p) return;
       p.style.fill = color; p.style.cursor = "pointer"; p.onclick = onClick;
-      if (cx == null) { try { const b = p.getBBox(); cx = (b.x + b.width / 2 - vb[0]) / vb[2] * 100; cy = (b.y + b.height / 2 - vb[1]) / vb[3] * 100; } catch (e) {} }
     });
-    if (cx == null && fb) { cx = fb[0]; cy = fb[1]; }
-    if (cx == null) return;
+    if (!xy) return;
     const chip = document.createElement("button");
     chip.className = "world-chip " + (chipClass || "");
-    chip.style.left = cx + "%"; chip.style.top = cy + "%";
+    chip.style.left = xy[0] + "%"; chip.style.top = xy[1] + "%";
     chip.innerHTML = labelHtml;
     chip.onclick = onClick;
     host.appendChild(chip);
@@ -1655,8 +1655,8 @@ function paintWorld() {
       (r.chg ?? 0) >= 0 ? "up" : "down", () => openIndexDialog(r)));
   } else {
     (MARKET.cbanks || []).forEach((cb) => place(
-      CB_SVG[cb.code] || [], CB_CHIP[cb.code], rateColor(cb.changed?.bp),
-      `${cb.flag} <b>${cb.rate}%</b>`, "rate", () => openCbDialog(cb)));
+      CB_SVG[cb.code] || [], CB_XY[cb.code], rateColor(cb.changed?.bp),
+      `${cb.flag} ${CB_SHORT[cb.code] || ""} <b>${cb.rate}%</b>`, "rate", () => openCbDialog(cb)));
   }
 }
 
