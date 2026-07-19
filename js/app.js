@@ -1292,47 +1292,104 @@ function bindDrawTools() {
   svg.addEventListener("pointercancel", () => { start = null; redrawDrawings(); });
 }
 
-/* ---------- 종목 메모 (localStorage, 종목별) ---------- */
+/* ---------- 종목 메모 (localStorage, 종목별 · 복수) ---------- */
 const MEMO_KEY = "cp_memo_v1";
-function memoLoad() { try { return JSON.parse(localStorage.getItem(MEMO_KEY)) || {}; } catch (e) { return {}; } }
+// 저장 구조: { "kr_005930": { name, items:[{id,text,created,updated}] } }
+function memoLoad() {
+  let o; try { o = JSON.parse(localStorage.getItem(MEMO_KEY)) || {}; } catch (e) { return {}; }
+  // 구(舊) 단일 메모 { text, name, updated } → 복수 구조로 자동 이관
+  let migrated = false;
+  Object.keys(o).forEach((k) => {
+    const v = o[k];
+    if (v && v.text != null && !Array.isArray(v.items)) {
+      o[k] = { name: v.name, items: [{ id: "m" + k, text: v.text, created: v.updated || "", updated: v.updated || "" }] };
+      migrated = true;
+    }
+  });
+  if (migrated) { try { localStorage.setItem(MEMO_KEY, JSON.stringify(o)); } catch (e) {} }
+  return o;
+}
 function memoSaveAll(o) { localStorage.setItem(MEMO_KEY, JSON.stringify(o)); }
+function memoNewId() { return "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function memoItems(key) { return (memoLoad()[key] || {}).items || []; }
+const memoSortDesc = (a, b) => (b.updated || "").localeCompare(a.updated || "") || (b.id > a.id ? 1 : -1);
 
 function renderLookupMemo(st) {
   const host = document.getElementById("lookup-memo");
   if (!host) return;
   host.style.display = "";
   const key = st.market + "_" + st.ticker;
-  const m = memoLoad()[key] || {};
-  host.innerHTML = `<div class="fund-head">🗒️ 이 종목 메모 <span class="sub-note" id="memo-status">${m.updated ? "최근 저장 " + m.updated : "이 브라우저에만 저장 · 자동 저장"}</span></div>
+  const nm = st.market === "kr" ? st.name : st.ticker;
+  const items = memoItems(key).slice().sort(memoSortDesc);
+  const esc = (t) => t.replace(/</g, "&lt;");
+  const list = items.length ? items.map((it) => `
+    <div class="lk-memo-item" data-id="${it.id}">
+      <div class="lk-memo-itxt">${esc(it.text).replace(/\n/g, "<br>")}</div>
+      <div class="lk-memo-meta"><span class="sub-note">${it.updated || ""}${it.updated && it.created && it.updated !== it.created ? " · 수정됨" : ""}</span>
+        <span style="flex:1"></span>
+        <a href="#" class="lk-memo-edit" data-id="${it.id}">수정</a>
+        <a href="#" class="lk-memo-del" data-id="${it.id}" style="color:#b91c1c;margin-left:10px">삭제</a></div>
+    </div>`).join("") : `<div class="sub-note" style="padding:2px 0 4px">아직 메모가 없습니다.</div>`;
+  host.innerHTML = `<div class="fund-head">🗒️ 이 종목 메모 <span class="sub-note">(${items.length}) · 이 브라우저에만 저장</span></div>
     <div style="padding:0 14px 12px">
-      <textarea id="lk-memo-text" rows="4" placeholder="이 종목에 대한 생각·매매 아이디어·관찰을 적어두세요. (자동 저장)"
-        style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:.9rem">${(m.text || "").replace(/</g, "&lt;")}</textarea>
+      <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+        <textarea id="lk-memo-new" rows="2" placeholder="새 메모 입력 후 [추가] (Ctrl+Enter)"
+          style="flex:1;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:.9rem"></textarea>
+        <button class="today-chart-btn" id="lk-memo-add" style="white-space:nowrap">추가</button>
+      </div>
+      <div id="lk-memo-list">${list}</div>
     </div>`;
-  const ta = document.getElementById("lk-memo-text");
-  let tmr = null;
-  ta.addEventListener("input", () => {
-    clearTimeout(tmr);
-    tmr = setTimeout(() => {
-      const o = memoLoad();
-      const txt = ta.value.trim();
-      if (txt) o[key] = { text: ta.value, name: st.market === "kr" ? st.name : st.ticker, updated: pfToday() };
-      else delete o[key];
-      memoSaveAll(o);
-      const s = document.getElementById("memo-status");
-      if (s) s.textContent = txt ? "저장됨 " + pfToday() : "이 브라우저에만 저장 · 자동 저장";
-    }, 500);
+  const add = () => {
+    const ta = document.getElementById("lk-memo-new");
+    if (!ta.value.trim()) return;
+    const o = memoLoad(), e = o[key] || { name: nm, items: [] };
+    e.name = nm; e.items = e.items || [];
+    e.items.push({ id: memoNewId(), text: ta.value, created: pfToday(), updated: pfToday() });
+    o[key] = e; memoSaveAll(o); renderLookupMemo(st);
+  };
+  document.getElementById("lk-memo-add").onclick = add;
+  document.getElementById("lk-memo-new").addEventListener("keydown", (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") { ev.preventDefault(); add(); }
+  });
+  host.querySelectorAll(".lk-memo-del").forEach((a) => a.onclick = (ev) => {
+    ev.preventDefault();
+    if (!confirm("이 메모를 삭제할까요?")) return;
+    const o = memoLoad(), e = o[key]; if (!e) return;
+    e.items = (e.items || []).filter((x) => x.id !== a.dataset.id);
+    if (!e.items.length) delete o[key];
+    memoSaveAll(o); renderLookupMemo(st);
+  });
+  host.querySelectorAll(".lk-memo-edit").forEach((a) => a.onclick = (ev) => {
+    ev.preventDefault();
+    const wrap = host.querySelector(`.lk-memo-item[data-id="${a.dataset.id}"]`);
+    const it = memoItems(key).find((x) => x.id === a.dataset.id); if (!wrap || !it) return;
+    wrap.innerHTML = `<textarea class="lk-memo-etext" rows="3" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:.9rem">${esc(it.text)}</textarea>
+      <div class="lk-memo-meta"><span style="flex:1"></span>
+        <a href="#" class="lk-memo-save">저장</a>
+        <a href="#" class="lk-memo-cancel" style="margin-left:10px">취소</a></div>`;
+    wrap.querySelector(".lk-memo-cancel").onclick = (e2) => { e2.preventDefault(); renderLookupMemo(st); };
+    wrap.querySelector(".lk-memo-save").onclick = (e2) => {
+      e2.preventDefault();
+      const nt = wrap.querySelector(".lk-memo-etext").value;
+      if (!nt.trim()) return;
+      const o = memoLoad(), e = o[key]; if (!e) return;
+      const tgt = (e.items || []).find((x) => x.id === it.id);
+      if (tgt) { tgt.text = nt; tgt.updated = pfToday(); }
+      memoSaveAll(o); renderLookupMemo(st);
+    };
   });
 }
 
-// 내 투자 → 종목 메모 탭 — 모든 메모 모아보기
+// 내 투자 → 종목 메모 탭 — 모든 메모 모아보기(메모 1건 = 1행)
 function renderMemo() {
   memoRendered = true;
   const host = document.getElementById("memo-list");
   const q = (document.getElementById("memo-search")?.value || "").trim().toLowerCase();
   const all = memoLoad();
-  let entries = Object.entries(all).filter(([k, v]) => v && v.text)
-    .sort((a, b) => (b[1].updated || "").localeCompare(a[1].updated || ""));
-  if (q) entries = entries.filter(([k, v]) => (v.name || k).toLowerCase().includes(q) || v.text.toLowerCase().includes(q));
+  let rows = [];
+  Object.entries(all).forEach(([k, v]) => (v.items || []).forEach((it) => { if (it && it.text) rows.push({ key: k, name: v.name, it }); }));
+  rows.sort((a, b) => memoSortDesc(a.it, b.it));
+  if (q) rows = rows.filter((r) => (r.name || r.key).toLowerCase().includes(q) || r.it.text.toLowerCase().includes(q));
   // 검색 바인딩(1회) + 내보내기/가져오기
   const sb = document.getElementById("memo-search");
   if (sb && !sb.dataset.bound) {
@@ -1350,28 +1407,38 @@ function renderMemo() {
         try {
           const d = JSON.parse(txt), src = d.memos || d;
           const cur = memoLoad(); let n = 0;
-          Object.entries(src).forEach(([k, v]) => { if (v && v.text && !cur[k]) { cur[k] = v; n++; } });
+          Object.entries(src).forEach(([k, v]) => {
+            // 구/신 구조 모두 items 배열로 정규화 후 병합(id 중복 제외)
+            const incoming = Array.isArray(v.items) ? v.items
+              : (v && v.text ? [{ id: "m" + k, text: v.text, created: v.updated || "", updated: v.updated || "" }] : []);
+            if (!incoming.length) return;
+            const e = cur[k] || { name: v.name, items: [] };
+            e.name = e.name || v.name; e.items = e.items || [];
+            const seen = new Set(e.items.map((x) => x.id));
+            incoming.forEach((it) => { if (it && it.text && !seen.has(it.id)) { e.items.push(it); n++; } });
+            cur[k] = e;
+          });
           memoSaveAll(cur); alert(n + "개 메모 가져옴 (기존 유지)"); renderMemo();
         } catch (err) { alert("JSON 형식이 올바르지 않습니다"); }
         e.target.value = "";
       });
     };
   }
-  if (!entries.length) {
+  if (!rows.length) {
     host.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
       ${q ? "검색 결과가 없습니다." : "아직 메모가 없습니다 — <b>종목 조회</b>에서 종목을 열고 <b>🗒️ 이 종목 메모</b>에 적어보세요."}</div>`;
     return;
   }
-  host.innerHTML = entries.map(([k, v]) => {
-    const mk = k.split("_")[0], tk = k.slice(mk.length + 1);
+  host.innerHTML = rows.map((r) => {
+    const k = r.key, mk = k.split("_")[0], tk = k.slice(mk.length + 1);
     const logo = logoUrl(mk, tk);
-    return `<div class="card-flat memo-row" data-key="${k}">
+    return `<div class="card-flat memo-row" data-key="${k}" data-id="${r.it.id}">
       <div class="memo-head"><img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-        <b>${v.name || tk}</b> <span class="sub-note">${tk} · ${v.updated || ""}</span>
+        <b>${r.name || tk}</b> <span class="sub-note">${tk} · ${r.it.updated || ""}</span>
         <span style="flex:1"></span>
         <a href="#" class="memo-goto" data-key="${k}">종목 조회 →</a>
-        <a href="#" class="memo-del" data-key="${k}" style="color:#b91c1c;margin-left:10px">삭제</a></div>
-      <div class="memo-body">${v.text.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</div>
+        <a href="#" class="memo-del" data-key="${k}" data-id="${r.it.id}" style="color:#b91c1c;margin-left:10px">삭제</a></div>
+      <div class="memo-body">${r.it.text.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</div>
     </div>`;
   }).join("");
   host.querySelectorAll(".memo-goto").forEach((a) => a.onclick = (e) => {
@@ -1382,7 +1449,10 @@ function renderMemo() {
   host.querySelectorAll(".memo-del").forEach((a) => a.onclick = (e) => {
     e.preventDefault();
     if (!confirm("이 메모를 삭제할까요?")) return;
-    const o = memoLoad(); delete o[a.dataset.key]; memoSaveAll(o); renderMemo();
+    const o = memoLoad(), ent = o[a.dataset.key]; if (!ent) return;
+    ent.items = (ent.items || []).filter((x) => x.id !== a.dataset.id);
+    if (!ent.items.length) delete o[a.dataset.key];
+    memoSaveAll(o); renderMemo();
   });
 }
 
