@@ -435,10 +435,30 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-frow { display: flex; align-items: center; gap: 12px; }
 .scr-frow-top { align-items: flex-start; }
 .scr-label { flex: 0 0 62px; font-weight: 700; font-size: .9rem; color: var(--ink); padding-top: 2px; }
-.scr-sec-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.scr-sectors { display: flex; flex-wrap: wrap; gap: 6px 14px; max-height: 168px; overflow-y: auto;
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
-.scr-sec { font-size: .86rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.scr-sec-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+/* 산업 대분류(아이콘 그룹) + 세부업종 아코디언 */
+.scr-groups { display: flex; flex-direction: column; gap: 8px; }
+.scr-group { display: flex; flex-direction: column; }
+.scr-gchip { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  font-size: .9rem; font-weight: 600; padding: 8px 13px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); cursor: pointer; color: var(--ink); }
+.scr-gchip .scr-gi { font-size: 1.05rem; }
+.scr-gchip .scr-gc { color: var(--muted); font-weight: 500; font-size: .8rem; }
+.scr-gchip .scr-gsel { background: #2563eb; color: #fff; font-size: .72rem; font-weight: 700;
+  border-radius: 999px; padding: 1px 7px; margin-left: 1px; }
+.scr-gchip .scr-gcaret { color: var(--muted); font-size: .7rem; }
+.scr-gchip.some { border-color: #93b4f5; }
+.scr-gchip.all { background: #eaf1fe; border-color: #2563eb; }
+.scr-gchip.open { border-color: #2563eb; }
+.scr-subs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px 6px;
+  padding: 10px; border: 1px dashed var(--line); border-radius: 8px; }
+.scr-sub { font-size: .82rem; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card, #fff); cursor: pointer; color: var(--ink); white-space: nowrap; }
+.scr-sub .scr-subn { color: var(--muted); font-size: .74rem; }
+.scr-sub.on { background: #2563eb; border-color: #2563eb; color: #fff; }
+.scr-sub.on .scr-subn { color: #d5e2fb; }
+.scr-sub-all { font-size: .82rem; padding: 5px 11px; border: 1px solid #2563eb; border-radius: 999px;
+  background: var(--bg); color: #2563eb; cursor: pointer; font-weight: 600; }
 .scr-mcap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .scr-num { width: 92px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px;
   padding: 6px 9px; font: inherit; font-size: .88rem; }

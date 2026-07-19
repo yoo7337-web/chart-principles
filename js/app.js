@@ -1591,7 +1591,7 @@ function initScreener() {
   document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
     document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
     scrState.country = b.dataset.c;
-    scrState.sectors = null; scrState.min = scrState.max = null;
+    scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
     $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = "";
     buildScrSectors(); buildScrTiers(); setScrUnitLabel();
     renderScreener();
@@ -1605,9 +1605,8 @@ function initScreener() {
   };
   $("#scr-mcap-min").addEventListener("input", onMcap);
   $("#scr-mcap-max").addEventListener("input", onMcap);
-  // 산업 전체선택/해제
-  $("#scr-sec-all").onclick = () => { scrState.sectors = null; syncScrSecChecks(); renderScreener(); };
-  $("#scr-sec-none").onclick = () => { scrState.sectors = new Set(); syncScrSecChecks(); renderScreener(); };
+  // 산업 초기화(전체)
+  $("#scr-sec-reset").onclick = () => { scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); renderScreener(); };
   // 정렬
   $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
   // 세부 지표 초기화
@@ -1625,30 +1624,69 @@ function setScrUnitLabel() {
     : scrState.country === "kr" ? "조원" : "조원 · 미국주 1$≈1,350원 환산";
 }
 
+// 산업 대분류(아이콘 그룹) — 세부 업종(네이버/GICS)을 큰 산업으로 묶어 직관적 선택
+const SCR_GROUPS = [
+  { key: "it", icon: "🔌", name: "반도체·IT·전자", sectors: ["반도체와반도체장비", "전자장비와기기", "전자제품", "디스플레이패널", "디스플레이장비및부품", "IT서비스", "소프트웨어", "통신장비", "핸드셋", "기술"] },
+  { key: "auto", icon: "🚗", name: "자동차", sectors: ["자동차", "자동차부품"] },
+  { key: "bio", icon: "💊", name: "바이오·헬스", sectors: ["제약", "생물공학", "건강관리장비와용품", "생명과학도구및서비스", "헬스케어"] },
+  { key: "fin", icon: "🏦", name: "금융·부동산", sectors: ["은행", "증권", "손해보험", "생명보험", "창업투자", "금융", "부동산"] },
+  { key: "ind", icon: "🏭", name: "산업재·기계", sectors: ["기계", "조선", "우주항공과국방", "건설", "건축자재", "상업서비스와공급품", "복합기업", "전기장비", "산업재"] },
+  { key: "cons", icon: "🛒", name: "소비재·유통", sectors: ["백화점과일반상점", "식품", "화장품", "섬유,의류,신발,호화품", "담배", "인터넷과카탈로그소매", "무역회사와판매업체", "호텔,레스토랑,레저", "가정용기기와용품", "전기제품", "임의소비재", "필수소비재"] },
+  { key: "mat", icon: "⚗️", name: "소재·화학", sectors: ["화학", "철강", "비철금속", "소재"] },
+  { key: "energy", icon: "⛽", name: "에너지·유틸리티", sectors: ["석유와가스", "에너지장비및서비스", "전기유틸리티", "에너지", "유틸리티"] },
+  { key: "media", icon: "📱", name: "미디어·통신·게임", sectors: ["방송과엔터테인먼트", "게임엔터테인먼트", "무선통신서비스", "다각화된통신서비스", "양방향미디어와서비스", "광고", "커뮤니케이션"] },
+  { key: "transport", icon: "🚢", name: "운송·물류", sectors: ["해운사", "항공사", "항공화물운송과물류", "운송인프라"] },
+];
+const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
+function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
+let scrOpenGroup = null;  // 펼쳐진 그룹(아코디언)
+
 function buildScrSectors() {
   const host = $("#scr-sectors");
-  const secs = scrSectorsFor(scrState.country);
-  host.innerHTML = secs.map(([name, n]) =>
-    `<label class="scr-sec"><input type="checkbox" value="${name.replace(/"/g, "&quot;")}"> ${name}<span class="sub-note"> ${n}</span></label>`).join("");
-  host.querySelectorAll("input").forEach((cb) => {
-    cb.checked = scrState.sectors === null || scrState.sectors.has(cb.value);
-    cb.onchange = () => {
-      if (scrState.sectors === null) scrState.sectors = new Set(secs.map(([nm]) => nm));  // null→명시적 집합
-      if (cb.checked) scrState.sectors.add(cb.value); else scrState.sectors.delete(cb.value);
-      updateScrSecCount(); renderScreener();
-    };
+  const secs = scrSectorsFor(scrState.country);          // [name, n]
+  const byG = {};
+  secs.forEach(([nm, n]) => { const k = scrGroupOf(nm); (byG[k] = byG[k] || { subs: [], total: 0 }); byG[k].subs.push([nm, n]); byG[k].total += n; });
+  const metaMap = Object.fromEntries([...SCR_GROUPS, SCR_GROUP_ETC].map((g) => [g.key, g]));
+  const order = [...SCR_GROUPS.map((g) => g.key), "etc"].filter((k) => byG[k]);
+  const selHas = (nm) => scrState.sectors && scrState.sectors.has(nm);
+  host.innerHTML = order.map((k) => {
+    const g = metaMap[k], grp = byG[k];
+    const subs = grp.subs.sort((a, b) => b[1] - a[1]);
+    const selN = subs.filter(([nm]) => selHas(nm)).length;
+    const cls = selN === 0 ? "" : (selN === subs.length ? "all" : "some");
+    const open = scrOpenGroup === k;
+    const chips = subs.map(([nm, n]) =>
+      `<button class="scr-sub ${selHas(nm) ? "on" : ""}" data-sec="${nm.replace(/"/g, "&quot;")}">${nm}<span class="scr-subn"> ${n}</span></button>`).join("");
+    return `<div class="scr-group">
+      <button class="scr-gchip ${cls} ${open ? "open" : ""}" data-gk="${k}"><span class="scr-gi">${g.icon}</span>${g.name}<span class="scr-gc">${grp.total}</span>${selN ? `<span class="scr-gsel">${selN}</span>` : ""} <span class="scr-gcaret">${open ? "▲" : "▾"}</span></button>
+      <div class="scr-subs" style="display:${open ? "flex" : "none"}">
+        <button class="scr-sub-all" data-gk="${k}">${selN === subs.length && selN > 0 ? "그룹 해제" : "그룹 전체"}</button>${chips}
+      </div></div>`;
+  }).join("");
+  host.querySelectorAll(".scr-gchip").forEach((b) => b.onclick = () => {
+    scrOpenGroup = scrOpenGroup === b.dataset.gk ? null : b.dataset.gk; buildScrSectors();
+  });
+  host.querySelectorAll(".scr-sub").forEach((b) => b.onclick = () => {
+    const nm = b.dataset.sec;
+    if (!scrState.sectors) scrState.sectors = new Set();
+    if (scrState.sectors.has(nm)) scrState.sectors.delete(nm); else scrState.sectors.add(nm);
+    if (!scrState.sectors.size) scrState.sectors = null;
+    buildScrSectors(); renderScreener();
+  });
+  host.querySelectorAll(".scr-sub-all").forEach((b) => b.onclick = () => {
+    const grp = byG[b.dataset.gk];
+    if (!scrState.sectors) scrState.sectors = new Set();
+    const all = grp.subs.every(([nm]) => scrState.sectors.has(nm));
+    grp.subs.forEach(([nm]) => { if (all) scrState.sectors.delete(nm); else scrState.sectors.add(nm); });
+    if (!scrState.sectors.size) scrState.sectors = null;
+    buildScrSectors(); renderScreener();
   });
   updateScrSecCount();
 }
-function syncScrSecChecks() {
-  $("#scr-sectors").querySelectorAll("input").forEach((cb) =>
-    cb.checked = scrState.sectors === null || scrState.sectors.has(cb.value));
-  updateScrSecCount();
-}
 function updateScrSecCount() {
+  const n = scrState.sectors ? scrState.sectors.size : 0;
   const total = scrSectorsFor(scrState.country).length;
-  const sel = scrState.sectors === null ? total : scrState.sectors.size;
-  $("#scr-sec-count").textContent = `${sel}/${total} 산업`;
+  $("#scr-sec-count").textContent = n ? `${n}개 세부산업 선택` : `전체 산업 (세부 ${total})`;
 }
 
 function buildScrTiers() {
