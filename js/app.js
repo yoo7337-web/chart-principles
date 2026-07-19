@@ -1643,36 +1643,125 @@ const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
 let scrOpenGroup = null;  // 펼쳐진 그룹(아코디언)
 
-// 반도체 밸류체인(시범) — company.json 사업개요 기반 수작업 큐레이션. codes=국내 종목코드.
-const SEMI_CHAIN = [
-  { key: "design", icon: "🎨", name: "설계 (팹리스)", desc: "반도체 설계·디자인하우스", codes: ["399720", "200710", "080220"] },
-  { key: "foundry", icon: "🏭", name: "종합·파운드리", desc: "IDM·위탁생산(메모리/파운드리)", codes: ["005930", "000660", "000990"] },
-  { key: "fe_equip", icon: "⚙️", name: "전공정 장비", desc: "증착·식각·세정 등 Fab 장비", codes: ["036930", "240810", "403870", "095610", "089970", "084370", "319660", "281820", "039030", "144960", "160980", "417840", "122640", "083450", "045100", "030530"] },
-  { key: "fe_mat", icon: "🧪", name: "전공정 소재·부품", desc: "포토레지스트·특수가스·석영·마스크 등", codes: ["005290", "357780", "014680", "093370", "064760", "183300", "074600", "059090", "166090", "170920", "101490"] },
-  { key: "osat", icon: "📦", name: "후공정 OSAT·테스트", desc: "외주 패키징·테스트(OSAT)", codes: ["067310", "036540", "131970", "330860"] },
-  { key: "be_equip", icon: "🔬", name: "후공정 장비·소재", desc: "테스트·본딩·검사 장비/소재", codes: ["042700", "058470", "095340", "089030", "131290", "003160", "025560", "232140", "252990", "064290", "420770", "089890", "033160", "077360", "098460", "327260"] },
-  { key: "substrate", icon: "🔲", name: "기판·패키징", desc: "PCB·Substrate·리드프레임", codes: ["009150", "011070", "353200", "007660", "195870", "222800", "007810", "356860", "323280"] },
-];
-const scrChainSel = new Set();  // 선택된 공정단계 key
-function scrChainKeys() { const s = new Set(); SEMI_CHAIN.forEach((st) => { if (scrChainSel.has(st.key)) st.codes.forEach((c) => s.add("kr_" + c)); }); return s; }
+// 산업별 밸류체인(시범) — company.json 사업개요 기반 수작업 큐레이션. codes=국내 종목코드. flow=공정흐름(화살표) 여부.
+const CHAINS = {
+  semi: { name: "반도체", icon: "🔌", flow: true, stages: [
+    { key: "design", icon: "🎨", name: "설계 (팹리스)", desc: "반도체 설계·디자인하우스", codes: ["399720", "200710", "080220"] },
+    { key: "foundry", icon: "🏭", name: "종합·파운드리", desc: "IDM·위탁생산(메모리/파운드리)", codes: ["005930", "000660", "000990"] },
+    { key: "fe_equip", icon: "⚙️", name: "전공정 장비", desc: "증착·식각·세정 등 Fab 장비", codes: ["036930", "240810", "403870", "095610", "089970", "084370", "319660", "281820", "039030", "144960", "160980", "417840", "122640", "083450", "045100", "030530"] },
+    { key: "fe_mat", icon: "🧪", name: "전공정 소재·부품", desc: "포토레지스트·특수가스·석영·마스크", codes: ["005290", "357780", "014680", "093370", "064760", "183300", "074600", "059090", "166090", "170920", "101490"] },
+    { key: "osat", icon: "📦", name: "후공정 OSAT·테스트", desc: "외주 패키징·테스트(OSAT)", codes: ["067310", "036540", "131970", "330860"] },
+    { key: "be_equip", icon: "🔬", name: "후공정 장비·소재", desc: "테스트·본딩·검사 장비/소재", codes: ["042700", "058470", "095340", "089030", "131290", "003160", "025560", "232140", "252990", "064290", "420770", "089890", "033160", "077360", "098460", "327260"] },
+    { key: "substrate", icon: "🔲", name: "기판·패키징", desc: "PCB·Substrate·리드프레임", codes: ["009150", "011070", "353200", "007660", "195870", "222800", "007810", "356860", "323280"] },
+  ] },
+  battery: { name: "2차전지", icon: "🔋", flow: true, stages: [
+    { key: "cell", icon: "🔋", name: "셀·배터리", desc: "배터리 셀 제조사", codes: ["373220", "006400", "096770", "082920"] },
+    { key: "cathode", icon: "⚡", name: "양극·음극재", desc: "양극재·음극재", codes: ["247540", "066970", "003670", "086520"] },
+    { key: "bmat", icon: "🧱", name: "소재(전해질·분리막·동박)", desc: "전해액·분리막·동박·첨가제", codes: ["011790", "020150", "357780", "093370", "014680", "457190"] },
+    { key: "mineral", icon: "⛏️", name: "소재·광물(모기업)", desc: "리튬·니켈·화학 모기업", codes: ["005490", "051910"] },
+    { key: "bequip", icon: "🛠️", name: "장비·부품", desc: "케이스·검사 등", codes: ["178320", "064290"] },
+  ] },
+  auto: { name: "자동차", icon: "🚗", flow: true, stages: [
+    { key: "oem", icon: "🚗", name: "완성차", desc: "완성차 제조", codes: ["005380", "000270"] },
+    { key: "parts", icon: "⚙️", name: "부품·모듈", desc: "모듈·공조·제동·구동", codes: ["012330", "018880", "005850", "204320", "011210", "007340", "010690"] },
+    { key: "tire", icon: "🛞", name: "타이어", desc: "타이어", codes: ["161390", "073240"] },
+  ] },
+  bio: { name: "바이오·헬스", icon: "💊", flow: true, stages: [
+    { key: "pharma", icon: "💊", name: "제약", desc: "전통 제약사", codes: ["000100", "128940", "000250", "086450", "009420"] },
+    { key: "biotech", icon: "🧬", name: "바이오·신약", desc: "신약개발·바이오", codes: ["068270", "326030", "196170", "141080", "087010", "226950", "028300", "298380", "950160", "310210", "397030", "039200", "007390"] },
+    { key: "cdmo", icon: "🏭", name: "CDMO·원료", desc: "위탁생산·원료의약품", codes: ["207940", "237690"] },
+    { key: "device", icon: "💉", name: "의료기기·미용", desc: "의료기기·미용", codes: ["214450", "290650", "145020", "214150", "041830"] },
+    { key: "dx", icon: "🔬", name: "진단", desc: "체외진단", codes: ["096530"] },
+  ] },
+  display: { name: "디스플레이", icon: "🖥️", flow: true, stages: [
+    { key: "panel", icon: "🖥️", name: "패널", desc: "디스플레이 패널", codes: ["034220"] },
+    { key: "dmod", icon: "🔩", name: "부품·모듈", desc: "FPCB·BLU 등", codes: ["090460", "290550", "004710"] },
+    { key: "dmat", icon: "🧪", name: "소재·장비", desc: "소재·제조장비", codes: ["005290", "170920", "101490", "036930"] },
+  ] },
+  defense: { name: "방산·우주항공", icon: "🛡️", flow: true, stages: [
+    { key: "system", icon: "🛡️", name: "방산·우주 체계", desc: "무기체계·발사체·완제", codes: ["012450", "064350", "079550", "272210", "047810", "000880"] },
+    { key: "dparts", icon: "🔩", name: "부품·소재", desc: "탄약·구동·복합소재", codes: ["103140", "011210", "017960"] },
+  ] },
+  ship: { name: "조선·해운", icon: "🚢", flow: true, stages: [
+    { key: "yard", icon: "🚢", name: "조선사", desc: "조선·해양플랜트", codes: ["329180", "042660", "009540", "010140", "267250", "097230"] },
+    { key: "sequip", icon: "⚙️", name: "엔진·기자재", desc: "선박엔진·기자재", codes: ["082740", "071970", "017960", "100090"] },
+    { key: "shipping", icon: "🚚", name: "해운", desc: "해운선사", codes: ["011200", "028670", "003280"] },
+  ] },
+  chem: { name: "화학·소재", icon: "⚗️", flow: true, stages: [
+    { key: "petro", icon: "🛢️", name: "석유화학", desc: "기초 석유화학", codes: ["051910", "011780", "011170", "298000", "120110", "005950"] },
+    { key: "fine", icon: "🧪", name: "정밀·특수화학", desc: "정밀·특수화학", codes: ["014680", "093370", "010060", "457190", "011790"] },
+    { key: "steel", icon: "🏗️", name: "철강", desc: "철강", codes: ["005490", "004020", "001430", "058430"] },
+    { key: "nonferrous", icon: "⛏️", name: "비철금속", desc: "비철·제련", codes: ["010130", "103140"] },
+  ] },
+  construction: { name: "건설·건자재", icon: "🏗️", flow: true, stages: [
+    { key: "build", icon: "🏗️", name: "건설", desc: "종합건설·플랜트", codes: ["028260", "000720", "028050", "047040", "006360", "375500", "002990"] },
+    { key: "cmat", icon: "🧱", name: "건자재·시멘트", desc: "건축자재·시멘트", codes: ["002380", "023410", "038500"] },
+  ] },
+  internet: { name: "인터넷·게임·엔터", icon: "📱", flow: false, stages: [
+    { key: "platform", icon: "🌐", name: "인터넷 플랫폼", desc: "포털·플랫폼", codes: ["035420", "035720"] },
+    { key: "game", icon: "🎮", name: "게임", desc: "게임 개발·퍼블리싱", codes: ["259960", "036570", "251270", "263750", "293490"] },
+    { key: "ent", icon: "🎤", name: "엔터·콘텐츠", desc: "엔터테인먼트", codes: ["352820", "035900", "041510"] },
+    { key: "telecom", icon: "📡", name: "통신", desc: "통신사", codes: ["017670", "030200", "032640"] },
+    { key: "adcomm", icon: "📢", name: "광고·커머스", desc: "광고·이커머스", codes: ["030000", "257720"] },
+  ] },
+  finance: { name: "금융", icon: "🏦", flow: false, stages: [
+    { key: "bank", icon: "🏦", name: "은행·지주", desc: "은행 금융지주", codes: ["105560", "055550", "086790", "316140", "024110", "323410", "138930", "175330", "139130", "006220"] },
+    { key: "sec", icon: "📈", name: "증권", desc: "증권사", codes: ["006800", "071050", "005940", "016360", "039490", "138040", "001510"] },
+    { key: "insure", icon: "🛡️", name: "보험", desc: "생명·손해보험", codes: ["032830", "000810", "005830", "088350", "001450", "085620"] },
+    { key: "vc", icon: "💰", name: "벤처·캐피탈", desc: "벤처캐피탈", codes: ["100790", "027360"] },
+  ] },
+  consumer: { name: "소비재·유통", icon: "🛒", flow: false, stages: [
+    { key: "food", icon: "🍜", name: "식음료·담배", desc: "식품·음료·담배", codes: ["003230", "271560", "097950", "004370", "033780", "003380"] },
+    { key: "cosmetic", icon: "💄", name: "화장품·생활", desc: "화장품·생활용품", codes: ["090430", "051900", "161890", "192820", "241710", "439090", "021240"] },
+    { key: "retail", icon: "🛍️", name: "유통·리테일", desc: "백화점·마트·편의점", codes: ["004170", "023530", "069960", "139480", "282330", "047050"] },
+    { key: "fashion", icon: "👕", name: "패션·레저", desc: "의류·호텔·레저", codes: ["111770", "081660", "035250", "034230", "032350", "008770"] },
+  ] },
+};
+const CHAIN_ORDER = ["semi", "battery", "auto", "bio", "display", "defense", "ship", "chem", "construction", "internet", "finance", "consumer"];
+let scrChainIndustry = null;    // 선택된 산업 key
+const scrChainSel = new Set();  // 선택된 단계 key (현 산업 내)
+function scrChainKeys() {
+  const s = new Set();
+  if (!scrChainIndustry) return s;
+  CHAINS[scrChainIndustry].stages.forEach((st) => { if (scrChainSel.has(st.key)) st.codes.forEach((c) => s.add("kr_" + c)); });
+  return s;
+}
 function renderScrChain() {
-  const host = $("#scr-chain-flow"); if (!host) return;
+  const indHost = $("#scr-chain-inds"), flowHost = $("#scr-chain-flow");
+  if (!indHost || !flowHost) return;
   const uni = new Set(((MARKET && MARKET.heatmap) || []).map((t) => t.m + "_" + t.t));
-  host.innerHTML = SEMI_CHAIN.map((st, i) => {
-    const n = st.codes.filter((c) => uni.has("kr_" + c)).length;
-    const on = scrChainSel.has(st.key);
-    return `${i ? '<span class="scr-arrow">›</span>' : ""}<button class="scr-stage ${on ? "on" : ""}" data-k="${st.key}" title="${st.desc}"><span class="scr-si">${st.icon}</span><span class="scr-sn">${st.name}</span><span class="scr-sc">${n}</span></button>`;
+  // 산업 선택 칩
+  indHost.innerHTML = CHAIN_ORDER.map((k) => {
+    const c = CHAINS[k];
+    return `<button class="scr-cind ${scrChainIndustry === k ? "on" : ""}" data-ind="${k}"><span>${c.icon}</span>${c.name}</button>`;
   }).join("");
-  host.querySelectorAll(".scr-stage").forEach((b) => b.onclick = () => {
-    const k = b.dataset.k;
-    if (scrChainSel.has(k)) scrChainSel.delete(k); else scrChainSel.add(k);
-    if (scrChainSel.size && scrState.country === "us") {  // 밸류체인은 국내 종목 → 미국 선택 시 전체로 전환
+  indHost.querySelectorAll(".scr-cind").forEach((b) => b.onclick = () => {
+    const k = b.dataset.ind;
+    scrChainSel.clear();
+    scrChainIndustry = (scrChainIndustry === k) ? null : k;
+    if (scrChainIndustry && scrState.country === "us") {  // 밸류체인은 국내 → 미국이면 전체로 전환
       scrState.country = ""; document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === ""));
       scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); buildScrTiers(); setScrUnitLabel();
     }
     renderScrChain(); renderScreener();
   });
-  const clr = $("#scr-chain-clear"); if (clr) clr.style.display = scrChainSel.size ? "" : "none";
+  // 단계 플로우
+  if (!scrChainIndustry) {
+    flowHost.innerHTML = `<span class="sub-note">위에서 산업을 선택하면 밸류체인 단계가 표시됩니다.</span>`;
+  } else {
+    const c = CHAINS[scrChainIndustry];
+    flowHost.innerHTML = c.stages.map((st, i) => {
+      const n = st.codes.filter((x) => uni.has("kr_" + x)).length;
+      const arrow = (c.flow && i) ? '<span class="scr-arrow">›</span>' : "";
+      return `${arrow}<button class="scr-stage ${scrChainSel.has(st.key) ? "on" : ""}" data-k="${st.key}" title="${st.desc || ""}"><span class="scr-si">${st.icon}</span><span class="scr-sn">${st.name}</span><span class="scr-sc">${n}</span></button>`;
+    }).join("");
+    flowHost.querySelectorAll(".scr-stage").forEach((b) => b.onclick = () => {
+      const k = b.dataset.k;
+      if (scrChainSel.has(k)) scrChainSel.delete(k); else scrChainSel.add(k);
+      renderScrChain(); renderScreener();
+    });
+  }
+  const clr = $("#scr-chain-clear"); if (clr) clr.style.display = (scrChainIndustry || scrChainSel.size) ? "" : "none";
 }
 
 function buildScrSectors() {
@@ -1778,7 +1867,7 @@ function renderScreener() {
   if (!MARKET || !MARKET.heatmap) return;
   const active = Object.keys(scrMetricSel).filter((id) => scrMetricSel[id] && scrMetricSel[id].size);
   const useDetail = scrValsReady && active.length > 0;
-  const chainKeys = scrChainSel.size ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
+  const chainKeys = (scrChainIndustry && scrChainSel.size) ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
   let rows = scrPool().filter((t) => {
     if (chainKeys && !chainKeys.has(t.m + "_" + t.t)) return false;
     if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
