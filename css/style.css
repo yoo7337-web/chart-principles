@@ -459,8 +459,24 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 #scr-table .scr-row:hover { background: var(--hover, rgba(37,99,235,.06)); }
 #scr-table .scr-name { display: flex; align-items: center; gap: 8px; }
 #scr-table .scr-name .mv-logo { width: 20px; height: 20px; flex: none; }
+/* 세부 지표 필터 */
+.scr-detail { margin-top: 12px; padding: 12px 16px; }
+.scr-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.scr-cat { border-top: 1px solid var(--line); padding: 4px 0; }
+.scr-cat > summary { cursor: pointer; font-weight: 700; font-size: .9rem; padding: 6px 0; list-style: revert; }
+.scr-metric-row { display: flex; align-items: center; gap: 10px; padding: 4px 0 4px 6px; flex-wrap: wrap; }
+.scr-mlabel { flex: 0 0 178px; font-size: .86rem; display: flex; flex-direction: column; }
+.scr-mnote { color: var(--muted); font-size: .72rem; }
+.scr-bks { display: flex; flex-wrap: wrap; gap: 5px; }
+.scr-bk { font-size: .8rem; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); cursor: pointer; color: var(--ink); }
+.scr-bk.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.scr-unavail { margin-top: 8px; }
+.scr-unavail summary { cursor: pointer; }
+.scr-unavail ul { margin: 8px 0 2px; padding-left: 18px; font-size: .82rem; color: var(--muted); line-height: 1.7; }
 @media (max-width: 640px) {
   .scr-label { flex-basis: 48px; }
+  .scr-mlabel { flex-basis: 120px; }
   #scr-table td:nth-child(3), #scr-table th:nth-child(3) { display: none; }
 }
 /* 보조지표 체크박스 + 지표 패널 */

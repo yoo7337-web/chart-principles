@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=68">
-<script src="firebase-config.js?v=68"></script>
-<script src="js/auth.js?v=68"></script>
+<link rel="stylesheet" href="css/style.css?v=69">
+<script src="firebase-config.js?v=69"></script>
+<script src="js/auth.js?v=69"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -248,6 +248,15 @@
           <span class="scr-tiers" id="scr-tiers"></span>
         </span>
       </div>
+    </div>
+    <div class="card-flat scr-detail">
+      <div class="scr-detail-head"><b>세부 지표 필터</b>
+        <span class="sub-note" id="scr-detail-note">재무 데이터 로딩 중…</span>
+        <span style="flex:1"></span>
+        <button class="today-chart-btn" id="scr-reset">지표 초기화</button></div>
+      <div id="scr-metrics"></div>
+      <details class="scr-unavail"><summary class="sub-note">ℹ️ 구현하지 못한 항목과 사유</summary>
+        <ul id="scr-unavail-list"></ul></details>
     </div>
     <div class="scr-bar">
       <div class="scr-summary" id="scr-summary"></div>
@@ -593,6 +602,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=68"></script>
+<script src="js/app.js?v=69"></script>
 </body>
 </html>

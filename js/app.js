@@ -1462,6 +1462,105 @@ function renderMemo() {
 // 데이터 소스: MARKET.heatmap = [{m,t,name,sector,mcap,chg}] (국내+미국 유니버스)
 const SCR_FX = 1350;  // '전체' 국가 비교 시 미국 시총 원화 환산(1$≈1,350원) — 대략치
 const scrState = { country: "", sectors: null, min: null, max: null, sort: "mcap" };  // sectors=null → 전체 선택
+const scrMetricSel = {};        // metricId → Set(bucketIdx) — 세부 지표 필터 선택
+let scrVals = new Map();         // "m_t" → 지표값 캐시(company.json 로드 후 구축)
+let scrValsReady = false;
+
+/* --- 세부 지표 계산 헬퍼 (연도별 재무 시계열 기반) --- */
+const _nn = (a) => a.filter((v) => v != null && !isNaN(v));
+function scrYoY(a) { const s = _nn(a); if (s.length < 2) return null; const p = s[s.length - 2]; if (!p) return null; return (s[s.length - 1] - p) / Math.abs(p) * 100; }
+function scrCagr(a) { const s = _nn(a); if (s.length < 2) return null; const a0 = s[0], b = s[s.length - 1], n = s.length - 1; if (a0 <= 0 || b <= 0) return null; return (Math.pow(b / a0, 1 / n) - 1) * 100; }
+function scrStreak(a) { const s = _nn(a); let c = 0; for (let i = s.length - 1; i > 0; i--) { if (s[i] > s[i - 1]) c++; else break; } return c; }
+function scrPayStreak(a) { let c = 0; for (let i = a.length - 1; i >= 0; i--) { if (a[i] != null && a[i] > 0) c++; else break; } return c; }
+function scrDivGrowStreak(a) { let c = 0; for (let i = a.length - 1; i > 0; i--) { if (a[i] != null && a[i - 1] != null && a[i] > a[i - 1] && a[i] > 0) c++; else break; } return c; }
+
+// 한 종목의 모든 세부 지표값 계산 (없으면 null)
+function scrComputeVals(t) {
+  const key = t.m + "_" + t.t;
+  const f = (FUND && FUND.map && FUND.map[key]) || {};
+  const c = (EXTRAS.company && EXTRAS.company.map && EXTRAS.company.map[key]) || {};
+  const m = c.metrics || {};
+  const num = (x) => (x == null || isNaN(x)) ? null : +x;
+  const finA = (c.fin || []).filter((r) => !r.est);        // 실적 연도(추정 제외)
+  const fxA = (c.fin_ext || []).filter((r) => !r.est);
+  const rev = finA.map((r) => r.rev), op = finA.map((r) => r.op);
+  const net = fxA.map((r) => r.net), dpsS = fxA.map((r) => r.dps);
+  const epsLatest = fxA.length ? num(fxA[fxA.length - 1].eps) : num(m.eps);
+  // PSR: 미국=제공값 / 한국=시총÷최근매출(억원→원)
+  let psr = num(m.psr);
+  if (psr == null && t.m === "kr") { const rv = rev.length ? rev[rev.length - 1] : null; if (rv > 0 && f.mcap) psr = f.mcap / (rv * 1e8); }
+  // 배당성향: 미국=제공값 / 한국=DPS÷EPS
+  let payout = num(m.payout);
+  if (payout == null && t.m === "kr") { const d = dpsS.length ? dpsS[dpsS.length - 1] : null; if (d > 0 && epsLatest > 0) payout = d / epsLatest * 100; }
+  let debt = num(m.debtRatio); if (debt == null && fxA.length) debt = num(fxA[fxA.length - 1].debt);
+  const roe = num(m.roe) != null ? num(m.roe) : num(f.roe);
+  const roa = (roe != null && debt != null) ? roe / (1 + debt / 100) : null;  // 추정: ROA=ROE÷(1+부채비율/100)
+  return {
+    per: num(m.per) != null ? num(m.per) : num(f.per),
+    pbr: num(m.pbr) != null ? num(m.pbr) : num(f.pbr),
+    psr,
+    rev_yoy: scrYoY(rev), rev_cagr: scrCagr(rev), rev_streak: scrStreak(rev),
+    op_yoy: scrYoY(op), op_streak: scrStreak(op),
+    net_yoy: scrYoY(net), net_cagr: scrCagr(net), net_streak: scrStreak(net),
+    opm: finA.length && finA[finA.length - 1].opm != null ? num(finA[finA.length - 1].opm) : num(f.op_margin),
+    npm: fxA.length ? num(fxA[fxA.length - 1].npm) : null,
+    roe, roa, debt,
+    curr: num(m.currentRatio),
+    intcov: num(m.interestCoverage),
+    dyield: num(f.div_yield), payout,
+    div_pay: scrPayStreak(dpsS), div_grow: scrDivGrowStreak(dpsS),
+  };
+}
+function scrBuildVals() {
+  scrVals = new Map();
+  ((MARKET && MARKET.heatmap) || []).forEach((t) => scrVals.set(t.m + "_" + t.t, scrComputeVals(t)));
+  scrValsReady = true;
+}
+
+/* --- 세부 지표 레지스트리 (버킷=구간 필터, 다중선택=OR) --- */
+function _b(l, lo, hi) { return { l, lo, hi }; }
+const SCR_METRICS = [
+  // 기업가치 (배)
+  { id: "per", cat: "기업가치", label: "PER", unit: "배", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~15", 10, 15), _b("15~20", 15, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "pbr", cat: "기업가치", label: "PBR", unit: "배", buckets: [_b("0~0.5", 0, 0.5), _b("0.5~1", 0.5, 1), _b("1~1.5", 1, 1.5), _b("1.5~2", 1.5, 2), _b("2~3", 2, 3), _b("3↑", 3, null)] },
+  { id: "psr", cat: "기업가치", label: "PSR", unit: "배", note: "한국은 시총÷최근매출로 계산", buckets: [_b("0~0.5", 0, 0.5), _b("0.5~1", 0.5, 1), _b("1~2", 1, 2), _b("2~3", 2, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
+  // 성장성 (%)
+  { id: "rev_yoy", cat: "성장성", label: "매출 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "rev_cagr", cat: "성장성", label: "매출 연평균성장(CAGR)", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "rev_streak", cat: "성장성", label: "매출 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
+  { id: "op_yoy", cat: "성장성", label: "영업이익 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "op_streak", cat: "성장성", label: "영업이익 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
+  { id: "net_yoy", cat: "성장성", label: "순이익 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "net_cagr", cat: "성장성", label: "순이익 연평균성장(CAGR)", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
+  { id: "net_streak", cat: "성장성", label: "순이익 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
+  // 수익성 (%)
+  { id: "opm", cat: "수익성", label: "영업이익률", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "npm", cat: "수익성", label: "순이익률", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "roe", cat: "수익성", label: "ROE", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~15", 10, 15), _b("15~20", 15, 20), _b("20↑", 20, null)] },
+  { id: "roa", cat: "수익성", label: "ROA", unit: "%", note: "ROE·부채비율로 추정", buckets: [_b("적자", null, 0), _b("0~3", 0, 3), _b("3~6", 3, 6), _b("6~10", 6, 10), _b("10↑", 10, null)] },
+  // 재무건전성
+  { id: "debt", cat: "재무건전성", label: "부채비율", unit: "%", buckets: [_b("0~50", 0, 50), _b("50~100", 50, 100), _b("100~200", 100, 200), _b("200↑", 200, null)] },
+  { id: "curr", cat: "재무건전성", label: "유동비율", unit: "%", note: "주로 미국(국내는 당좌비율만 제공)", buckets: [_b("100미만", null, 100), _b("100~150", 100, 150), _b("150~200", 150, 200), _b("200↑", 200, null)] },
+  { id: "intcov", cat: "재무건전성", label: "이자보상배율", unit: "배", note: "미국만 제공", buckets: [_b("1미만", null, 1), _b("1~3", 1, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
+  // 배당
+  { id: "dyield", cat: "배당", label: "배당수익률", unit: "%", buckets: [_b("0~1", 0, 1), _b("1~2", 1, 2), _b("2~3", 2, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
+  { id: "payout", cat: "배당", label: "배당성향", unit: "%", note: "한국은 DPS÷EPS로 계산", buckets: [_b("0~20", 0, 20), _b("20~40", 20, 40), _b("40~60", 40, 60), _b("60~100", 60, 100), _b("100↑", 100, null)] },
+  { id: "div_pay", cat: "배당", label: "배당 연속지급", unit: "년", note: "국내만(최근 수년 데이터 한정)", buckets: [_b("3년↑", 3, null), _b("5년↑", 5, null)] },
+  { id: "div_grow", cat: "배당", label: "배당 연속증가", unit: "년", note: "국내만(최근 수년 데이터 한정)", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null)] },
+];
+const SCR_METRIC_BY_ID = Object.fromEntries(SCR_METRICS.map((m) => [m.id, m]));
+const SCR_CATS = ["기업가치", "성장성", "수익성", "재무건전성", "배당"];
+// 구현 불가 항목(원인) — UI에 안내
+const SCR_UNAVAIL = [
+  ["PFCR", "잉여현금흐름(FCF) 미수집 — 현금흐름표 수집 필요"],
+  ["EV/EBITDA", "EBITDA(감가상각 전 이익) 미수집 — EV는 있으나 EBITDA 산출 데이터 없음"],
+  ["매출총이익률·매출총이익 증감/연속", "매출원가·매출총이익 미수집(영업이익까지만 제공)"],
+  ["ROA(실측)", "총자산 미수집 → ROE·부채비율 기반 '추정 ROA'로 대체 구현"],
+  ["영업이익·순이익 어닝 서프라이즈", "컨센서스 실적 추정치 미수집(목표주가·투자의견만 보유)"],
+  ["주당배당금(절대액)", "원/달러 통화가 달라 절대액 구간필터 부적합 → 배당수익률·배당성향으로 대체"],
+  ["배당주기(분기/반기/연)", "배당 지급일 이력 미수집"],
+];
+function scrBucketMatch(b, v) { return (b.lo == null || v >= b.lo) && (b.hi == null || v < b.hi); }
 
 function scrUnit() { return scrState.country === "us" ? "$B" : "조원"; }  // 시총 입력 단위
 function scrMcapVal(t) {  // 현재 단위(조원 or $B)로 변환한 시총값
@@ -1487,7 +1586,7 @@ function scrSectorsFor(country) {
 function initScreener() {
   if (!MARKET || !MARKET.heatmap) return;  // 데이터 로딩 전 — 다음 진입 시 재시도
   screenerRendered = true;
-  $("#scr-context").innerHTML = `<b>주식찾기</b> — 국내·미국 유니버스에서 <b>국가·산업·시가총액</b>으로 종목을 걸러냅니다. (세부 지표 필터는 추가 예정)`;
+  $("#scr-context").innerHTML = `<b>주식찾기</b> — 국내·미국 유니버스에서 <b>국가·산업·시가총액 + 세부 지표</b>(기업가치·성장성·수익성·재무건전성·배당)로 종목을 걸러냅니다. 지표 여러 개 = AND, 한 지표의 구간 여러 개 = OR.`;
   // 국가 토글
   document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
     document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
@@ -1511,8 +1610,14 @@ function initScreener() {
   $("#scr-sec-none").onclick = () => { scrState.sectors = new Set(); syncScrSecChecks(); renderScreener(); };
   // 정렬
   $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
+  // 세부 지표 초기화
+  const rb = $("#scr-reset");
+  if (rb) rb.onclick = () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]);
+    document.querySelectorAll("#scr-metrics .scr-bk.active").forEach((x) => x.classList.remove("active")); renderScreener(); };
 
-  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScreener();
+  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScrMetrics(); renderScreener();
+  // 세부 지표는 company.json(연도별 재무) 로드 후 활성화
+  loadExtras().then(() => { scrBuildVals(); const n = $("#scr-detail-note"); if (n) n.style.display = "none"; renderScreener(); });
 }
 
 function setScrUnitLabel() {
@@ -1565,13 +1670,56 @@ function buildScrTiers() {
   });
 }
 
+// 세부 지표 필터 UI (카테고리별 접이식 · 버킷 칩)
+function renderScrMetrics() {
+  const host = $("#scr-metrics");
+  if (!host) return;
+  host.innerHTML = SCR_CATS.map((cat) => {
+    const ms = SCR_METRICS.filter((m) => m.cat === cat);
+    const rows = ms.map((m) => {
+      const chips = m.buckets.map((b, i) =>
+        `<button class="scr-bk" data-mid="${m.id}" data-i="${i}">${b.l}</button>`).join("");
+      const note = m.note ? `<span class="scr-mnote">${m.note}</span>` : "";
+      return `<div class="scr-metric-row"><span class="scr-mlabel">${m.label}<span class="sub-note"> (${m.unit})</span>${note}</span><span class="scr-bks">${chips}</span></div>`;
+    }).join("");
+    return `<details class="scr-cat"${cat === "기업가치" ? " open" : ""}><summary>${cat} <span class="sub-note scr-cat-n" data-cat="${cat}"></span></summary>${rows}</details>`;
+  }).join("");
+  host.querySelectorAll(".scr-bk").forEach((b) => b.onclick = () => {
+    const mid = b.dataset.mid, i = +b.dataset.i;
+    const set = scrMetricSel[mid] || (scrMetricSel[mid] = new Set());
+    if (set.has(i)) set.delete(i); else set.add(i);
+    if (!set.size) delete scrMetricSel[mid];
+    b.classList.toggle("active");
+    renderScreener();
+  });
+  const ul = $("#scr-unavail-list");
+  if (ul) ul.innerHTML = SCR_UNAVAIL.map(([a, b]) => `<li><b>${a}</b> — ${b}</li>`).join("");
+}
+function updateScrCatCounts() {
+  document.querySelectorAll(".scr-cat-n").forEach((el) => {
+    const n = SCR_METRICS.filter((m) => m.cat === el.dataset.cat && scrMetricSel[m.id]).length;
+    el.textContent = n ? `· ${n}개 적용` : "";
+  });
+}
+
 function renderScreener() {
   if (!MARKET || !MARKET.heatmap) return;
+  const active = Object.keys(scrMetricSel).filter((id) => scrMetricSel[id] && scrMetricSel[id].size);
+  const useDetail = scrValsReady && active.length > 0;
   let rows = scrPool().filter((t) => {
     if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
     const v = scrMcapVal(t);
     if (scrState.min != null && v < scrState.min) return false;
     if (scrState.max != null && v > scrState.max) return false;
+    if (useDetail) {
+      const vals = scrVals.get(t.m + "_" + t.t) || {};
+      for (const id of active) {
+        const val = vals[id];
+        if (val == null) return false;  // 지표값 없으면 제외
+        const M = SCR_METRIC_BY_ID[id];
+        if (![...scrMetricSel[id]].some((i) => scrBucketMatch(M.buckets[i], val))) return false;
+      }
+    }
     return true;
   });
   const s = scrState.sort;
@@ -1584,21 +1732,26 @@ function renderScreener() {
       default: return scrMcapVal(b) - scrMcapVal(a);
     }
   });
-  $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}</span>`;
+  updateScrCatCounts();
+  $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}${active.length ? ` · 지표 ${active.length}종 적용` : ""}</span>`;
   const tb = $("#scr-table");
   if (!rows.length) {
     tb.innerHTML = `<tbody><tr><td style="padding:26px;text-align:center;color:var(--muted)">조건에 맞는 종목이 없습니다.</td></tr></tbody>`;
     return;
   }
-  const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th></tr></thead>`;
+  const cols = active.slice(0, 4);  // 적용 지표값을 컬럼으로 표시(최대 4)
+  const colHead = cols.map((id) => `<th class="scr-r">${SCR_METRIC_BY_ID[id].label}</th>`).join("");
+  const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
   const body = rows.map((t) => {
     const col = t.chg >= 0 ? "#d93036" : "#1e63e0";
+    const vals = scrVals.get(t.m + "_" + t.t) || {};
+    const extra = cols.map((id) => `<td class="scr-r">${scrFmtMetric(id, vals[id])}</td>`).join("");
     return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
       <td class="scr-name"><img class="mv-logo" src="${logoUrl(t.m, t.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${t.name}</b> <span class="sub-note">${t.t}</span></td>
       <td>${t.m === "kr" ? "🇰🇷" : "🇺🇸"}</td>
       <td>${t.sector}</td>
       <td class="scr-r">${fmtMcap(t.mcap, t.m)}</td>
-      <td class="scr-r" style="color:${col}">${pct(t.chg, 2)}</td>
+      <td class="scr-r" style="color:${col}">${pct(t.chg, 2)}</td>${extra}
     </tr>`;
   }).join("");
   tb.innerHTML = head + `<tbody>${body}</tbody>`;
@@ -1607,6 +1760,13 @@ function renderScreener() {
     if (!lookupRendered) initLookup();
     loadLookup(tr.dataset.key);
   });
+}
+function scrFmtMetric(id, v) {
+  if (v == null) return "-";
+  const u = SCR_METRIC_BY_ID[id].unit;
+  if (u === "배") return v.toFixed(1) + "배";
+  if (u === "년") return v + "년";
+  return v.toFixed(1) + "%";
 }
 
 /* ---------- 시뮬레이션 ---------- */
