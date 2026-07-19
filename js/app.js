@@ -1036,24 +1036,31 @@ function drawLookupChart() {
   lookupInds = [];
   $("#lookup-inds").innerHTML = "";
   const el = $("#lookup-chart");
-  // 가격축(우측 눈금) 폭을 주가 최대 라벨 기준으로 산정 → 전 패널 동일 minimumWidth로 고정
-  // → 플롯 폭 일치 → 같은 날짜가 같은 x에 정렬(스크롤 중에도 유지, 지표는 fmtCompact로 폭 억제).
+  // 메인 가격축 라벨 포맷을 고정 → 폭이 줌/데이터와 무관하게 일정 → psW가 항상 유효.
+  //  KR=정수+콤마("45,650") / US=소수 2자리("45.65"). (기본 포맷은 "45650.00"처럼 폭이 커져 어긋남)
+  const fmtPx = st.market === "us"
+    ? (v) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : (v) => Math.round(v).toLocaleString();
+  const pxFormat = { type: "custom", formatter: fmtPx, minMove: st.market === "us" ? 0.01 : 1 };
+  // 가격축(우측 눈금) 폭 = 최대 라벨 길이 기준(기본포맷 "374500.00" 최악치까지 커버) → 전 패널 동일
+  //  minimumWidth로 고정 → 플롯 폭 일치 → 일자 정렬(초기·줌·스크롤 모두 유지).
   const maxAbs = Math.max(1, ...s.map((x) => Math.abs(x.h ?? x.c ?? 0)));
-  const decCh = st.market === "us" ? 3 : 0;  // 미국 소수점 여유
-  const psW = Math.max(56, 16 + (Math.round(maxAbs).toLocaleString().length + decCh) * 7);
+  const worstLen = Math.round(maxAbs).toString().length + 3;  // 정수부 + ".00" (기본포맷 상한)
+  const psW = Math.max(60, 16 + Math.max(worstLen, fmtPx(maxAbs).length) * 7.5);
   const opts = baseChartOpts(el, 420);
   opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: psW };
   lookupChart = LightweightCharts.createChart(el, opts);
   const candles = lookupChart.addCandlestickSeries({
     upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
     borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+    priceFormat: pxFormat,
   });
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
   lookupChart._syncSeries = candles;  // 십자선 동기화용
 
   const line = (key2, color, width, dashed) => {
     const ser = lookupChart.addLineSeries({ color, lineWidth: width || 1,
-      lineStyle: dashed ? 2 : 0, priceLineVisible: false, lastValueVisible: false });
+      lineStyle: dashed ? 2 : 0, priceLineVisible: false, lastValueVisible: false, priceFormat: pxFormat });
     ser.setData(s.filter((x) => x[key2] != null).map((x) => ({ time: x.t, value: x[key2] })));
   };
   line("ma20", "#f39c12", 2);
@@ -1062,7 +1069,7 @@ function drawLookupChart() {
   line("bbu", "#b0b8bf", 1, true);     // 볼린저 상단(점선)
   line("bbd", "#b0b8bf", 1, true);     // 볼린저 하단(점선)
 
-  const vol = lookupChart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "" });
+  const vol = lookupChart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false });
   lookupChart.priceScale("").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
   vol.setData(s.map((x) => ({ time: x.t, value: x.v, color: x.c >= x.o ? "#fecaca" : "#bfdbfe" })));
 
@@ -1755,7 +1762,8 @@ function drawCalDay() {
     <span class="sub-note">${items.length}건</span></div>`;
   if (!items.length) { host.innerHTML = head + `<p class="mini-note">이 날짜에 예정된 일정이 없습니다.</p>`; return; }
   host.innerHTML = head + items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
-      ${r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`}
+      ${r.t ? `<img class="cal-logo" src="${logoUrl(calMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
+        : (r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`)}
       <span class="cal-name"><b>${r.name}</b>${r.t ? `<span class="sub-note"> ${r.t}</span>` : ""}</span>
       <span class="cal-info">${calMk === "kr"
         ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
