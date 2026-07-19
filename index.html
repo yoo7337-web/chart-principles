@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=65">
-<script src="firebase-config.js?v=65"></script>
-<script src="js/auth.js?v=65"></script>
+<link rel="stylesheet" href="css/style.css?v=66">
+<script src="firebase-config.js?v=66"></script>
+<script src="js/auth.js?v=66"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -127,6 +127,7 @@
     </div>
     <div id="lookup-head" class="lookup-head" style="display:none"></div>
     <div id="lookup-links" class="ext-links" style="display:none"></div>
+    <div id="lookup-memo" class="card-flat" style="display:none"></div>
     <!-- ① 차트 + 원칙 신호 (핵심 — 최상단) -->
     <div class="controls" id="lookup-filter" style="display:none">
       <label><input type="radio" name="sigfilter" value="core" checked> ⭐ 채택 원칙만</label>
@@ -165,7 +166,6 @@
     </div>
     <div id="lookup-inds"></div>
     <p class="legend" id="lookup-legend" style="display:none"></p>
-    <div id="lookup-memo" class="card-flat" style="display:none"></div>
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
@@ -544,6 +544,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=65"></script>
+<script src="js/app.js?v=66"></script>
 </body>
 </html>
