@@ -514,14 +514,14 @@ function fmtCompact(v) {
 const OSC_PRICE_FMT = { type: "custom", formatter: fmtCompact, minMove: 0.01 };
 
 // 오실레이터 패널 (종류 직접 지정 — 원칙 연동·수동 선택 공용). minWidth=메인과 가격축 폭 통일용(선택).
-function drawOscKind(el, kind, s, markerDates, minWidth) {
+function drawOscKind(el, kind, s, markerDates, minWidth, rightOffset) {
   if (!kind) { el.style.display = "none"; return null; }
   el.style.display = "block";
   el.style.height = "160px";
   const opts = baseChartOpts(el, 160);
   if (minWidth) opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: minWidth };
   const c = LightweightCharts.createChart(el, opts);
-  c.timeScale().applyOptions({ visible: false });
+  c.timeScale().applyOptions({ visible: false, rightOffset: rightOffset || 0 });  // 메인과 동일 미래 여백 → 초기 정렬 유지
 
   // 워밍업(null) 구간도 whitespace({time})로 채워 메인 차트와 동일 길이·동일 논리인덱스 유지
   // → 줌/스크롤 시 시간축 동기화(logical range)가 어긋나지 않음
@@ -1056,8 +1056,11 @@ function drawLookupChart() {
   const maxAbs = Math.max(1, ...s.map((x) => Math.abs(x.h ?? x.c ?? 0)));
   const worstLen = Math.round(maxAbs).toString().length + 3;  // 정수부 + ".00" (기본포맷 상한)
   const psW = Math.max(60, 16 + Math.max(worstLen, fmtPx(maxAbs).length) * 7.5);
+  // 마지막 봉 오른쪽에 ~3개월(봉단위) 미래 여백 → 추세선을 미래로 연장해 그릴 수 있음. 전 패널 동일 적용해 정렬 유지.
+  const rOff = ({ d: 63, w: 13, m: 3 })[tf] || 0;
   const opts = baseChartOpts(el, 420);
   opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: psW };
+  opts.timeScale = { ...(opts.timeScale || {}), rightOffset: rOff };
   lookupChart = LightweightCharts.createChart(el, opts);
   const candles = lookupChart.addCandlestickSeries({
     upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
@@ -1126,7 +1129,7 @@ function drawLookupChart() {
     pane.className = "chart vol ind-pane";
     indHost.appendChild(pane);
     const dates = (ruleLinked && i === 0) ? shown.map((m) => snap(m.t)).filter(Boolean) : [];
-    const oc = drawOscKind(pane, kind, s, dates, psW);  // 메인과 동일 가격축 폭
+    const oc = drawOscKind(pane, kind, s, dates, psW, rOff);  // 메인과 동일 가격축 폭·미래 여백
     if (oc) {
       lookupInds.push(oc);
       // 지표명 라벨(패널 좌상단)
@@ -1200,15 +1203,18 @@ function redrawDrawings() {
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.style.width = w + "px"; svg.style.height = h + "px";
   const ts = lookupChart.timeScale();
-  const X = (t) => {
-    const i = _barIdxByTime && _barIdxByTime.get(t);
-    const c = i != null ? ts.logicalToCoordinate(i) : ts.timeToCoordinate(t);
+  const last = _barTimeByIdx ? _barTimeByIdx.length - 1 : 0;
+  // 과거 앵커=시간(t)→논리인덱스, 미래 앵커=fo(마지막 봉 기준 봉 오프셋)→논리 last+fo. 둘 다 오프스크린 연장 지원.
+  const X = (t, fo) => {
+    let c;
+    if (fo != null) c = ts.logicalToCoordinate(last + fo);
+    else { const i = _barIdxByTime && _barIdxByTime.get(t); c = i != null ? ts.logicalToCoordinate(i) : ts.timeToCoordinate(t); }
     return c == null ? null : c;
   };
   const Y = (p) => { const c = lookupCandles.priceToCoordinate(p); return c == null ? null : c; };
   const arr = drawLoad()[drawKey()] || [];
   svg.innerHTML = arr.map((d, i) => {
-    const x1 = X(d.t1), y1 = Y(d.p1), x2 = X(d.t2), y2 = Y(d.p2);
+    const x1 = X(d.t1, d.fo1), y1 = Y(d.p1), x2 = X(d.t2, d.fo2), y2 = Y(d.p2);
     if ([x1, y1, x2, y2].some((v) => v == null)) return "";
     if (d.type === "trend") return `<line class="dw" data-i="${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
     return `<rect class="dw" data-i="${i}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
@@ -1246,14 +1252,15 @@ function bindDrawTools() {
     const r = svg.getBoundingClientRect();
     const x = ev.clientX - r.left, y = ev.clientY - r.top;
     const ts = lookupChart.timeScale();
-    let t = null;
+    let t = null, fo = null;
     const logical = ts.coordinateToLogical(x);
     if (logical != null && _barTimeByIdx) {
-      const idx = Math.max(0, Math.min(_barTimeByIdx.length - 1, Math.round(logical)));
-      t = _barTimeByIdx[idx];
+      const last = _barTimeByIdx.length - 1;
+      if (logical > last + 0.5) fo = logical - last;   // 마지막 봉 오른쪽(미래 여백) → 봉 오프셋 저장
+      else t = _barTimeByIdx[Math.max(0, Math.round(logical))];
     }
     const p = lookupCandles.coordinateToPrice(y);
-    return { x, y, t, p };
+    return { x, y, t, fo, p };
   };
   svg.addEventListener("pointerdown", (ev) => {
     if (!drawMode || drawMode === "erase" || !lookupCandles) return;
@@ -1272,9 +1279,10 @@ function bindDrawTools() {
   const finish = (ev) => {
     if (!start) return;
     const end = toData(ev);
-    if (start.t != null && end.t != null && start.p != null && end.p != null && (Math.abs(end.x - start.x) > 3 || Math.abs(end.y - start.y) > 3)) {
+    const okA = start.t != null || start.fo != null, okB = end.t != null || end.fo != null;
+    if (okA && okB && start.p != null && end.p != null && (Math.abs(end.x - start.x) > 3 || Math.abs(end.y - start.y) > 3)) {
       const o = drawLoad(), k = drawKey();
-      (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, p1: start.p, t2: end.t, p2: end.p });
+      (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, fo1: start.fo, p1: start.p, t2: end.t, fo2: end.fo, p2: end.p });
       drawSaveAll(o);
     }
     start = null;
