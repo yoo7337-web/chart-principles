@@ -845,7 +845,8 @@ function fillTodayTable() {
     `<tr><th>신호일</th><th>종목</th><th>원칙</th><th>방향</th><th>종가</th><th>국면상</th><th>차트</th></tr>` +
     (rows.length ? rows.map((s, i) => `<tr style="${s.active ? "" : "opacity:.45"}">
       <td>${s.date}</td>
-      <td><a href="#" class="goto-lookup" data-key="${s.market}_${s.ticker}">${s.market === "kr" ? s.name + " (" + s.ticker + ")" : s.ticker}</a></td>
+      <td class="td-stock"><img class="tbl-logo" src="${logoUrl(s.market, s.ticker)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <a href="#" class="goto-lookup" data-key="${s.market}_${s.ticker}">${s.market === "kr" ? s.name + " (" + s.ticker + ")" : s.ticker}</a></td>
       <td>${s.rule}</td><td>${s.side === "buy" ? "🟢 매수" : "🔴 매도"}</td>
       <td>${s.price.toLocaleString()}</td><td>${s.active ? "✅ 유효" : "⛔ 꺼짐"}</td>
       <td><button class="today-chart-btn" data-i="${i}">📈 보기</button></td>

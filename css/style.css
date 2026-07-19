@@ -509,6 +509,9 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 .mv-logo { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line);
   background: #fff; object-fit: contain; flex: 0 0 28px; display: inline-block; }
+.td-stock { white-space: nowrap; }
+.tbl-logo { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line);
+  object-fit: contain; background: #fff; vertical-align: middle; margin-right: 6px; }
 .cal-logo { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
   background: #fff; object-fit: contain; flex: 0 0 22px; vertical-align: middle; margin-right: 6px; display: inline-block; }
 
