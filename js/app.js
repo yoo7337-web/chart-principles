@@ -33,6 +33,9 @@ let chart = null;
 let indChart = null;
 let lookupChart = null;
 let lookupInds = [];   // 보조지표 패널 차트들(복수)
+let lookupCandles = null;       // 메인 캔들 시리즈 (그리기 좌표 변환용)
+let _barIdxByTime = null, _barTimeByIdx = null;  // 봉 시간↔논리인덱스 (그리기 좌표 안정화)
+let drawMode = "";     // "" | "trend" | "box" | "erase"
 let lookupSupply = null;
 let simChart = null;
 let applyRendered = false;
@@ -44,6 +47,7 @@ let lookupRendered = false;
 let journalRendered = false;
 let portfolioRendered = false;
 let holdingsRendered = false;
+let memoRendered = false;
 
 const $ = (s) => document.querySelector(s);
 const pct = (x, d = 2) => (x == null ? "-" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
@@ -66,7 +70,7 @@ const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap",
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
   calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", value: "내재가치",
-  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지",
+  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
 let navSuppress = false;
@@ -117,6 +121,7 @@ function activateTab(tabId) {
   if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
+  if (tabId === "memo") renderMemo();
   if (tabId === "heatmap" && !heatmapRendered) renderHome();
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
@@ -953,7 +958,7 @@ function loadLookup(key) {
     if (!st) return;
     LOOKUP_ST = st;
     ["lookup-info", "lookup-chart", "lookup-legend", "lookup-stats-title", "lookup-stats-wrap",
-     "lookup-rule-wrap", "lookup-filter", "lookup-profile"]
+     "lookup-rule-wrap", "lookup-filter", "lookup-profile", "draw-tools"]
       .forEach((id) => { document.getElementById(id).style.display = ""; });
     $("#lookup-rule-wrap").style.display = "inline";
     $("#lookup-filter").style.display = "flex";
@@ -1004,6 +1009,9 @@ function loadLookup(key) {
       present.map((s) => `<option value="${s.rule_id}">${s.side === "buy" ? "🟢" : "🔴"} ${s.name}</option>`).join("");
     $("#lookup-rule").onchange = drawLookupChart;
     drawLookupChart();
+    bindDrawTools();            // 그리기 도구(추세선·박스권) 1회 바인딩
+    setDrawMode("");            // 종목 전환 시 이동 모드로 초기화(+저장된 그림 재배치)
+    renderLookupMemo(st);       // 이 종목 메모 카드
 
     $("#lookup-stats").innerHTML =
       `<tr><th>원칙</th><th>방향</th><th>구분</th><th>신호수</th><th>승률</th><th>평균 20일 수익</th></tr>` +
@@ -1058,6 +1066,9 @@ function drawLookupChart() {
   });
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
   lookupChart._syncSeries = candles;  // 십자선 동기화용
+  lookupCandles = candles;            // 그리기 좌표 변환용
+  _barIdxByTime = new Map(s.map((x, i) => [x.t, i]));
+  _barTimeByIdx = s.map((x) => x.t);
 
   const line = (key2, color, width, dashed) => {
     const ser = lookupChart.addLineSeries({ color, lineWidth: width || 1,
@@ -1144,6 +1155,9 @@ function drawLookupChart() {
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유).
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유). 가격축 폭은 위에서 동일 고정.
   syncCharts([lookupChart, ...lookupInds]);
+  // 그리기 오버레이 재배치 (줌/스크롤에 연동해 추세선·박스가 봉 위치를 따라감)
+  lookupChart.timeScale().subscribeVisibleLogicalRangeChange(() => redrawDrawings());
+  requestAnimationFrame(() => redrawDrawings());
 }
 
 // 여러 lightweight-charts 인스턴스의 시간축·십자선 연동 (좌우 스크롤/줌·날짜 커서 공유)
@@ -1169,6 +1183,198 @@ function syncCharts(charts) {
       });
       guard = false;
     });
+  });
+}
+
+/* ---------- 차트 그리기 도구 (추세선·박스권 — localStorage, 종목별) ---------- */
+const DRAW_KEY = "cp_draw_v1";
+function drawLoad() { try { return JSON.parse(localStorage.getItem(DRAW_KEY)) || {}; } catch (e) { return {}; } }
+function drawSaveAll(o) { localStorage.setItem(DRAW_KEY, JSON.stringify(o)); }
+function drawKey() { return LOOKUP_ST ? LOOKUP_ST.market + "_" + LOOKUP_ST.ticker : null; }
+
+// 저장 (시간·가격) → 현재 화면 좌표. 시간→논리인덱스→logicalToCoordinate(오프스크린도 연장), 가격→priceToCoordinate.
+function redrawDrawings() {
+  const svg = document.getElementById("lookup-draw"), el = document.getElementById("lookup-chart");
+  if (!svg || !el || !lookupChart || !lookupCandles || !LOOKUP_ST) return;
+  const w = el.clientWidth, h = el.clientHeight;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.style.width = w + "px"; svg.style.height = h + "px";
+  const ts = lookupChart.timeScale();
+  const X = (t) => {
+    const i = _barIdxByTime && _barIdxByTime.get(t);
+    const c = i != null ? ts.logicalToCoordinate(i) : ts.timeToCoordinate(t);
+    return c == null ? null : c;
+  };
+  const Y = (p) => { const c = lookupCandles.priceToCoordinate(p); return c == null ? null : c; };
+  const arr = drawLoad()[drawKey()] || [];
+  svg.innerHTML = arr.map((d, i) => {
+    const x1 = X(d.t1), y1 = Y(d.p1), x2 = X(d.t2), y2 = Y(d.p2);
+    if ([x1, y1, x2, y2].some((v) => v == null)) return "";
+    if (d.type === "trend") return `<line class="dw" data-i="${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    return `<rect class="dw" data-i="${i}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
+  }).join("");
+  if (drawMode === "erase") svg.querySelectorAll(".dw").forEach((sh) => sh.onclick = () => {
+    const o = drawLoad(), k = drawKey();
+    if (o[k]) { o[k].splice(+sh.dataset.i, 1); if (!o[k].length) delete o[k]; drawSaveAll(o); redrawDrawings(); }
+  });
+}
+
+function setDrawMode(m) {
+  drawMode = m;
+  const svg = document.getElementById("lookup-draw");
+  if (svg) svg.style.pointerEvents = m ? "auto" : "none";  // 이동 모드에선 차트로 이벤트 통과
+  document.querySelectorAll("#draw-mode button").forEach((b) => b.classList.toggle("active", b.dataset.dm === m));
+  const hint = document.getElementById("draw-hint");
+  if (hint) hint.textContent = m === "erase" ? "지우고 싶은 선/박스를 클릭하세요"
+    : m ? "차트에서 드래그해 그리세요 · 줌/스크롤에 따라 봉에 고정됩니다"
+    : "추세선/박스권 선택 후 차트에서 드래그 · 이 브라우저에 저장";
+  redrawDrawings();
+}
+
+function bindDrawTools() {
+  const tools = document.getElementById("draw-tools");
+  if (!tools || tools.dataset.bound) return;
+  tools.dataset.bound = "1";
+  tools.querySelectorAll("#draw-mode button").forEach((b) => b.onclick = () => setDrawMode(b.dataset.dm));
+  document.getElementById("draw-clear").onclick = () => {
+    if (!confirm("이 종목의 그림을 모두 지울까요?")) return;
+    const o = drawLoad(); delete o[drawKey()]; drawSaveAll(o); redrawDrawings();
+  };
+  const svg = document.getElementById("lookup-draw");
+  let start = null;
+  const toData = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    const ts = lookupChart.timeScale();
+    let t = null;
+    const logical = ts.coordinateToLogical(x);
+    if (logical != null && _barTimeByIdx) {
+      const idx = Math.max(0, Math.min(_barTimeByIdx.length - 1, Math.round(logical)));
+      t = _barTimeByIdx[idx];
+    }
+    const p = lookupCandles.coordinateToPrice(y);
+    return { x, y, t, p };
+  };
+  svg.addEventListener("pointerdown", (ev) => {
+    if (!drawMode || drawMode === "erase" || !lookupCandles) return;
+    start = toData(ev);
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!start) return;
+    const c = toData(ev);
+    const prev = svg.querySelector(".dw-preview"); if (prev) prev.remove();
+    const el = drawMode === "trend"
+      ? `<line class="dw dw-preview" x1="${start.x}" y1="${start.y}" x2="${c.x}" y2="${c.y}"/>`
+      : `<rect class="dw dw-preview" x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
+    svg.insertAdjacentHTML("beforeend", el);
+  });
+  const finish = (ev) => {
+    if (!start) return;
+    const end = toData(ev);
+    if (start.t != null && end.t != null && start.p != null && end.p != null && (Math.abs(end.x - start.x) > 3 || Math.abs(end.y - start.y) > 3)) {
+      const o = drawLoad(), k = drawKey();
+      (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, p1: start.p, t2: end.t, p2: end.p });
+      drawSaveAll(o);
+    }
+    start = null;
+    redrawDrawings();
+  };
+  svg.addEventListener("pointerup", finish);
+  svg.addEventListener("pointercancel", () => { start = null; redrawDrawings(); });
+}
+
+/* ---------- 종목 메모 (localStorage, 종목별) ---------- */
+const MEMO_KEY = "cp_memo_v1";
+function memoLoad() { try { return JSON.parse(localStorage.getItem(MEMO_KEY)) || {}; } catch (e) { return {}; } }
+function memoSaveAll(o) { localStorage.setItem(MEMO_KEY, JSON.stringify(o)); }
+
+function renderLookupMemo(st) {
+  const host = document.getElementById("lookup-memo");
+  if (!host) return;
+  host.style.display = "";
+  const key = st.market + "_" + st.ticker;
+  const m = memoLoad()[key] || {};
+  host.innerHTML = `<div class="fund-head">🗒️ 이 종목 메모 <span class="sub-note" id="memo-status">${m.updated ? "최근 저장 " + m.updated : "이 브라우저에만 저장 · 자동 저장"}</span></div>
+    <div style="padding:0 14px 12px">
+      <textarea id="lk-memo-text" rows="4" placeholder="이 종목에 대한 생각·매매 아이디어·관찰을 적어두세요. (자동 저장)"
+        style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:.9rem">${(m.text || "").replace(/</g, "&lt;")}</textarea>
+    </div>`;
+  const ta = document.getElementById("lk-memo-text");
+  let tmr = null;
+  ta.addEventListener("input", () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => {
+      const o = memoLoad();
+      const txt = ta.value.trim();
+      if (txt) o[key] = { text: ta.value, name: st.market === "kr" ? st.name : st.ticker, updated: pfToday() };
+      else delete o[key];
+      memoSaveAll(o);
+      const s = document.getElementById("memo-status");
+      if (s) s.textContent = txt ? "저장됨 " + pfToday() : "이 브라우저에만 저장 · 자동 저장";
+    }, 500);
+  });
+}
+
+// 내 투자 → 종목 메모 탭 — 모든 메모 모아보기
+function renderMemo() {
+  memoRendered = true;
+  const host = document.getElementById("memo-list");
+  const q = (document.getElementById("memo-search")?.value || "").trim().toLowerCase();
+  const all = memoLoad();
+  let entries = Object.entries(all).filter(([k, v]) => v && v.text)
+    .sort((a, b) => (b[1].updated || "").localeCompare(a[1].updated || ""));
+  if (q) entries = entries.filter(([k, v]) => (v.name || k).toLowerCase().includes(q) || v.text.toLowerCase().includes(q));
+  // 검색 바인딩(1회) + 내보내기/가져오기
+  const sb = document.getElementById("memo-search");
+  if (sb && !sb.dataset.bound) {
+    sb.dataset.bound = "1";
+    sb.addEventListener("input", () => renderMemo());
+    document.getElementById("memo-export").onclick = () => {
+      const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), memos: memoLoad() }, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `종목메모_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    };
+    document.getElementById("memo-import").onclick = () => document.getElementById("memo-import-file").click();
+    document.getElementById("memo-import-file").onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      f.text().then((txt) => {
+        try {
+          const d = JSON.parse(txt), src = d.memos || d;
+          const cur = memoLoad(); let n = 0;
+          Object.entries(src).forEach(([k, v]) => { if (v && v.text && !cur[k]) { cur[k] = v; n++; } });
+          memoSaveAll(cur); alert(n + "개 메모 가져옴 (기존 유지)"); renderMemo();
+        } catch (err) { alert("JSON 형식이 올바르지 않습니다"); }
+        e.target.value = "";
+      });
+    };
+  }
+  if (!entries.length) {
+    host.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
+      ${q ? "검색 결과가 없습니다." : "아직 메모가 없습니다 — <b>종목 조회</b>에서 종목을 열고 <b>🗒️ 이 종목 메모</b>에 적어보세요."}</div>`;
+    return;
+  }
+  host.innerHTML = entries.map(([k, v]) => {
+    const mk = k.split("_")[0], tk = k.slice(mk.length + 1);
+    const logo = logoUrl(mk, tk);
+    return `<div class="card-flat memo-row" data-key="${k}">
+      <div class="memo-head"><img class="mv-logo" src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <b>${v.name || tk}</b> <span class="sub-note">${tk} · ${v.updated || ""}</span>
+        <span style="flex:1"></span>
+        <a href="#" class="memo-goto" data-key="${k}">종목 조회 →</a>
+        <a href="#" class="memo-del" data-key="${k}" style="color:#b91c1c;margin-left:10px">삭제</a></div>
+      <div class="memo-body">${v.text.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</div>
+    </div>`;
+  }).join("");
+  host.querySelectorAll(".memo-goto").forEach((a) => a.onclick = (e) => {
+    e.preventDefault(); gotoTabFull("lookup");
+    if (!lookupRendered) initLookup();
+    loadLookup(a.dataset.key);
+  });
+  host.querySelectorAll(".memo-del").forEach((a) => a.onclick = (e) => {
+    e.preventDefault();
+    if (!confirm("이 메모를 삭제할까요?")) return;
+    const o = memoLoad(); delete o[a.dataset.key]; memoSaveAll(o); renderMemo();
   });
 }
 

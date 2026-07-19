@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=63">
-<script src="firebase-config.js?v=63"></script>
-<script src="js/auth.js?v=63"></script>
+<link rel="stylesheet" href="css/style.css?v=64">
+<script src="firebase-config.js?v=64"></script>
+<script src="js/auth.js?v=64"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -36,6 +36,7 @@
   <button class="tab" data-tab="holdings">보유 포트폴리오</button>
   <button class="tab" data-tab="portfolio">포트폴리오 점검</button>
   <button class="tab" data-tab="journal">매매일지</button>
+  <button class="tab" data-tab="memo">종목 메모</button>
 </nav>
 <nav class="tabs" data-group-tabs="market">
   <button class="tab active" data-tab="heatmap">홈</button>
@@ -147,9 +148,24 @@
         <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동)</span>
       </span>
     </div>
-    <div id="lookup-chart" class="chart" style="display:none"></div>
+    <div class="controls" id="draw-tools" style="display:none;align-items:center;gap:8px">
+      <span class="sub-note">✏️ 그리기</span>
+      <span class="mk-toggle" id="draw-mode">
+        <button data-dm="" class="active">🖐 이동</button>
+        <button data-dm="trend">📈 추세선</button>
+        <button data-dm="box">▭ 박스권</button>
+        <button data-dm="erase">🧽 지우기</button>
+      </span>
+      <button class="today-chart-btn" id="draw-clear">전체 삭제</button>
+      <span class="sub-note" id="draw-hint">추세선/박스권 선택 후 차트에서 드래그 · 이 브라우저에 저장</span>
+    </div>
+    <div id="lookup-chart-wrap" style="position:relative">
+      <div id="lookup-chart" class="chart" style="display:none"></div>
+      <svg id="lookup-draw" class="draw-overlay"></svg>
+    </div>
     <div id="lookup-inds"></div>
     <p class="legend" id="lookup-legend" style="display:none"></p>
+    <div id="lookup-memo" class="card-flat" style="display:none"></div>
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
@@ -508,6 +524,18 @@
       </form>
     </dialog>
   </section>
+  <section id="tab-memo" class="panel">
+    <div class="criteria">🗒️ <b>종목 메모</b> — 종목 조회에서 종목별로 남긴 메모를 모아 봅니다. 모든 메모는
+      <b>이 브라우저에만</b> 저장(서버 전송 없음). 메모 클릭 = 해당 종목 조회로 이동.</div>
+    <div class="home-topbar" style="margin:12px 0 10px">
+      <input type="text" id="memo-search" placeholder="🔍 종목명·내용 검색" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--line);border-radius:8px">
+      <span style="flex:1"></span>
+      <button class="today-chart-btn" id="memo-export">⬇ 내보내기</button>
+      <button class="today-chart-btn" id="memo-import">⬆ 가져오기</button>
+      <input type="file" id="memo-import-file" accept=".json" style="display:none">
+    </div>
+    <div id="memo-list"></div>
+  </section>
 </main>
 
 <button id="nav-back" class="nav-back" style="display:none">← 뒤로</button>
@@ -516,6 +544,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=63"></script>
+<script src="js/app.js?v=64"></script>
 </body>
 </html>

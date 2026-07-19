@@ -413,6 +413,18 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 #world-dialog { border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
   margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
 #world-dialog::backdrop { background: rgba(17,24,39,.45); }
+/* 차트 그리기 오버레이 */
+.draw-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; touch-action: none; }
+.draw-overlay .dw { fill: rgba(37,99,235,.08); stroke: #2563eb; stroke-width: 1.6; cursor: pointer; }
+.draw-overlay line.dw { fill: none; }
+.draw-overlay .dw-preview { stroke-dasharray: 4 3; opacity: .8; pointer-events: none; }
+#draw-mode button { font-size: .8rem; }
+/* 종목 메모 + 메모 탭 */
+.memo-row { padding: 12px 14px; margin-bottom: 10px; }
+.memo-head { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
+.memo-head .mv-logo { width: 20px; height: 20px; }
+.memo-body { margin-top: 7px; font-size: .9rem; color: var(--ink); white-space: pre-wrap; line-height: 1.55; }
+.memo-row .memo-goto { font-size: .8rem; }
 /* 보조지표 체크박스 + 지표 패널 */
 .osc-checks { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: .82rem; font-weight: 600; color: var(--muted); }
 .osc-checks label { display: inline-flex; align-items: center; gap: 3px; font-weight: 500; color: var(--ink);
