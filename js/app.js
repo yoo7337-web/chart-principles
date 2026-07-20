@@ -1509,6 +1509,7 @@ function scrComputeVals(t) {
     intcov: num(m.interestCoverage),
     dyield: num(f.div_yield), payout,
     div_pay: scrPayStreak(dpsS), div_grow: scrDivGrowStreak(dpsS),
+    c5: num(t.c5), upstreak: num(t.up),  // 모멘텀(heatmap 제공): 5거래일 수익률·연속 상승일
   };
 }
 function scrBuildVals() {
@@ -1562,6 +1563,30 @@ const SCR_UNAVAIL = [
 ];
 function scrBucketMatch(b, v) { return (b.lo == null || v >= b.lo) && (b.hi == null || v < b.hi); }
 
+/* --- 테마(원클릭 프리셋) — 지표 조건 조합(정확값). cond: {m, min(≥), max(<), gt(>)} --- */
+const SCR_THEMES = [
+  { id: "momentum", name: "🚀 연속상승세", desc: "1주일 전보다 상승 + 3일 연속 상승",
+    conds: [{ m: "c5", gt: 0 }, { m: "upstreak", min: 3 }] },
+  { id: "growth_value", name: "🌱 저평가 성장주", desc: "매출·순이익 3년평균 성장 + PER 0~20배",
+    conds: [{ m: "rev_cagr", min: 10 }, { m: "per", min: 0, max: 20 }, { m: "net_cagr", min: 20 }] },
+  { id: "cheap_value", name: "💎 저렴한 가치주", desc: "PBR 0~1.5 + PER 0~15 + 순이익 성장 0%↑",
+    conds: [{ m: "pbr", min: 0, max: 1.5 }, { m: "per", min: 0, max: 15 }, { m: "net_cagr", min: 0 }] },
+  { id: "dividend", name: "💰 배당주", desc: "배당성향 30%↑ + 3년+ 연속지급 + 순이익 최근 3개년 우상향 (실적 데이터 3개년 기준)",
+    conds: [{ m: "payout", min: 30 }, { m: "div_pay", min: 3 }, { m: "net_streak", min: 2 }] },
+  { id: "cashcow", name: "🏆 돈 잘버는 회사", desc: "영업이익률 20%↑ + ROE 15%↑ (매출총이익률 미수집→영업이익률 대체)",
+    conds: [{ m: "opm", min: 20 }, { m: "roe", min: 15 }] },
+];
+let scrThemeActive = null;
+function scrCondMatch(c, v) {
+  if (v == null) return false;
+  return (c.min == null || v >= c.min) && (c.max == null || v < c.max) && (c.gt == null || v > c.gt);
+}
+function scrThemePass(vals) {
+  const th = SCR_THEMES.find((x) => x.id === scrThemeActive);
+  if (!th) return true;
+  return th.conds.every((c) => scrCondMatch(c, vals[c.m]));
+}
+
 function scrUnit() { return scrState.country === "us" ? "$B" : "조원"; }  // 시총 입력 단위
 function scrMcapVal(t) {  // 현재 단위(조원 or $B)로 변환한 시총값
   if (scrState.country === "us") return t.mcap / 1e9;                    // $B
@@ -1609,14 +1634,16 @@ function initScreener() {
   $("#scr-sec-reset").onclick = () => { scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); renderScreener(); };
   // 정렬
   $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
-  // 세부 지표 초기화
+  // 세부 지표·테마 초기화
   const rb = $("#scr-reset");
   if (rb) rb.onclick = () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]);
-    document.querySelectorAll("#scr-metrics .scr-bk.active").forEach((x) => x.classList.remove("active")); renderScreener(); };
+    scrThemeActive = null;
+    document.querySelectorAll("#scr-metrics .scr-bk.active").forEach((x) => x.classList.remove("active"));
+    renderScrThemes(); renderScreener(); };
 
   const cc = $("#scr-chain-clear");
   if (cc) cc.onclick = () => { scrChainSel.clear(); renderScrChain(); renderScreener(); };
-  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); scrSyncFilterVisibility(); renderScrChain(); renderScrMetrics(); renderScreener();
+  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); scrSyncFilterVisibility(); renderScrChain(); renderScrThemes(); renderScrMetrics(); renderScreener();
   // 세부 지표는 company.json(연도별 재무) 로드 후 활성화
   loadExtras().then(() => { scrBuildVals(); const n = $("#scr-detail-note"); if (n) n.style.display = "none"; renderScreener(); });
 }
@@ -1883,6 +1910,18 @@ function buildScrTiers() {
   });
 }
 
+// 테마 프리셋 칩
+function renderScrThemes() {
+  const host = $("#scr-themes"); if (!host) return;
+  host.innerHTML = SCR_THEMES.map((t) => `<button class="scr-theme ${scrThemeActive === t.id ? "on" : ""}" data-id="${t.id}" title="${t.desc}">${t.name}</button>`).join("");
+  const setDesc = () => { const d = $("#scr-theme-desc"); if (d) d.textContent = scrThemeActive ? SCR_THEMES.find((x) => x.id === scrThemeActive).desc : ""; };
+  host.querySelectorAll(".scr-theme").forEach((b) => b.onclick = () => {
+    scrThemeActive = (scrThemeActive === b.dataset.id) ? null : b.dataset.id;
+    renderScrThemes(); renderScreener();
+  });
+  setDesc();
+}
+
 // 세부 지표 필터 UI (카테고리별 접이식 · 버킷 칩)
 function renderScrMetrics() {
   const host = $("#scr-metrics");
@@ -1919,6 +1958,7 @@ function renderScreener() {
   if (!MARKET || !MARKET.heatmap) return;
   const active = Object.keys(scrMetricSel).filter((id) => scrMetricSel[id] && scrMetricSel[id].size);
   const useDetail = scrValsReady && active.length > 0;
+  const useTheme = scrValsReady && scrThemeActive;
   const chainKeys = (scrChainIndustry && scrChainSel.size) ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
   let rows = scrPool().filter((t) => {
     if (chainKeys && t.m === "kr" && !chainKeys.has(t.m + "_" + t.t)) return false;  // 밸류체인=국내만
@@ -1926,9 +1966,10 @@ function renderScreener() {
     const v = scrMcapVal(t);
     if (scrState.min != null && v < scrState.min) return false;
     if (scrState.max != null && v > scrState.max) return false;
-    if (useDetail) {
+    if (useDetail || useTheme) {
       const vals = scrVals.get(t.m + "_" + t.t) || {};
-      for (const id of active) {
+      if (useTheme && !scrThemePass(vals)) return false;
+      if (useDetail) for (const id of active) {
         const val = vals[id];
         if (val == null) return false;  // 지표값 없으면 제외
         const M = SCR_METRIC_BY_ID[id];
@@ -1948,14 +1989,16 @@ function renderScreener() {
     }
   });
   updateScrCatCounts();
-  $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}${active.length ? ` · 지표 ${active.length}종 적용` : ""}</span>`;
+  const themeNote = useTheme ? ` · <b>${SCR_THEMES.find((x) => x.id === scrThemeActive).name}</b>` : "";
+  $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}${active.length ? ` · 지표 ${active.length}종` : ""}${themeNote}</span>`;
   const tb = $("#scr-table");
   if (!rows.length) {
     tb.innerHTML = `<tbody><tr><td style="padding:26px;text-align:center;color:var(--muted)">조건에 맞는 종목이 없습니다.</td></tr></tbody>`;
     return;
   }
-  const cols = active.slice(0, 4);  // 적용 지표값을 컬럼으로 표시(최대 4)
-  const colHead = cols.map((id) => `<th class="scr-r">${SCR_METRIC_BY_ID[id].label}</th>`).join("");
+  const themeCols = useTheme ? SCR_THEMES.find((x) => x.id === scrThemeActive).conds.map((c) => c.m) : [];
+  const cols = [...new Set([...themeCols, ...active])].slice(0, 4);  // 테마·적용 지표값을 컬럼으로 표시(최대 4)
+  const colHead = cols.map((id) => `<th class="scr-r">${scrColLabel(id)}</th>`).join("");
   const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
   const body = rows.map((t) => {
     const col = t.chg >= 0 ? "#d93036" : "#1e63e0";
@@ -1976,9 +2019,13 @@ function renderScreener() {
     loadLookup(tr.dataset.key);
   });
 }
+const SCR_EXTRA_META = { c5: { label: "1주수익률", unit: "%pt" }, upstreak: { label: "연속상승", unit: "일" } };
+function scrColLabel(id) { return SCR_METRIC_BY_ID[id]?.label || SCR_EXTRA_META[id]?.label || id; }
 function scrFmtMetric(id, v) {
   if (v == null) return "-";
-  const u = SCR_METRIC_BY_ID[id].unit;
+  if (id === "c5") return (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+  if (id === "upstreak") return v + "일";
+  const u = SCR_METRIC_BY_ID[id]?.unit;
   if (u === "배") return v.toFixed(1) + "배";
   if (u === "년") return v + "년";
   return v.toFixed(1) + "%";
