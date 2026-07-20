@@ -988,6 +988,7 @@ function loadLookup(key) {
     }
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
     renderLookupHead(st);
+    renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     loadExtras().then(() => {
       if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
       renderLookupHead(st);
@@ -1761,13 +1762,13 @@ const CHAINS = {
   energy: { name: "에너지·유틸리티", icon: "⛽", flow: false, stages: [
     { key: "oil", icon: "🛢️", name: "정유·석유", sectors: ["석유와가스"] },
     { key: "eequip", icon: "⚙️", name: "에너지 장비·서비스", sectors: ["에너지장비및서비스"] },
-    { key: "util", icon: "💡", name: "전력·유틸리티", sectors: ["전기유틸리티"] },
+    { key: "util", icon: "💡", name: "전력·가스 유틸리티", sectors: ["전기유틸리티", "가스유틸리티", "복합유틸리티"] },
   ] },
   machinery: { name: "산업재·기계·운송", icon: "🏭", flow: false, stages: [
     { key: "machine", icon: "⚙️", name: "기계·중공업", sectors: ["기계"] },
-    { key: "elec", icon: "🔌", name: "전기장비·전자부품", sectors: ["전기장비", "전기제품", "전자장비와기기", "전자제품"] },
+    { key: "elec", icon: "🔌", name: "전기장비·전자부품", sectors: ["전기장비", "전기제품", "전자장비와기기", "전자제품", "사무용전자제품"] },
     { key: "indsvc", icon: "🏢", name: "복합·산업서비스", sectors: ["복합기업", "상업서비스와공급품"] },
-    { key: "transport", icon: "🚚", name: "운송·항공", sectors: ["항공사", "항공화물운송과물류", "운송인프라"] },
+    { key: "transport", icon: "🚚", name: "운송·항공", sectors: ["항공사", "항공화물운송과물류", "운송인프라", "도로와철도운송"] },
   ] },
 };
 const CHAIN_ORDER = ["semi", "battery", "auto", "bio", "display", "defense", "ship", "chem", "energy", "machinery", "construction", "internet", "finance", "consumer"];
@@ -1785,8 +1786,13 @@ const CHAIN_SECTORS = {
   "양방향미디어와서비스": "internet", "광고": "internet", "IT서비스": "internet", "소프트웨어": "internet", "통신장비": "internet", "핸드셋": "internet", "인터넷과카탈로그소매": "internet",
   "은행": "finance", "증권": "finance", "손해보험": "finance", "생명보험": "finance", "창업투자": "finance",
   "백화점과일반상점": "consumer", "식품": "consumer", "화장품": "consumer", "섬유,의류,신발,호화품": "consumer", "담배": "consumer", "무역회사와판매업체": "consumer", "호텔,레스토랑,레저": "consumer", "가정용기기와용품": "consumer",
-  "석유와가스": "energy", "에너지장비및서비스": "energy", "전기유틸리티": "energy",
-  "기계": "machinery", "전기장비": "machinery", "전기제품": "machinery", "전자장비와기기": "machinery", "전자제품": "machinery", "복합기업": "machinery", "상업서비스와공급품": "machinery", "항공사": "machinery", "항공화물운송과물류": "machinery", "운송인프라": "machinery",
+  "석유와가스": "energy", "에너지장비및서비스": "energy", "전기유틸리티": "energy", "가스유틸리티": "energy", "복합유틸리티": "energy",
+  "기계": "machinery", "전기장비": "machinery", "전기제품": "machinery", "전자장비와기기": "machinery", "전자제품": "machinery", "사무용전자제품": "machinery", "복합기업": "machinery", "상업서비스와공급품": "machinery", "항공사": "machinery", "항공화물운송과물류": "machinery", "운송인프라": "machinery", "도로와철도운송": "machinery",
+  // 종목조회(heatmap 밖) 추가 업종 — 매핑 완결용
+  "부동산": "construction", "포장재": "chem", "종이와목재": "chem",
+  "음료": "consumer", "가구": "consumer", "식품과기본식료품소매": "consumer", "판매업체": "consumer", "레저용장비와제품": "consumer", "교육서비스": "consumer",
+  "건강관리업체및서비스": "bio", "건강관리기술": "bio",
+  "카드": "finance", "기타금융": "finance",
 };
 // 단계 codes 산출: codes(직접) 또는 sectors(네이버 업종 동적)
 function scrStageCodes(st) {
@@ -1806,6 +1812,80 @@ function scrChainAllStages(indKey) {
   const etc = scrIndustryEtc(indKey);
   if (etc.length) base.push({ key: "_etc", icon: "📁", name: "그 외", desc: "해당 산업 내 기타", _codes: etc });
   return base;
+}
+// 종목 → 산업/밸류체인 링크 (종목조회 표시용, 티커+업종 기반 · heatmap 비의존)
+function stockChainLinks(mk, tk, sector) {
+  if (mk !== "kr" || !sector) return [];
+  const res = [], seen = new Set();
+  CHAIN_ORDER.forEach((ind) => {
+    CHAINS[ind].stages.forEach((st) => {
+      const inCodes = st.codes && st.codes.includes(tk);
+      const inSectors = st.sectors && st.sectors.includes(sector) && CHAIN_SECTORS[sector] === ind;
+      if (inCodes || inSectors) {
+        const k = ind + "/" + st.key;
+        if (!seen.has(k)) { seen.add(k); res.push({ ind, indName: CHAINS[ind].name, indIcon: CHAINS[ind].icon, stageKey: st.key, stage: st.name, stageIcon: st.icon }); }
+      }
+    });
+  });
+  if (!res.length) {
+    const ind = CHAIN_SECTORS[sector];
+    if (ind) res.push({ ind, indName: CHAINS[ind].name, indIcon: CHAINS[ind].icon, stageKey: "_etc", stage: "그 외", stageIcon: "📁" });
+  }
+  return res;
+}
+// 미국 GICS 영문 업종 → 한글(종목파일 profile은 영문, heatmap은 한글)
+const US_SECTOR_KO = { "Technology": "기술", "Communication Services": "커뮤니케이션", "Consumer Cyclical": "임의소비재",
+  "Consumer Defensive": "필수소비재", "Financial Services": "금융", "Healthcare": "헬스케어", "Industrials": "산업재",
+  "Energy": "에너지", "Utilities": "유틸리티", "Real Estate": "부동산", "Basic Materials": "소재" };
+// 미국 GICS 업종 → 대분류 그룹
+function stockGroupLink(sector) {
+  if (!sector) return null;
+  const gk = scrGroupOf(sector);
+  const g = [...SCR_GROUPS, SCR_GROUP_ETC].find((x) => x.key === gk);
+  return g ? { key: gk, name: g.name, icon: g.icon } : null;
+}
+// 종목조회 → 주식찾기 밸류체인으로 이동(국내)
+function scrOpenFromChain(ind, stageKey) {
+  gotoTabFull("screener");
+  if (!screenerRendered) initScreener();
+  scrState.country = "kr";
+  document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === "kr"));
+  scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
+  buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
+  scrChainIndustry = ind; scrChainSel.clear();
+  if (stageKey) scrChainSel.add(stageKey);
+  renderScrChain(); renderScreener();
+}
+// 종목조회 → 주식찾기 미국 업종필터로 이동
+function scrOpenFromGroupUS(gk, sector) {
+  gotoTabFull("screener");
+  if (!screenerRendered) initScreener();
+  scrState.country = "us";
+  document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === "us"));
+  scrState.sectors = sector ? new Set([sector]) : null; scrOpenGroup = gk;
+  scrChainIndustry = null; scrChainSel.clear();
+  buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
+  renderScrChain(); renderScreener();
+}
+function renderLookupIndustry(st) {
+  const host = $("#lookup-industry"); if (!host) return;
+  const tileSec = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.sector;
+  if (st.market === "kr") {
+    const sector = st.profile?.sector || tileSec || null;
+    const links = stockChainLinks("kr", st.ticker, sector);
+    if (!links.length) { host.style.display = "none"; return; }
+    host.style.display = "";
+    host.innerHTML = `<span class="lk-ind-label">🏭 산업·밸류체인</span>` + links.map((l) =>
+      `<button class="lk-ind-badge" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.indIcon} ${l.indName}<span class="lk-ind-arrow">›</span>${l.stageIcon} ${l.stage}</button>`).join("");
+    host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => scrOpenFromChain(b.dataset.ind, b.dataset.stage));
+  } else {
+    let sector = tileSec || US_SECTOR_KO[st.profile?.sector] || st.profile?.sector || null;  // 한글 업종 우선
+    const g = stockGroupLink(sector);
+    if (!g) { host.style.display = "none"; return; }
+    host.style.display = "";
+    host.innerHTML = `<span class="lk-ind-label">🏭 업종</span><button class="lk-ind-badge" data-us="${g.key}">${g.icon} ${g.name}${sector ? ` <span class="sub-note">(${sector})</span>` : ""}</button>`;
+    host.querySelector(".lk-ind-badge").onclick = () => scrOpenFromGroupUS(g.key, sector);
+  }
 }
 let scrChainIndustry = null;    // 선택된 산업 key
 const scrChainSel = new Set();  // 선택된 단계 key (현 산업 내)

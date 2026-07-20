@@ -506,6 +506,14 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   .scr-stage { min-width: 0; flex: 1 1 28%; }
   .scr-arrow { display: none; }
 }
+/* 종목조회 산업·밸류체인 배지 */
+.lk-industry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.lk-ind-label { font-size: .82rem; font-weight: 700; color: var(--muted); }
+.lk-ind-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; font-weight: 600;
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg);
+  cursor: pointer; color: var(--ink); }
+.lk-ind-badge:hover { border-color: #2563eb; color: #2563eb; }
+.lk-ind-arrow { color: var(--muted); margin: 0 2px; }
 /* 테마 프리셋 */
 .scr-themes-wrap { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .scr-themes-head { font-weight: 700; font-size: .88rem; margin-bottom: 8px; }
