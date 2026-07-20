@@ -1593,7 +1593,7 @@ function initScreener() {
     scrState.country = b.dataset.c;
     scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
     $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = "";
-    buildScrSectors(); buildScrTiers(); setScrUnitLabel();
+    buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
     renderScreener();
   });
   // 시총 직접 입력
@@ -1616,7 +1616,7 @@ function initScreener() {
 
   const cc = $("#scr-chain-clear");
   if (cc) cc.onclick = () => { scrChainSel.clear(); renderScrChain(); renderScreener(); };
-  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); renderScrChain(); renderScrMetrics(); renderScreener();
+  setScrUnitLabel(); buildScrSectors(); buildScrTiers(); scrSyncFilterVisibility(); renderScrChain(); renderScrMetrics(); renderScreener();
   // 세부 지표는 company.json(연도별 재무) 로드 후 활성화
   loadExtras().then(() => { scrBuildVals(); const n = $("#scr-detail-note"); if (n) n.style.display = "none"; renderScreener(); });
 }
@@ -1716,14 +1716,62 @@ const CHAINS = {
     { key: "retail", icon: "🛍️", name: "유통·리테일", desc: "백화점·마트·편의점", codes: ["004170", "023530", "069960", "139480", "282330", "047050"] },
     { key: "fashion", icon: "👕", name: "패션·레저", desc: "의류·호텔·레저", codes: ["111770", "081660", "035250", "034230", "032350", "008770"] },
   ] },
+  // 아래 2개 산업 + 각 산업 '그 외'로 국내 전 종목 100% 커버. stages는 sectors(네이버 업종)로 동적 산출 가능.
+  energy: { name: "에너지·유틸리티", icon: "⛽", flow: false, stages: [
+    { key: "oil", icon: "🛢️", name: "정유·석유", sectors: ["석유와가스"] },
+    { key: "eequip", icon: "⚙️", name: "에너지 장비·서비스", sectors: ["에너지장비및서비스"] },
+    { key: "util", icon: "💡", name: "전력·유틸리티", sectors: ["전기유틸리티"] },
+  ] },
+  machinery: { name: "산업재·기계·운송", icon: "🏭", flow: false, stages: [
+    { key: "machine", icon: "⚙️", name: "기계·중공업", sectors: ["기계"] },
+    { key: "elec", icon: "🔌", name: "전기장비·전자부품", sectors: ["전기장비", "전기제품", "전자장비와기기", "전자제품"] },
+    { key: "indsvc", icon: "🏢", name: "복합·산업서비스", sectors: ["복합기업", "상업서비스와공급품"] },
+    { key: "transport", icon: "🚚", name: "운송·항공", sectors: ["항공사", "항공화물운송과물류", "운송인프라"] },
+  ] },
 };
-const CHAIN_ORDER = ["semi", "battery", "auto", "bio", "display", "defense", "ship", "chem", "construction", "internet", "finance", "consumer"];
+const CHAIN_ORDER = ["semi", "battery", "auto", "bio", "display", "defense", "ship", "chem", "energy", "machinery", "construction", "internet", "finance", "consumer"];
+// 네이버 업종 → 밸류체인 산업(그 외 단계 산출용 파티션). 국내 전 업종 배정.
+const CHAIN_SECTORS = {
+  "반도체와반도체장비": "semi", "디스플레이장비및부품": "semi",
+  "디스플레이패널": "display",
+  "자동차": "auto", "자동차부품": "auto",
+  "제약": "bio", "생물공학": "bio", "건강관리장비와용품": "bio", "생명과학도구및서비스": "bio",
+  "조선": "ship", "해운사": "ship",
+  "우주항공과국방": "defense",
+  "화학": "chem", "철강": "chem", "비철금속": "chem",
+  "건설": "construction", "건축자재": "construction",
+  "방송과엔터테인먼트": "internet", "게임엔터테인먼트": "internet", "무선통신서비스": "internet", "다각화된통신서비스": "internet",
+  "양방향미디어와서비스": "internet", "광고": "internet", "IT서비스": "internet", "소프트웨어": "internet", "통신장비": "internet", "핸드셋": "internet", "인터넷과카탈로그소매": "internet",
+  "은행": "finance", "증권": "finance", "손해보험": "finance", "생명보험": "finance", "창업투자": "finance",
+  "백화점과일반상점": "consumer", "식품": "consumer", "화장품": "consumer", "섬유,의류,신발,호화품": "consumer", "담배": "consumer", "무역회사와판매업체": "consumer", "호텔,레스토랑,레저": "consumer", "가정용기기와용품": "consumer",
+  "석유와가스": "energy", "에너지장비및서비스": "energy", "전기유틸리티": "energy",
+  "기계": "machinery", "전기장비": "machinery", "전기제품": "machinery", "전자장비와기기": "machinery", "전자제품": "machinery", "복합기업": "machinery", "상업서비스와공급품": "machinery", "항공사": "machinery", "항공화물운송과물류": "machinery", "운송인프라": "machinery",
+};
+// 단계 codes 산출: codes(직접) 또는 sectors(네이버 업종 동적)
+function scrStageCodes(st) {
+  if (st.codes) return st.codes;
+  if (st.sectors) return ((MARKET && MARKET.heatmap) || []).filter((t) => t.m === "kr" && st.sectors.includes(t.sector)).map((t) => t.t);
+  return [];
+}
+// 산업 내 '그 외' = 해당 산업 업종인데 어느 단계에도 없는 국내 종목
+function scrIndustryEtc(indKey) {
+  const used = new Set();
+  CHAINS[indKey].stages.forEach((st) => scrStageCodes(st).forEach((c) => used.add(c)));
+  return ((MARKET && MARKET.heatmap) || []).filter((t) => t.m === "kr" && CHAIN_SECTORS[t.sector] === indKey && !used.has(t.t)).map((t) => t.t);
+}
+// 산업의 전체 단계(큐레이션 + '그 외'), 각 단계에 _codes 부여
+function scrChainAllStages(indKey) {
+  const base = CHAINS[indKey].stages.map((st) => ({ ...st, _codes: scrStageCodes(st) }));
+  const etc = scrIndustryEtc(indKey);
+  if (etc.length) base.push({ key: "_etc", icon: "📁", name: "그 외", desc: "해당 산업 내 기타", _codes: etc });
+  return base;
+}
 let scrChainIndustry = null;    // 선택된 산업 key
 const scrChainSel = new Set();  // 선택된 단계 key (현 산업 내)
 function scrChainKeys() {
   const s = new Set();
   if (!scrChainIndustry) return s;
-  CHAINS[scrChainIndustry].stages.forEach((st) => { if (scrChainSel.has(st.key)) st.codes.forEach((c) => s.add("kr_" + c)); });
+  scrChainAllStages(scrChainIndustry).forEach((st) => { if (scrChainSel.has(st.key)) st._codes.forEach((c) => s.add("kr_" + c)); });
   return s;
 }
 function renderScrChain() {
@@ -1739,10 +1787,6 @@ function renderScrChain() {
     const k = b.dataset.ind;
     scrChainSel.clear();
     scrChainIndustry = (scrChainIndustry === k) ? null : k;
-    if (scrChainIndustry && scrState.country === "us") {  // 밸류체인은 국내 → 미국이면 전체로 전환
-      scrState.country = ""; document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === ""));
-      scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); buildScrTiers(); setScrUnitLabel();
-    }
     renderScrChain(); renderScreener();
   });
   // 단계 플로우
@@ -1750,8 +1794,9 @@ function renderScrChain() {
     flowHost.innerHTML = `<span class="sub-note">위에서 산업을 선택하면 밸류체인 단계가 표시됩니다.</span>`;
   } else {
     const c = CHAINS[scrChainIndustry];
-    flowHost.innerHTML = c.stages.map((st, i) => {
-      const n = st.codes.filter((x) => uni.has("kr_" + x)).length;
+    const stages = scrChainAllStages(scrChainIndustry);
+    flowHost.innerHTML = stages.map((st, i) => {
+      const n = st._codes.filter((x) => uni.has("kr_" + x)).length;
       const arrow = (c.flow && i) ? '<span class="scr-arrow">›</span>' : "";
       return `${arrow}<button class="scr-stage ${scrChainSel.has(st.key) ? "on" : ""}" data-k="${st.key}" title="${st.desc || ""}"><span class="scr-si">${st.icon}</span><span class="scr-sn">${st.name}</span><span class="scr-sc">${n}</span></button>`;
     }).join("");
@@ -1766,7 +1811,7 @@ function renderScrChain() {
 
 function buildScrSectors() {
   const host = $("#scr-sectors");
-  const secs = scrSectorsFor(scrState.country);          // [name, n]
+  const secs = scrSectorsFor("us");          // 산업(업종)필터는 미국 전용 → 미국 GICS 업종만
   const byG = {};
   secs.forEach(([nm, n]) => { const k = scrGroupOf(nm); (byG[k] = byG[k] || { subs: [], total: 0 }); byG[k].subs.push([nm, n]); byG[k].total += n; });
   const metaMap = Object.fromEntries([...SCR_GROUPS, SCR_GROUP_ETC].map((g) => [g.key, g]));
@@ -1808,8 +1853,15 @@ function buildScrSectors() {
 }
 function updateScrSecCount() {
   const n = scrState.sectors ? scrState.sectors.size : 0;
-  const total = scrSectorsFor(scrState.country).length;
-  $("#scr-sec-count").textContent = n ? `${n}개 세부산업 선택` : `전체 산업 (세부 ${total})`;
+  const total = scrSectorsFor("us").length;
+  $("#scr-sec-count").textContent = n ? `${n}개 업종 선택` : `전체 업종 (${total})`;
+}
+// 국가에 따라 필터 UI 전환: 한국=밸류체인만 / 미국=산업(업종)필터만 / 전체=둘 다
+function scrSyncFilterVisibility() {
+  const c = scrState.country;
+  const chainCard = $("#scr-chain-card"), secRow = $("#scr-sector-row");
+  if (chainCard) chainCard.style.display = (c === "us") ? "none" : "";
+  if (secRow) secRow.style.display = (c === "kr") ? "none" : "";
 }
 
 function buildScrTiers() {
@@ -1869,8 +1921,8 @@ function renderScreener() {
   const useDetail = scrValsReady && active.length > 0;
   const chainKeys = (scrChainIndustry && scrChainSel.size) ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
   let rows = scrPool().filter((t) => {
-    if (chainKeys && !chainKeys.has(t.m + "_" + t.t)) return false;
-    if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
+    if (chainKeys && t.m === "kr" && !chainKeys.has(t.m + "_" + t.t)) return false;  // 밸류체인=국내만
+    if (scrState.sectors && t.m === "us" && !scrState.sectors.has(t.sector)) return false;  // 산업(업종)필터=미국만
     const v = scrMcapVal(t);
     if (scrState.min != null && v < scrState.min) return false;
     if (scrState.max != null && v > scrState.max) return false;
