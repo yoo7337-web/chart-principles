@@ -182,7 +182,9 @@ def main():
 
     print("[1/4] Breadth 시계열...")
     from common import core_data
-    data = core_data(load_research())  # 시장 내부지표는 ≥750일 대형주 코어만
+    # ⚠load_research()는 클라우드(2년 캐시)에서 항상 빈 결과 → 크래시(2026-07-20 사고). 이 스크립트는
+    # refresh.yml 30분 클라우드 루프에 포함되므로 market_dash와 동일하게 유동성 코어만 사용.
+    data = core_data(load_all())
     breadth = breadth_series(data)
 
     print("[2/4] 섹터 로테이션...")
