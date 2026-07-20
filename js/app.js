@@ -1059,8 +1059,9 @@ function drawLookupChart() {
   const maxAbs = Math.max(1, ...s.map((x) => Math.abs(x.h ?? x.c ?? 0)));
   const worstLen = Math.round(maxAbs).toString().length + 3;  // 정수부 + ".00" (기본포맷 상한)
   const psW = Math.max(60, 16 + Math.max(worstLen, fmtPx(maxAbs).length) * 7.5);
-  // 마지막 봉 오른쪽에 ~3개월(봉단위) 미래 여백 → 추세선을 미래로 연장해 그릴 수 있음. 전 패널 동일 적용해 정렬 유지.
-  const rOff = ({ d: 63, w: 13, m: 3 })[tf] || 0;
+  // 초기 뷰는 오른쪽 공백 없음(rightOffset 0 → 마지막 봉이 우측 끝). 미래에 그림 그리려면 우측으로 스크롤하면
+  // 빈 공간이 나타남(fixRightEdge 기본 false). 전 패널 동일 적용해 정렬 유지.
+  const rOff = 0;
   const opts = baseChartOpts(el, 420);
   opts.rightPriceScale = { ...opts.rightPriceScale, minimumWidth: psW };
   opts.timeScale = { ...(opts.timeScale || {}), rightOffset: rOff };
