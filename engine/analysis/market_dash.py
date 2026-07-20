@@ -236,9 +236,23 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
         mcap = float(meta.get("mcap") or 0)
         if mcap <= 0:  # 폴백: 최근 거래대금 규모
             mcap = float((df["close"] * df["volume"]).tail(20).mean())
+        # 모멘텀: c5=5거래일(≈1주) 수익률, up=최근 연속 상승일 수 (주식찾기 테마용)
+        c5, up = None, 0
+        try:
+            cl = df["close"].dropna().tolist()
+            if len(cl) >= 6 and cl[-6]:
+                c5 = round(cl[-1] / cl[-6] - 1, 4)
+            for i in range(len(cl) - 1, 0, -1):
+                if cl[i] > cl[i - 1]:
+                    up += 1
+                else:
+                    break
+        except Exception:
+            pass
         tiles.append({
             "m": mk, "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
             "sector": sector, "mcap": mcap, "chg": round(chg_map.get((mk, tk), 0.0), 4),
+            "c5": c5, "up": up,
         })
     return tiles
 
