@@ -957,7 +957,12 @@ function initLookup() {
 
 function loadLookup(key) {
   fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => {
-    if (!st) return;
+    if (!st) {  // 유니버스엔 있으나 종목 파일이 아직 없음(주1 갱신 지연) — 안내만
+      const h = document.getElementById("lookup-head");
+      if (h) { h.style.display = ""; h.innerHTML = `<div class="lk-title"><div class="lk-name">데이터 준비 중 <span class="sub-note">이 종목은 곧 수집 예정입니다</span></div></div>`; }
+      const ind = document.getElementById("lookup-industry"); if (ind) ind.style.display = "none";
+      return;
+    }
     LOOKUP_ST = st;
     ["lookup-info", "lookup-chart", "lookup-legend", "lookup-stats-title", "lookup-stats-wrap",
      "lookup-rule-wrap", "lookup-filter", "lookup-profile", "draw-tools"]
@@ -3303,10 +3308,11 @@ function renderLookupHead(st) {
   const { cur, chg, src } = freshQuote(st);
   const up = (chg ?? 0) >= 0;
   const col = chg == null ? "" : (up ? "#d93036" : "#1e63e0");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
+  const shortBadge = st.short_history ? `<span class="lk-short-badge">이력 부족 · 원칙 검증 제외</span>` : "";
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
-      <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span></div>
+      <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span>${shortBadge}</div>
       <div class="lk-price"><span${col ? ` style="color:${col}"` : ""}>${fmtPrice(cur, st.market)}${chg != null ? ` ${up ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>
         <span class="sub-note">${src}</span></div>
     </div>`;
