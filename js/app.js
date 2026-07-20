@@ -1575,6 +1575,20 @@ const SCR_THEMES = [
     conds: [{ m: "payout", min: 30 }, { m: "div_pay", min: 3 }, { m: "net_streak", min: 2 }] },
   { id: "cashcow", name: "🏆 돈 잘버는 회사", desc: "영업이익률 20%↑ + ROE 15%↑ (매출총이익률 미수집→영업이익률 대체)",
     conds: [{ m: "opm", min: 20 }, { m: "roe", min: 15 }] },
+  { id: "turnaround", name: "🔄 실적 턴어라운드", desc: "순이익 흑자 + 순이익 증감률 30%↑ (적자탈출·급반등)",
+    conds: [{ m: "npm", gt: 0 }, { m: "net_yoy", min: 30 }] },
+  { id: "quality", name: "🏰 재무 우량주", desc: "부채비율 50% 미만 + ROE 10%↑ + 영업이익 흑자",
+    conds: [{ m: "debt", max: 50 }, { m: "roe", min: 10 }, { m: "opm", gt: 0 }] },
+  { id: "highdiv", name: "💵 고배당 안정주", desc: "배당수익률 4%↑ + 부채비율 100% 미만 + 순이익 흑자",
+    conds: [{ m: "dyield", min: 4 }, { m: "debt", max: 100 }, { m: "npm", gt: 0 }] },
+  { id: "earnmom", name: "📈 이익 모멘텀 성장주", desc: "매출 증감률 15%↑ + 영업이익 증감률 15%↑ (외형·수익 동반성장)",
+    conds: [{ m: "rev_yoy", min: 15 }, { m: "op_yoy", min: 15 }] },
+  { id: "deepvalue", name: "🩸 초저평가 자산주", desc: "PBR 1배 미만 + PER 10배 미만 + 순이익 흑자",
+    conds: [{ m: "pbr", min: 0, max: 1 }, { m: "per", min: 0, max: 10 }, { m: "npm", gt: 0 }] },
+  { id: "rebound", name: "⚡ 낙폭과대 반등후보", desc: "1주간 하락(주간수익률<0) + 최근 2일+ 상승 전환",
+    conds: [{ m: "c5", max: 0 }, { m: "upstreak", min: 2 }] },
+  { id: "intcov_us", name: "🛡️ 이자보상 우량주(미국)", desc: "이자보상배율 5배↑ + ROE 15%↑ (이자보상배율은 미국 종목만 제공)",
+    conds: [{ m: "intcov", min: 5 }, { m: "roe", min: 15 }] },
 ];
 let scrThemeActive = null;
 function scrCondMatch(c, v) {
