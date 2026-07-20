@@ -23,7 +23,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import load_all, norm_ohlcv
+from collect import load_all, load_research, norm_ohlcv
 from common import dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
@@ -115,7 +115,7 @@ def main():
     print(f"보유종목 {len(holdings)}개 로드")
 
     # 현재 국면은 유니버스 캐시로 판정 (보유종목 데이터와 무관)
-    reg = regime_map(load_all())
+    reg = regime_map(load_research())  # 국면 판정 ≥750일 유지
     cur = {mk: (str(r[r != "na"].iloc[-1]) if len(r[r != "na"]) else "neutral")
            for mk, r in reg.items()}
 

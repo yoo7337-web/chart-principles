@@ -21,7 +21,7 @@ from scipy import stats as sps
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import backtest
-from collect import load_all
+from collect import load_all, load_research
 from regimes import DN, UP, WIN, periods, regime_map
 from rules import ALL_RULES
 
@@ -93,7 +93,7 @@ def pct(x, d=2):
 
 def main():
     print("[1/4] 데이터 로드 & 레짐 분류...")
-    data = load_all()
+    data = load_research()  # 국면 리포트 ≥750일 유지
     reg = regime_map(data)
     shares = {mk: reg[mk].value_counts(normalize=True).round(3).to_dict() for mk in reg}
     print(f"  국면 비중: {shares}")

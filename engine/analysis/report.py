@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import backtest
 import validate
-from collect import load_all
+from collect import load_all, load_research
 from indicators import add_indicators
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -165,7 +165,7 @@ def write_report(res: pd.DataFrame, n_kr: int, n_us: int, n_events: int):
 def main():
     print("[1/4] 데이터 로드...")
     from common import core_data
-    data = core_data(load_all())  # 원칙 검증은 대형주 코어만(메서드론 유지)
+    data = core_data(load_research())  # 원칙 검증은 ≥750일 대형주 코어만(메서드론 유지)
     n_kr = sum(1 for k in data if k[0] == "kr")
     n_us = sum(1 for k in data if k[0] == "us")
     print(f"  한국 {n_kr} + 미국 {n_us} = {len(data)}종목")

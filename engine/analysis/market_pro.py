@@ -18,7 +18,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import DATA_DIR, load_all
+from collect import DATA_DIR, load_all, load_research
 from common import APP_DATA, ROOT
 
 KST = timezone(timedelta(hours=9))  # 클라우드 러너=UTC 대응
@@ -182,7 +182,7 @@ def main():
 
     print("[1/4] Breadth 시계열...")
     from common import core_data
-    data = core_data(load_all())  # 분석은 대형주 코어만
+    data = core_data(load_research())  # 시장 내부지표는 ≥750일 대형주 코어만
     breadth = breadth_series(data)
 
     print("[2/4] 섹터 로테이션...")

@@ -16,7 +16,8 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 START = "2016-01-01"
-MIN_ROWS = 750  # 3년 미만 데이터 종목 제외
+MIN_ROWS = 750  # 원칙 연구 게이트(≥3년) — load_research()에서 적용
+MIN_ROWS_COLLECT = 20  # 수집 바닥값 — 신규상장·소형주도 수집(주식찾기·마켓현황·종목조회용). c5는 ≥6행 필요
 
 # 미국 대형주 100 (S&P500 시총 상위 + 나스닥 대표주, 2026 기준 고정 리스트)
 US_TICKERS = [
@@ -126,7 +127,7 @@ def collect_kr(quick: bool, force: bool) -> int:
             raw = raw.rename(columns={"시가": "open", "고가": "high", "저가": "low",
                                       "종가": "close", "거래량": "volume"})
             df = norm_ohlcv(raw)
-            if len(df) < MIN_ROWS:
+            if len(df) < MIN_ROWS_COLLECT:  # 수집 바닥값(원칙 게이트는 load_research에서)
                 continue
             df.to_parquet(path)
             ok += 1
@@ -175,6 +176,12 @@ def load_all() -> dict:
         market, ticker = p.stem.split("_", 1)
         out[(market, ticker)] = pd.read_parquet(p)
     return out
+
+
+def load_research(min_rows: int = MIN_ROWS) -> dict:
+    """원칙 연구용 로드 — 이력 부족(<750행) 종목 제외. load_all()의 부분집합.
+    (results/regimes/apply/simulation/오늘의신호 등 10년 귀납검증은 이 게이트 유지)"""
+    return {k: v for k, v in load_all().items() if len(v) >= min_rows}
 
 
 def _append_new(path: Path, new: pd.DataFrame) -> int:
@@ -253,7 +260,7 @@ def collect_cloud() -> None:
     start_kr = (_date.today() - timedelta(days=760)).strftime("%Y%m%d")  # ~2년(지표 여유)
     start_us = (_date.today() - timedelta(days=760)).strftime("%Y-%m-%d")
     today = _date.today().strftime("%Y%m%d")
-    names = kr_universe(kospi_n=300, kosdaq_n=150)
+    names = kr_universe(kospi_n=500, kosdaq_n=300)  # 1단계 800 전체(주식찾기·마켓현황용)
 
     # US
     todo = [t for t in US_TICKERS if not cache_fresh(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")]
@@ -282,7 +289,7 @@ def collect_cloud() -> None:
             raw = raw.rename(columns={"시가": "open", "고가": "high", "저가": "low",
                                       "종가": "close", "거래량": "volume"})
             df = norm_ohlcv(raw)
-            if len(df) >= 200:
+            if len(df) >= MIN_ROWS_COLLECT:  # 수집 바닥값(신규상장 포함)
                 df.to_parquet(path)
                 ok += 1
         except Exception as e:

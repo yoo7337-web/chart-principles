@@ -14,7 +14,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import load_all
+from collect import load_all, load_research
 from common import APP_DATA, ROOT, dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
@@ -24,7 +24,7 @@ LOOKBACK = 3  # 최근 N영업일 신호만
 
 def main():
     ruleset = load_ruleset()
-    data = load_all()
+    data = load_research()  # 오늘의 신호 ≥750일 유지
     names_path = ROOT / "data" / "kr_names.json"
     kr_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {}
 

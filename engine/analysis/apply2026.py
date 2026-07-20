@@ -14,7 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import load_all
+from collect import load_all, load_research
 from indicators import add_indicators
 from rules import ALL_RULES
 
@@ -31,7 +31,7 @@ def main():
     hist = {r["rule_id"]: r for r in results["rules"]}
     kr_names = results.get("kr_names", {})
 
-    data = load_all()
+    data = load_research()  # 원칙 실전검증 ≥750일 유지
 
     # --- 대상 선정: 2026년 평균 거래대금 상위 TOP_N (시장별) ---
     liq = {}

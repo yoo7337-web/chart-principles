@@ -51,9 +51,9 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from collect import load_all
+    from collect import load_research
 
-    data = load_all()
+    data = load_research()  # 국면 분류 ≥750일 유지
     for mk, reg in regime_map(data).items():
         share = reg.value_counts(normalize=True).round(3).to_dict()
         print(f"[{mk}] 비중: {share}")

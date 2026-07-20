@@ -133,26 +133,28 @@ def main():
         } for ts, x in zip(w.index, w.itertuples())]  # 지표 컬럼은 프런트 taEnrich()가 재계산
 
         markers, stats = [], []
-        for rid, entry in ruleset.items():
-            rule = entry["rule"]
-            try:
-                sig = rule.fn(d).to_numpy()
-            except Exception:
-                continue
-            pos = dedupe_positions(sig)
-            # 10년 성적 (판정 가능한 신호만)
-            rets = [float(fwd.iloc[p]) for p in pos if not np.isnan(fwd.iloc[p])]
-            if rets:
-                wins = sum(1 for r in rets if (r > 0 if rule.side == "buy" else r < 0))
-                stats.append({"rule_id": rid, "name": rule.name, "side": rule.side,
-                              "scope": entry["scope"], "n": len(rets),
-                              "win": round(wins / len(rets), 3),
-                              "avg_fwd20": round(float(np.mean(rets)), 4)})
-            # 차트 구간 신호 마커
-            for p in pos:
-                if p >= cut:
-                    markers.append({"t": d.index[p].strftime("%Y-%m-%d"),
-                                    "rule_id": rid, "name": rule.name, "side": rule.side})
+        short_history = len(d) < 750  # 이력 3년 미만 → 원칙 검증 제외(배열은 항상 [] 방출)
+        if not short_history:
+            for rid, entry in ruleset.items():
+                rule = entry["rule"]
+                try:
+                    sig = rule.fn(d).to_numpy()
+                except Exception:
+                    continue
+                pos = dedupe_positions(sig)
+                # 10년 성적 (판정 가능한 신호만)
+                rets = [float(fwd.iloc[p]) for p in pos if not np.isnan(fwd.iloc[p])]
+                if rets:
+                    wins = sum(1 for r in rets if (r > 0 if rule.side == "buy" else r < 0))
+                    stats.append({"rule_id": rid, "name": rule.name, "side": rule.side,
+                                  "scope": entry["scope"], "n": len(rets),
+                                  "win": round(wins / len(rets), 3),
+                                  "avg_fwd20": round(float(np.mean(rets)), 4)})
+                # 차트 구간 신호 마커
+                for p in pos:
+                    if p >= cut:
+                        markers.append({"t": d.index[p].strftime("%Y-%m-%d"),
+                                        "rule_id": rid, "name": rule.name, "side": rule.side})
 
         supply_series, supply_sum = build_supply(mk, tk, raw)
         payload = {
@@ -163,6 +165,7 @@ def main():
             "series": series, "markers": sorted(markers, key=lambda x: x["t"]),
             "stats": sorted(stats, key=lambda x: -x["n"]),
             "supply": supply_series, "supply_sum": supply_sum,
+            "short_history": short_history,  # True면 종목조회에 '이력 부족·원칙 검증 제외' 배지
         }
         (OUT_DIR / f"{mk}_{tk}.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8")

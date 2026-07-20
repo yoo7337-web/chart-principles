@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import load_all
+from collect import load_all, load_research
 from common import APP_DATA, dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
@@ -48,7 +48,7 @@ def main():
     buy_ids = [rid for rid, e in ruleset.items() if e["rule"].side == "buy" and e["scope"] == "general"]
     sell_ids = [rid for rid, e in ruleset.items() if e["rule"].side == "sell" and e["scope"] == "general"]
 
-    data = load_all()
+    data = load_research()  # 기계매매 시뮬레이션 ≥750일 유지
     keys = sorted(data)
     print(f"[1/3] 신호·수익률 준비 ({len(keys)}종목)...")
 

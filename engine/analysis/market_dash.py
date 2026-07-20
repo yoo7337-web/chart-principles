@@ -179,24 +179,25 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
     except Exception as e:
         print(f"  KR 업종 스크래핑 실패({e}) — '기타' 폴백", file=sys.stderr)
 
-    # --- KR 시총: 네이버 시가총액 페이지 read_html ---
-    try:
-        for page in range(1, 7):
-            url = f"https://finance.naver.com/sise/sise_market_sum.naver?sosok=0&page={page}"
-            html = get(url)
-            codes = re.findall(r'/item/main\.naver\?code=(\d{6})', html)
-            tables = pd.read_html(__import__("io").StringIO(html))
-            df = max(tables, key=len)
-            mcaps = df["시가총액"].dropna().tolist() if "시가총액" in df.columns else []
-            seen = list(dict.fromkeys(codes))
-            for code, mc in zip(seen, mcaps):
-                try:
-                    smap.setdefault(f"kr_{code}", {})["mcap"] = float(mc) * 1e8  # 억원→원
-                except Exception:
-                    pass
-            time.sleep(0.2)
-    except Exception as e:
-        print(f"  KR 시총 파싱 실패({e}) — 거래대금 폴백", file=sys.stderr)
+    # --- KR 시총: 네이버 시가총액 페이지 read_html (코스피 1~10p ≈500 + 코스닥 1~6p ≈300) ---
+    for sosok, pages in ((0, 10), (1, 6)):  # sosok=0 코스피 / 1 코스닥
+        try:
+            for page in range(1, pages + 1):
+                url = f"https://finance.naver.com/sise/sise_market_sum.naver?sosok={sosok}&page={page}"
+                html = get(url)
+                codes = re.findall(r'/item/main\.naver\?code=(\d{6})', html)
+                tables = pd.read_html(__import__("io").StringIO(html))
+                df = max(tables, key=len)
+                mcaps = df["시가총액"].dropna().tolist() if "시가총액" in df.columns else []
+                seen = list(dict.fromkeys(codes))
+                for code, mc in zip(seen, mcaps):
+                    try:
+                        smap.setdefault(f"kr_{code}", {})["mcap"] = float(mc) * 1e8  # 억원→원
+                    except Exception:
+                        pass
+                time.sleep(0.2)
+        except Exception as e:
+            print(f"  KR 시총 파싱 실패(sosok={sosok}, {e}) — 거래대금 폴백", file=sys.stderr)
 
     # --- US: yfinance info (99종목, 1회성) ---
     import yfinance as yf
@@ -506,23 +507,30 @@ def main():
 
     print("[2/4] Breadth + 거래대금 급증...")
     from common import core_data
-    data = core_data(load_all())  # 분석은 대형주 코어만(히트맵 가독성·시장폭 대표성)
+    wide = load_all()  # 전체 확보분(주식찾기·마켓현황·종목조회) — 신규상장·소형주 포함
+    core = core_data({k: v for k, v in wide.items() if len(v) >= 750})  # 시장폭·국면은 대표성(≥750)
     names_path = ROOT / "data" / "kr_names.json"
     kr_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {}
-    breadth, hot, chg_map = compute_breadth(data, kr_names)
-    reg = regime_map(data)
+    breadth, hot, _ = compute_breadth(core, kr_names)  # 시장폭·급증은 코어 대상
+    reg = regime_map(core)
     regime = {mk: (str(r[r != "na"].iloc[-1]) if len(r[r != "na"]) else "neutral") for mk, r in reg.items()}
+    # 히트맵/홈 타일용 등락률은 전 종목 계산(단기이력 포함, ≥2행)
+    chg_wide = {}
+    for (mk, tk), df in wide.items():
+        c = df["close"]
+        if len(c) >= 2:
+            chg_wide[(mk, tk)] = float(c.iloc[-1] / c.iloc[-2] - 1)
 
     print("[3/4] 섹터 히트맵 + 홈(featured/movers) + 중앙은행/세계지수...")
-    smap = build_sector_map(data, kr_names)
-    heatmap = build_heatmap(data, kr_names, smap, chg_map)
-    featured, movers, quotes = build_home_extras(data, kr_names, smap, chg_map)
+    smap = build_sector_map(wide, kr_names)
+    heatmap = build_heatmap(wide, kr_names, smap, chg_wide)
+    featured, movers, quotes = build_home_extras(wide, kr_names, smap, chg_wide)
     cbanks = fetch_cbanks()
     world = fetch_world()
     print(f"  cbanks {len(cbanks)}행 · world {len(world)}지수")
 
     print("[4/4] 저장...")
-    asof = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
+    asof = max(df.index[-1] for df in core.values()).strftime("%Y-%m-%d")
     payload = {
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "asof": asof, "regime": regime,
