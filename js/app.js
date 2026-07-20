@@ -3302,12 +3302,12 @@ function renderLookupHead(st) {
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
   const { cur, chg, src } = freshQuote(st);
   const up = (chg ?? 0) >= 0;
+  const col = chg == null ? "" : (up ? "#d93036" : "#1e63e0");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
       <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span></div>
-      <div class="lk-price">${fmtPrice(cur, st.market)}
-        ${chg != null ? `<span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(chg, 2)}</span>` : ""}
+      <div class="lk-price"><span${col ? ` style="color:${col}"` : ""}>${fmtPrice(cur, st.market)}${chg != null ? ` ${up ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>
         <span class="sub-note">${src}</span></div>
     </div>`;
 }
