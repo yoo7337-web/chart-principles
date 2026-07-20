@@ -508,7 +508,9 @@ def main():
     print("[2/4] Breadth + 거래대금 급증...")
     from common import core_data
     wide = load_all()  # 전체 확보분(주식찾기·마켓현황·종목조회) — 신규상장·소형주 포함
-    core = core_data({k: v for k, v in wide.items() if len(v) >= 750})  # 시장폭·국면은 대표성(≥750)
+    # ⚠750일(원칙 연구) 필터는 여기 넣지 않음 — 클라우드는 2년치만 캐시하므로 core가 텅 비어 크래시함(2026-07-20 사고).
+    # 시장폭·국면은 core_data의 유동성 랭킹(코스피 상위300+US)만으로 충분 — load_research()는 리서치 스크립트 전용.
+    core = core_data(wide)  # 시장폭·국면은 유동성 코어(로컬10년/클라우드2년 모두 대응)
     names_path = ROOT / "data" / "kr_names.json"
     kr_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {}
     breadth, hot, _ = compute_breadth(core, kr_names)  # 시장폭·급증은 코어 대상
@@ -530,7 +532,7 @@ def main():
     print(f"  cbanks {len(cbanks)}행 · world {len(world)}지수")
 
     print("[4/4] 저장...")
-    asof = max(df.index[-1] for df in core.values()).strftime("%Y-%m-%d")
+    asof = max(df.index[-1] for df in wide.values()).strftime("%Y-%m-%d")  # wide는 항상 비어있지 않음(방어적)
     payload = {
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "asof": asof, "regime": regime,
