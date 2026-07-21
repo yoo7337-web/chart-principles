@@ -2335,7 +2335,7 @@ function renderHome() {
       hmZoomSector = null;
       $("#hm-back").style.display = "none";
       $("#home-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
-      renderIdxCards(); drawTreemap(); renderMovers();
+      renderIdxCards(); drawTreemap(); renderMovers(); renderRankings();
     };
   });
   $("#hm-back").onclick = () => {
@@ -2347,6 +2347,7 @@ function renderHome() {
   renderIdxCards();
   drawTreemap();
   renderMovers();
+  renderRankings();
   renderHomeNews();
 }
 
@@ -2417,6 +2418,60 @@ function renderMovers() {
 }
 
 // 주요 뉴스 미리보기 (뉴스 탭 데이터 재사용, 상위 5건)
+// 실시간 랭킹 (toss_market.json) — 홈 시장 토글(homeMk)에 연동. TOSSM 없으면 섹션 숨김.
+const RANK_CATS = [["amount", "거래대금"], ["volume", "거래량"], ["gainers", "급등"],
+                   ["losers", "급락"], ["toss", "🟦 토스 고객"]];
+let rankCat = "amount";
+
+function renderRankings() {
+  const wrap = $("#rank-wrap");
+  if (!wrap) return;
+  const rk = TOSSM?.rankings;
+  if (!rk) { wrap.style.display = "none"; return; }
+
+  // 현재 시장에서 제공되는 카테고리만 노출(미국은 거래량 랭킹 미수집)
+  const cats = RANK_CATS.filter(([k]) => rk[`${homeMk}_${k}`]?.rows?.length);
+  if (!cats.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  if (!cats.some(([k]) => k === rankCat)) rankCat = cats[0][0];
+
+  const g = rk[`${homeMk}_${rankCat}`];
+  $("#rank-note").textContent =
+    `(${g.duration === "realtime" ? "실시간" : "1일"} · ${TOSSM.generated} 수집 · 토스증권)`;
+
+  $("#rank-chips").innerHTML = cats.map(([k, lab]) =>
+    `<button class="chip${k === rankCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
+  $("#rank-chips").querySelectorAll(".chip").forEach((b) => {
+    b.onclick = () => { rankCat = b.dataset.cat; renderRankings(); };
+  });
+
+  $("#rank-list").innerHTML = g.rows.map((r) => {
+    const up = (r.chg ?? 0) >= 0;
+    const sub = rankCat === "volume"
+      ? `거래량 ${(r.volume || 0).toLocaleString()}주`
+      : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
+    return `<div class="mv-row" data-t="${r.t}">
+      <span class="mv-rank">${r.rank}</span>
+      <img class="mv-logo" src="${logoUrl(homeMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span>${r.halted ? ` <span class="rank-halt">거래정지</span>` : ""}<br>
+        <span class="mv-sub">${sub}</span></span>
+      <span class="mv-price">${fmtPrice(r.last, homeMk)}
+        <span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(r.chg, 1)}</span></span>
+    </div>`;
+  }).join("") || `<p class="mini-note">데이터 없음</p>`;
+
+  // 유니버스 안의 종목만 종목조회로 연결(밖이면 클릭 무시)
+  const uni = new Set((MARKET?.heatmap || []).filter((t) => t.m === homeMk).map((t) => t.t));
+  $("#rank-list").querySelectorAll(".mv-row").forEach((el) => {
+    if (!uni.has(el.dataset.t)) { el.classList.add("mv-row-flat"); return; }
+    el.onclick = () => {
+      gotoTabFull("lookup");
+      if (!lookupRendered) initLookup();
+      loadLookup(`${homeMk}_${el.dataset.t}`);
+    };
+  });
+}
+
 function renderHomeNews() {
   const host = $("#home-news");
   if (!host) return;

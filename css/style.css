@@ -516,6 +516,10 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   cursor: pointer; color: var(--ink); }
 .lk-ind-badge:hover { border-color: #2563eb; color: #2563eb; }
 .lk-ind-arrow { color: var(--muted); margin: 0 2px; }
+/* 실시간 랭킹 */
+.rank-halt { font-size: .68rem; font-weight: 700; color: #b91c1c; background: #fee2e2;
+  border-radius: 4px; padding: 1px 5px; margin-left: 4px; }
+.mv-row-flat { cursor: default; opacity: .75; }
 /* 국고채 금리 커브 */
 .bond-spreads { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .bond-sp { font-size: .84rem; background: var(--bg); border: 1px solid var(--line);

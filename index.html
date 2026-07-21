@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=80">
-<script src="firebase-config.js?v=80"></script>
-<script src="js/auth.js?v=80"></script>
+<link rel="stylesheet" href="css/style.css?v=81">
+<script src="firebase-config.js?v=81"></script>
+<script src="js/auth.js?v=81"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -335,6 +335,12 @@
     <div class="chips" id="mv-chips"></div>
     <div id="mv-list" class="mv-list card-flat"></div>
 
+    <div id="rank-wrap" style="display:none">
+      <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
+      <div class="chips" id="rank-chips"></div>
+      <div id="rank-list" class="mv-list card-flat"></div>
+    </div>
+
     <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
     <div id="home-news" class="news-list card-flat"></div>
   </section>
@@ -624,6 +630,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=80"></script>
+<script src="js/app.js?v=81"></script>
 </body>
 </html>
