@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=81">
-<script src="firebase-config.js?v=81"></script>
-<script src="js/auth.js?v=81"></script>
+<link rel="stylesheet" href="css/style.css?v=83">
+<script src="firebase-config.js?v=83"></script>
+<script src="js/auth.js?v=83"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -140,7 +140,7 @@
     </div>
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
-        <button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
+        <button data-tf="1m" id="tf-1m" style="display:none">당일 분봉</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
       </span>
       <span class="osc-checks" id="lookup-osc">보조지표
         <label><input type="checkbox" value="rsi"> RSI</label>
@@ -630,6 +630,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=81"></script>
+<script src="js/app.js?v=83"></script>
 </body>
 </html>

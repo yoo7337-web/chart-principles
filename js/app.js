@@ -984,6 +984,10 @@ function loadLookup(key) {
       tfbar.querySelectorAll("#lookup-tf button").forEach((b) => b.onclick = () => {
         lookupTf = b.dataset.tf;
         tfbar.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x === b));
+        if (lookupTf === "1m") {   // 분봉은 개별 파일 lazy 로드 후 그림
+          loadMinuteBars(LOOKUP_ST).then(() => drawLookupChart());
+          return;
+        }
         drawLookupChart();
       });
       // 보조지표 체크박스 — 복수 선택, 변경 시 재그림
@@ -992,6 +996,21 @@ function loadLookup(key) {
         drawLookupChart();
       });
     }
+    // 당일 분봉 버튼 — 수집된 종목만 노출(유동성 상위). 없으면 일봉으로 되돌림.
+    loadIntradayIndex().then((idx) => {
+      if (LOOKUP_ST !== st) return;
+      const has = !!idx?.stocks?.[`${st.market}_${st.ticker}`];
+      const btn = document.getElementById("tf-1m");
+      if (btn) btn.style.display = has ? "" : "none";
+      if (lookupTf !== "1m") return;
+      if (has) {           // 분봉 유지 — 새 종목 분봉 로드 후 재그림
+        loadMinuteBars(st).then(() => { if (LOOKUP_ST === st) drawLookupChart(); });
+      } else {             // 이 종목은 분봉 없음 → 일봉으로 복귀
+        lookupTf = "d";
+        document.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x.dataset.tf === "d"));
+        drawLookupChart();
+      }
+    });
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
@@ -1033,21 +1052,55 @@ function loadLookup(key) {
   });
 }
 
-let lookupTf = "d";   // 일/주/월봉
+let lookupTf = "d";   // 1m/일/주/월봉
 let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
-const TF_KO = { d: "일봉", w: "주봉", m: "월봉" };
+const TF_KO = { "1m": "당일 분봉", d: "일봉", w: "주봉", m: "월봉" };
+
+// 당일 분봉 (intraday/*.json — yfinance 1m, 유동성 상위만 수집) ─────────────
+let INTRADAY = null;  // index.json {generated, date, stocks:{key:봉수}}
+function loadIntradayIndex() {
+  if (INTRADAY) return Promise.resolve(INTRADAY);
+  return fetch("data/intraday/index.json" + _cb)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (INTRADAY = j || { stocks: {} }));
+}
+// 분봉 rows(["HH:MM",o,h,l,c,v] 배열 포맷) → 차트 시리즈.
+// 벽시계 시각을 UTC로 취급해 차트에 현지시간 그대로 표시.
+function minuteSeries(rows, dateStr) {
+  const [Y, M, D] = (dateStr || "1970-01-01").split("-").map(Number);
+  return rows.map((r) => {
+    const [hh, mm] = r[0].split(":").map(Number);
+    return { t: Date.UTC(Y, M - 1, D, hh, mm) / 1000,
+             o: r[1], h: r[2], l: r[3], c: r[4], v: r[5] };
+  });
+}
+function loadMinuteBars(st) {
+  const key = `${st.market}_${st.ticker}`;
+  if (st._min) return Promise.resolve(st._min);
+  return fetch(`data/intraday/${key}.json` + _cb)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      if (!j?.rows?.length) return null;
+      st._min = minuteSeries(j.rows, INTRADAY?.date);
+      taEnrich(st._min);   // 분봉 기준 지표(MA·RSI·MACD 등) 재계산
+      return st._min;
+    });
+}
 const OSC_KO = { rsi: "RSI(14)", macd: "MACD", stoch: "스토캐스틱", obv: "OBV", disp: "이격도" };
 
 function drawLookupChart() {
   const st = LOOKUP_ST;
   if (!st._ta) { taEnrich(st.series); st._ta = true; }  // 지표는 클라이언트 계산(OHLCV 슬림 JSON)
   const tf = lookupTf;
-  const s = resampleBars(st.series, tf);  // 5년 전체(슬라이스 없음) — 좌우 스크롤로 탐색
+  const isMin = tf === "1m" && st._min?.length;   // 당일 분봉 모드(원칙 신호는 일봉 기준이라 미표시)
+  const s = isMin ? st._min : resampleBars(st.series, tf);
   const selRule = $("#lookup-rule").value;  // "" = 전체
   $("#lookup-info").innerHTML =
-    `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · 기준일 ${st.asof} · ${TF_KO[tf]}`
-    + " · 최근 5년 (좌우로 드래그·스크롤)"
-    + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`);
+    `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · `
+    + (isMin
+      ? `${INTRADAY?.date || ""} 당일 1분봉 · ${INTRADAY?.generated || ""} 수집 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`
+      : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 5년 (좌우로 드래그·스크롤)`
+        + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
   (lookupInds || []).forEach((c) => { try { c.remove(); } catch (e) {} });
@@ -1100,7 +1153,7 @@ function drawLookupChart() {
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
   const filt = document.querySelector('input[name="sigfilter"]:checked')?.value || "core";
-  const shown = st.markers.filter((m) => {
+  const shown = (isMin ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
     if (selRule && m.rule_id !== selRule) return false;
     if (filt === "core" && !SELECTED_RULES.has(m.rule_id)) return false;  // ⭐ 최종 채택 원칙만(기본)
     const on = ruleActive(m.rule_id, st.market);
