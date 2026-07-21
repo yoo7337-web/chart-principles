@@ -516,6 +516,20 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   cursor: pointer; color: var(--ink); }
 .lk-ind-badge:hover { border-color: #2563eb; color: #2563eb; }
 .lk-ind-arrow { color: var(--muted); margin: 0 2px; }
+/* 국고채 금리 커브 */
+.bond-spreads { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.bond-sp { font-size: .84rem; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; }
+.bond-sp.neg { border-color: #1e63e0; color: #1e63e0; }
+.bond-warn { font-size: .84rem; font-weight: 700; color: #b45309; background: #fef3c7;
+  border: 1px solid #fcd34d; border-radius: 999px; padding: 4px 12px; }
+.bond-curve { display: flex; align-items: flex-end; gap: 10px; height: 150px; }
+.bond-bar { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; height: 100%; gap: 4px; }
+.bond-fill { width: 100%; max-width: 64px; background: linear-gradient(180deg, #60a5fa, #2563eb);
+  border-radius: 6px 6px 0 0; min-height: 6px; }
+.bond-val { font-size: .78rem; font-weight: 700; color: #2563eb; }
+.bond-lbl { font-size: .78rem; color: var(--muted); }
 /* 테마 프리셋 */
 .scr-themes-wrap { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .scr-themes-head { font-weight: 700; font-size: .88rem; margin-bottom: 8px; }

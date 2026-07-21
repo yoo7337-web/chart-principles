@@ -7,6 +7,7 @@ let RCOMMENT = null;
 let TODAY = null;
 let SIM = null;
 let MARKET = null;
+let TOSSM = null;   // toss_market.json — 랭킹·국고채 커브(토스 Open API, 허용IP 필요 → 없을 수 있음)
 let NEWS = null;
 let MPRO = null;
 let FUND = null;
@@ -2537,7 +2538,34 @@ function renderMacro() {
 /* ---------- 매크로 탭 (지표 카드 + 세계 지도[증시/기준금리]) ---------- */
 function renderMacroTab() {
   renderMacro();       // 매크로 카드 (macroRendered 세팅)
+  renderBondCurve();   // 국고채 금리 커브 (toss_market.json — 없으면 섹션 숨김)
   renderWorld();       // 세계 지도 — 증시/기준금리 토글 (중앙은행 금리는 MARKET.cbanks)
+}
+
+// 국고채 금리 커브 — 만기별 수익률 막대 + 장단기 스프레드. TOSSM 없으면 섹션 자체를 숨김.
+function renderBondCurve() {
+  const wrap = $("#bond-curve-wrap");
+  const b = TOSSM?.bonds;
+  if (!wrap || !b || !b.curve?.length) { if (wrap) wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  $("#bond-curve-note").textContent = `(${TOSSM.generated} 기준 · 만기별 수익률)`;
+
+  const sp = b.spreads || {};
+  $("#bond-spreads").innerHTML = Object.entries(sp).map(([k, v]) => {
+    const neg = v < 0;
+    return `<span class="bond-sp ${neg ? "neg" : ""}">${k} <b>${v >= 0 ? "+" : ""}${v.toFixed(3)}%p</b>${neg ? " 역전" : ""}</span>`;
+  }).join("") + (b.inverted
+    ? `<span class="bond-warn">⚠ 장단기 금리 역전 — 경기침체 신호</span>`
+    : `<span class="sub-note">정상 우상향 커브</span>`);
+
+  const ys = b.curve.map((c) => c.yield);
+  const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(0.001, hi - lo);
+  $("#bond-curve").innerHTML = b.curve.map((c) => {
+    const h = 24 + ((c.yield - lo) / span) * 76;  // 24~100%
+    return `<div class="bond-bar"><span class="bond-val">${c.yield.toFixed(3)}</span>
+      <div class="bond-fill" style="height:${h}%"></div>
+      <span class="bond-lbl">${c.label}</span></div>`;
+  }).join("");
 }
 
 // 세계 증시 지도 — world.svg 인라인 + 국가 색칠 + 칩(getBBox 좌표) + 클릭 5년 차트 팝업
@@ -5161,11 +5189,13 @@ Promise.all([
   getJSON("deals_archive.json"),
   getJSON("calendar.json"),
   getJSON("sector_news.json"),
+  getJSON("toss_market.json"),
 ])
-  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal, sn]) => {
+  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal, sn, tm]) => {
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal; SECNEWS = sn;
+    TOSSM = tm;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
