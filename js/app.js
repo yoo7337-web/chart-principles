@@ -174,6 +174,7 @@ function activateTab(tabId) {
 document.querySelectorAll(".tab").forEach((b) =>
   b.addEventListener("click", () => activateTab(b.dataset.tab)));
 injectSubtabs();  // 통합 페이지 소탭 pill 주입(섹션은 정적 HTML이라 즉시 가능)
+bindChartDialog();  // 5년 차트 팝업 닫기 — 부팅 시 1회(매크로 탭 렌더에 의존하면 홈에서만 쓸 때 ✕가 죽음)
 
 document.querySelectorAll(".group").forEach((g) =>
   g.addEventListener("click", () => {
@@ -2809,11 +2810,6 @@ async function renderWorld() {
       paintWorld();
     });
   }
-  const dlg = $("#world-dialog");
-  if (dlg && !dlg.dataset.bound) {
-    dlg.dataset.bound = "1";
-    $("#wd-close").onclick = () => { dlg.close(); if (worldChart) { worldChart.remove(); worldChart = null; } };
-  }
   paintWorld();
 }
 
@@ -2856,6 +2852,17 @@ function paintWorld() {
 }
 
 // 5년 차트 팝업 공용 (지수·매크로) — dates/values + area 차트
+// 5년 차트 팝업 닫기 바인딩 — ✕ / 배경 클릭 / Esc 모두 차트까지 정리
+function bindChartDialog() {
+  const dlg = $("#world-dialog");
+  if (!dlg || dlg.dataset.bound) return;
+  dlg.dataset.bound = "1";
+  const kill = () => { if (worldChart) { worldChart.remove(); worldChart = null; } };
+  $("#wd-close").onclick = () => { dlg.close(); kill(); };
+  dlg.addEventListener("close", kill);
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });  // 배경 클릭
+}
+
 function openChartDialog(title, statsHtml, dates, values, opts) {
   opts = opts || {};
   const dlg = $("#world-dialog");
