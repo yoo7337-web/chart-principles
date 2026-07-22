@@ -19,7 +19,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import APP_DATA
 
 HOLDINGS = Path(r"C:\Users\yoo73\stock-radar\holdings.yaml")
-MARKET_QUERIES = ["코스피 증시", "미국 증시 마감", "연준 금리", "원달러 환율", "반도체 업황"]
+# 시장별 키워드 — 기사에 mk(kr/us) 태그를 붙여 홈 '주요 뉴스'가 국내/미국 토글에 연동되게 한다
+MARKET_QUERIES = {
+    "kr": ["코스피 증시", "코스닥 시황", "원달러 환율", "반도체 업황", "외국인 순매수"],
+    "us": ["미국 증시 마감", "뉴욕증시", "나스닥 지수", "연준 금리", "미국 기업 실적 발표"],
+}
+# 미국 뉴스로 잡히지만 실제론 국내 상품·국내 채권 기사인 것들(ETF 순자산 홍보 등) 제외
+US_EXCLUDE = re.compile(r"TIGER|KODEX|ACE |PLUS |국고채|코스피|코스닥|순자산")
 MAX_AGE_H = 24
 KST = timezone(timedelta(hours=9))
 
@@ -105,13 +111,20 @@ def main():
     args = ap.parse_args()
 
     market = []
-    for q in MARKET_QUERIES:
-        try:
-            market += fetch_rss(q)
-        except Exception as e:
-            print(f"  '{q}' 실패: {e}", file=sys.stderr)
-        time.sleep(0.3)
-    market = dedupe(market)[:30]
+    for mk, queries in MARKET_QUERIES.items():
+        for q in queries:
+            try:
+                items = fetch_rss(q)
+                if mk == "us":
+                    items = [it for it in items if not US_EXCLUDE.search(it["title"])]
+                market += [{**it, "mk": mk} for it in items]
+            except Exception as e:
+                print(f"  '{q}' 실패: {e}", file=sys.stderr)
+            time.sleep(0.3)
+    # 시장별로 각각 상위 20건 유지(한쪽이 다른 쪽을 밀어내지 않도록)
+    market = [it for mk in MARKET_QUERIES
+              for it in dedupe([x for x in market if x["mk"] == mk])[:20]]
+    market = dedupe(market)
 
     holdings_news = []
     if HOLDINGS.exists():
