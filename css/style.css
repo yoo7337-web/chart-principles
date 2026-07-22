@@ -527,6 +527,12 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   cursor: pointer; color: var(--ink); }
 .lk-ind-badge:hover { border-color: #2563eb; color: #2563eb; }
 .lk-ind-arrow { color: var(--muted); margin: 0 2px; }
+/* 통합 페이지 소탭(pill) */
+.subtab-bar { display: flex; gap: 6px; margin: 2px 0 14px; }
+.subtab { font-size: .88rem; font-weight: 600; padding: 7px 15px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--bg); cursor: pointer; color: var(--muted); }
+.subtab:hover { border-color: #93b4f5; color: var(--ink); }
+.subtab.active { background: #111827; border-color: #111827; color: #fff; }
 /* 실시간 랭킹 */
 .rank-halt { font-size: .68rem; font-weight: 700; color: #b91c1c; background: #fee2e2;
   border-radius: 4px; padding: 1px 5px; margin-left: 4px; }

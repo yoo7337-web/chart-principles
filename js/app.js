@@ -67,7 +67,33 @@ function logoUrl(mk, tk) {
 }
 
 /* ---------- 중분류(그룹) + 탭 ---------- */
-const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "holdings" };
+const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatmap", journal: "holdings" };
+
+/* ---------- 소탭(통합 페이지) — nav에는 부모탭만, 자식은 섹션 상단 pill로 전환 ----------
+   기존 섹션(id=tab-X)·렌더·딥링크는 그대로 두고 표시만 부모탭으로 묶는다. */
+const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
+  internals: [["internals", "시장 진단"], ["rotation", "섹터 로테이션"]],
+  news:      [["news", "뉴스·딜"], ["calendar", "경제일정"]],
+  rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
+  holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
+};
+const PILL_PARENT = { rotation: "internals", calendar: "news", chart: "rank", portfolio: "holdings" };
+const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
+
+function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
+  Object.values(SUB_PILLS).forEach((pair) => {
+    pair.forEach(([child]) => {
+      const sec = document.getElementById("tab-" + child);
+      if (!sec || sec.querySelector(".subtab-bar")) return;
+      const bar = document.createElement("div");
+      bar.className = "subtab-bar";
+      bar.innerHTML = pair.map(([id, lab]) =>
+        `<button class="subtab${id === child ? " active" : ""}" data-tab="${id}">${lab}</button>`).join("");
+      bar.querySelectorAll(".subtab").forEach((b) => b.onclick = () => activateTab(b.dataset.tab));
+      sec.prepend(bar);
+    });
+  });
+}
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
@@ -80,7 +106,7 @@ let currentTab = "heatmap";
 
 // 그룹 nav·탭바 표시까지 동기화하는 완전 이동 (뒤로가기·해시 복원용)
 function gotoTabFull(tabId) {
-  const nav = document.querySelector(`.tabs [data-tab="${tabId}"]`)?.closest(".tabs");
+  const nav = document.querySelector(`.tabs [data-tab="${navIdOf(tabId)}"]`)?.closest(".tabs");
   if (!nav) return;
   const group = nav.dataset.groupTabs;
   document.querySelectorAll(".group").forEach((x) => x.classList.toggle("active", x.dataset.group === group));
@@ -110,10 +136,12 @@ window.addEventListener("popstate", () => {
 
 function activateTab(tabId) {
   const from = currentTab;
-  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tabId));
+  const navId = navIdOf(tabId);  // 소탭(자식)은 nav에 버튼이 없음 → 부모 버튼 하이라이트
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === navId));
   document.querySelectorAll(".panel").forEach((x) => x.classList.toggle("active", x.id === "tab-" + tabId));
-  const group = document.querySelector(`.tabs [data-tab="${tabId}"]`)?.closest(".tabs")?.dataset.groupTabs;
-  if (group) lastTabOfGroup[group] = tabId;
+  document.querySelectorAll(".subtab-bar .subtab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tabId));
+  const group = document.querySelector(`.tabs [data-tab="${navId}"]`)?.closest(".tabs")?.dataset.groupTabs;
+  if (group) lastTabOfGroup[group] = tabId;  // 자식 id 저장 → 그룹 재진입 시 마지막 소탭 복원
   if (tabId === "rank" && !rankRendered) renderRank();
   if (tabId === "chart" && !chart) renderChartTab();
   if (tabId === "apply" && !applyRendered) renderApply();
@@ -145,6 +173,7 @@ function activateTab(tabId) {
 
 document.querySelectorAll(".tab").forEach((b) =>
   b.addEventListener("click", () => activateTab(b.dataset.tab)));
+injectSubtabs();  // 통합 페이지 소탭 pill 주입(섹션은 정적 HTML이라 즉시 가능)
 
 document.querySelectorAll(".group").forEach((g) =>
   g.addEventListener("click", () => {

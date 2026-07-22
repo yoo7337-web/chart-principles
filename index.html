@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=84">
-<script src="firebase-config.js?v=84"></script>
-<script src="js/auth.js?v=84"></script>
+<link rel="stylesheet" href="css/style.css?v=85">
+<script src="firebase-config.js?v=85"></script>
+<script src="js/auth.js?v=85"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -16,26 +16,24 @@
 </header>
 
 <nav class="groups">
-  <button class="group active" data-group="market">📡 마켓 현황</button>
-  <button class="group" data-group="discover">🔍 투자 발굴</button>
-  <button class="group" data-group="research">📐 원칙 연구</button>
+  <button class="group active" data-group="market">📡 시장 보기</button>
+  <button class="group" data-group="discover">🔍 종목 찾기</button>
+  <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
 </nav>
 
 <nav class="tabs" data-group-tabs="research" style="display:none">
   <button class="tab" data-tab="rank">원칙</button>
   <button class="tab" data-tab="apply">실전 검증</button>
-  <button class="tab" data-tab="chart">사례 차트</button>
 </nav>
 <nav class="tabs" data-group-tabs="discover" style="display:none">
+  <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="today">오늘의 신호</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
-  <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="value">내재가치</button>
 </nav>
 <nav class="tabs" data-group-tabs="journal" style="display:none">
-  <button class="tab" data-tab="holdings">보유 포트폴리오</button>
-  <button class="tab" data-tab="portfolio">포트폴리오 점검</button>
+  <button class="tab" data-tab="holdings">포트폴리오</button>
   <button class="tab" data-tab="journal">매매일지</button>
   <button class="tab" data-tab="memo">종목 메모</button>
 </nav>
@@ -43,9 +41,7 @@
   <button class="tab active" data-tab="heatmap">홈</button>
   <button class="tab" data-tab="macro">매크로</button>
   <button class="tab" data-tab="internals">시장 진단</button>
-  <button class="tab" data-tab="rotation">섹터 로테이션</button>
-  <button class="tab" data-tab="news">뉴스·딜</button>
-  <button class="tab" data-tab="calendar">경제일정</button>
+  <button class="tab" data-tab="news">뉴스·일정</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
 </nav>
 
@@ -636,6 +632,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=84"></script>
+<script src="js/app.js?v=85"></script>
 </body>
 </html>
