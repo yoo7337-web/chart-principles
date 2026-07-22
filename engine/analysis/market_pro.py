@@ -71,36 +71,156 @@ def _merge_series(old: list, new: list, cumulative: bool = False) -> list:
     return _thin(merged[-(HIST_DAYS + 300):])   # 5년 + 솎임 여유까지만 보관
 
 
-def merge_breadth(old_hist: dict, new_hist: dict) -> dict:
-    """시장×지표별 병합. nhnl만 누적 지표."""
-    out = {}
-    for mk in ("kr", "us"):
-        o, n = (old_hist or {}).get(mk, {}), new_hist.get(mk, {})
-        out[mk] = {k: _merge_series(o.get(k, []), n.get(k, []), cumulative=(k == "nhnl"))
-                   for k in ("adr", "nhnl", "ma50", "ma200")}
+# 시계열 키 — nhnl만 누적(원점 보정 필요). frgn20/inst20은 KR 전용(수급 parquet이 로컬에만 있음)
+BREADTH_KEYS = ("adr", "nhnl", "ma50", "ma200", "hi52", "lo52", "mcc", "ddmed",
+                "corr60", "rv20", "ewcw", "conc10", "frgn20", "inst20")
+CUMULATIVE_KEYS = ("nhnl",)
+
+
+def _pack(hist_mk: dict) -> dict:
+    """{키: [{t,v},…]} → {t:[날짜…], 키:[값…]} 공유 날짜축 포맷(용량 1/3). 결측은 null."""
+    dates = sorted({p["t"] for s in hist_mk.values() for p in s})
+    idx = {t: i for i, t in enumerate(dates)}
+    out = {"t": dates}
+    for k, s in hist_mk.items():
+        col = [None] * len(dates)
+        for p in s:
+            col[idx[p["t"]]] = p["v"]
+        out[k] = col
     return out
 
 
-def breadth_series(data: dict) -> dict:
-    """시장별 ADR·신고-신저 누적·MA50/200 상회 비율 — 최근 HIST_DAYS."""
+def _unpack(hist_mk: dict) -> dict:
+    """_pack 역변환. 구(舊) [{t,v},…] 포맷도 그대로 통과(하위호환)."""
+    if not hist_mk or "t" not in hist_mk:
+        return hist_mk or {}
+    dates = hist_mk["t"]
+    return {k: [{"t": dates[i], "v": v} for i, v in enumerate(col) if v is not None]
+            for k, col in hist_mk.items() if k != "t"}
+
+
+def merge_breadth(old_hist: dict, new_hist: dict) -> dict:
+    """시장×지표별 병합 후 압축 저장. 새 계산분이 비면(클라우드 미보유 지표) 기존 이력 보존."""
     out = {}
     for mk in ("kr", "us"):
+        o = _unpack((old_hist or {}).get(mk, {}))
+        n = new_hist.get(mk, {})
+        merged = {k: _merge_series(o.get(k, []), n.get(k, []), cumulative=(k in CUMULATIVE_KEYS))
+                  for k in BREADTH_KEYS}
+        out[mk] = _pack({k: v for k, v in merged.items() if v})
+    return out
+
+
+def _avg_pair_corr(R: pd.DataFrame, win: int = 60) -> pd.Series:
+    """종목 간 평균 상관계수(rolling) — 전 쌍 계산(O(n²))은 불가능하므로 항등식으로 O(n).
+       Σ_{i<j}cov = (Var(Σr) − Σvar)/2,  Σ_{i<j}sd_i·sd_j = ((Σsd)² − Σsd²)/2
+       ⇒ 평균상관 = (Var(Σr) − Σvar) / ((Σsd)² − Σsd²)"""
+    S = R.sum(axis=1)
+    sd = R.rolling(win).std()
+    sum_sd = sd.sum(axis=1)
+    sum_var = (sd ** 2).sum(axis=1)
+    num = S.rolling(win).var() - sum_var
+    den = sum_sd ** 2 - sum_var
+    return (num / den.replace(0, np.nan)).clip(-1, 1)
+
+
+def breadth_series(data: dict, macro: pd.DataFrame | None = None) -> dict:
+    """시장별 시장내부 지표 14종 — 최근 HIST_DAYS."""
+    out = {}
+    IDX_COL = {"kr": "^KS11", "us": "^GSPC"}
+    for mk in ("kr", "us"):
         C = close_matrix(data, mk)
+        V = pd.DataFrame({tk: df["volume"] for (m, tk), df in data.items() if m == mk}).sort_index()
+        n_valid = C.notna().sum(axis=1)
         chg = C.diff()
         up = (chg > 0).sum(axis=1)
         dn = (chg < 0).sum(axis=1)
         adr = (up.rolling(20).sum() / dn.rolling(20).sum().replace(0, np.nan) * 100)
-        hi52 = (C >= C.rolling(252).max()).sum(axis=1)
-        lo52 = (C <= C.rolling(252).min()).sum(axis=1)
-        nhnl = (hi52 - lo52).cumsum()
-        ma50 = (C > C.rolling(50).mean()).sum(axis=1) / C.notna().sum(axis=1) * 100
-        ma200 = (C > C.rolling(200).mean()).sum(axis=1) / C.notna().sum(axis=1) * 100
+        hi52c = (C >= C.rolling(252).max()).sum(axis=1)
+        lo52c = (C <= C.rolling(252).min()).sum(axis=1)
+        nhnl = (hi52c - lo52c).cumsum()
+        ma50 = (C > C.rolling(50).mean()).sum(axis=1) / n_valid * 100
+        ma200 = (C > C.rolling(200).mean()).sum(axis=1) / n_valid * 100
+
+        # 신고가/신저가 '비율' 분리 — 둘 다 높으면 시장 분열(Hindenburg류 경고)
+        hi52 = hi52c / n_valid * 100
+        lo52 = lo52c / n_valid * 100
+
+        # McClellan 오실레이터 — RANA(등락 정규화)의 EMA19 − EMA39. breadth 모멘텀(변곡 선행)
+        rana = ((up - dn) / (up + dn).replace(0, np.nan) * 1000)
+        mcc = rana.ewm(span=19, adjust=False).mean() - rana.ewm(span=39, adjust=False).mean()
+
+        # 52주 고점 대비 낙폭 중앙값(%) — '체감 하락률'
+        ddmed = ((C / C.rolling(252).max() - 1) * 100).median(axis=1)
+
+        # 종목 간 평균 상관계수(60일) — 급등=시스템 리스크/패닉, 하락=종목장
+        R = C.pct_change()
+        R = R.loc[:, R.notna().mean() >= 0.95].fillna(0)   # 상장 짧은 종목 제외 후 결측 0
+        corr60 = _avg_pair_corr(R, 60) if R.shape[1] >= 20 else pd.Series(dtype=float)
+
+        # 거래대금 상위 10종목 집중도(%) — 유동성 쏠림(5일 평균으로 평활)
+        A = (C * V).values
+        tot = np.nansum(A, axis=1)
+        k = min(10, A.shape[1])
+        top = np.sort(np.nan_to_num(A, nan=0.0), axis=1)[:, -k:].sum(axis=1)
+        conc10 = pd.Series(np.where(tot > 0, top / np.where(tot > 0, tot, 1) * 100, np.nan),
+                           index=C.index).rolling(5).mean()
+
+        # 동일가중 − 시총가중(지수) 60일 수익률 차(%p) — 양수=확산, 음수=대형주 쏠림
+        ew = (1 + R.mean(axis=1)).cumprod()
+        ew60 = ew / ew.shift(60) - 1
+        ewcw = rv20 = pd.Series(dtype=float)
+        col = IDX_COL[mk]
+        if macro is not None and col in macro.columns:
+            ix = macro[col].reindex(C.index).ffill()
+            ewcw = (ew60 - (ix / ix.shift(60) - 1)) * 100
+            rv20 = ix.pct_change().rolling(20).std() * np.sqrt(252) * 100  # 지수 실현변동성(연율 %)
 
         def ser(s):
-            t = s.dropna().tail(HIST_DAYS)
+            if s is None or not len(s):
+                return []
+            t = s.replace([np.inf, -np.inf], np.nan).dropna().tail(HIST_DAYS)
             return [{"t": d.strftime("%Y-%m-%d"), "v": round(float(v), 2)} for d, v in t.items()]
-        out[mk] = {"adr": ser(adr), "nhnl": ser(nhnl), "ma50": ser(ma50), "ma200": ser(ma200)}
+        out[mk] = {"adr": ser(adr), "nhnl": ser(nhnl), "ma50": ser(ma50), "ma200": ser(ma200),
+                   "hi52": ser(hi52), "lo52": ser(lo52), "mcc": ser(mcc), "ddmed": ser(ddmed),
+                   "corr60": ser(corr60), "rv20": ser(rv20), "ewcw": ser(ewcw), "conc10": ser(conc10)}
+    flow = supply_series(data)
+    for mk, v in flow.items():
+        out[mk].update(v)
     return out
+
+
+def supply_series(data: dict) -> dict:
+    """시장 전체 외국인·기관 20일 누적 순매수(억원) — data\\flow_*.parquet(네이버, 국내 전용·로컬 전용).
+    클라우드엔 flow parquet이 없어 빈 결과 → merge가 기존 이력을 보존한다."""
+    files = list(DATA_DIR.glob("flow_*.parquet"))
+    if not files:
+        return {}
+    frgn, inst = {}, {}
+    for f in files:
+        code = f.stem.replace("flow_", "")
+        px = data.get(("kr", code))
+        if px is None:
+            continue
+        try:
+            fl = pd.read_parquet(f)
+        except Exception:
+            continue
+        c = px["close"].reindex(fl.index).ffill()
+        for col, acc in (("frgn_net_vol", frgn), ("inst_net_vol", inst)):
+            if col not in fl.columns:
+                continue
+            amt = (fl[col] * c) / 1e8            # 순매매량×종가 → 억원
+            for d, v in amt.dropna().items():
+                acc[d] = acc.get(d, 0.0) + float(v)
+    if not frgn and not inst:
+        return {}
+
+    def ser(acc):
+        s = pd.Series(acc).sort_index().rolling(20, min_periods=5).sum()
+        return [{"t": d.strftime("%Y-%m-%d"), "v": round(float(v), 1)}
+                for d, v in s.dropna().tail(HIST_DAYS).items()]
+    return {"kr": {"frgn20": ser(frgn), "inst20": ser(inst)}}
 
 
 def sector_rotation(data: dict) -> dict:
@@ -239,9 +359,12 @@ def main():
     out_path = APP_DATA / "market_pro.json"
     prev = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else {}
     # 기존 published 시계열과 병합 — 클라우드(2년 캐시)가 로컬 백필한 5년 이력을 잘라먹지 않게
-    breadth = merge_breadth(prev.get("breadth_hist"), breadth_series(data))
-    _n = len(breadth.get("kr", {}).get("adr", []))
-    print(f"      breadth KR {_n}p ({breadth['kr']['adr'][0]['t'] if _n else '-'} ~)")
+    _mp = DATA_DIR / "macro.parquet"
+    macro = pd.read_parquet(_mp).sort_index() if _mp.exists() else None
+    breadth = merge_breadth(prev.get("breadth_hist"), breadth_series(data, macro))
+    _t = breadth.get("kr", {}).get("t", [])
+    _keys = [k for k in breadth.get("kr", {}) if k != "t"]
+    print(f"      breadth KR {len(_t)}p ({_t[0] if _t else '-'} ~) · 지표 {len(_keys)}종: {','.join(_keys)}")
 
     print("[2/4] 섹터 로테이션...")
     rotation = sector_rotation(data)
