@@ -542,6 +542,15 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .rank-halt { font-size: .68rem; font-weight: 700; color: #b91c1c; background: #fee2e2;
   border-radius: 4px; padding: 1px 5px; margin-left: 4px; }
 .mv-row-flat { cursor: default; opacity: .75; }
+/* 시장 진단 — 지표 카드 2열 그리드 */
+.int-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.int-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.int-card h3 { margin: 0 0 2px; font-size: .92rem; }
+.int-card .int-note { font-size: .74rem; color: var(--muted); line-height: 1.35; margin: 0 0 8px; }
+.int-card .int-chart { height: 170px; }
+.int-card .int-legend { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+.int-card .int-empty { font-size: .78rem; color: var(--muted); padding: 24px 0; text-align: center; }
+@media (max-width: 900px) { .int-grid { grid-template-columns: 1fr; } }
 /* 국내 관례 색상: 상승 빨강 / 하락 파랑 (가격·변동액 모두) */
 .kup { color: #d93036; } .kdn { color: #1e63e0; }
 /* 국고채 금리 커브 */

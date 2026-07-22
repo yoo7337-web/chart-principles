@@ -3113,8 +3113,55 @@ function lineChart(hostSel, series, color, refLine) {
   return c;
 }
 
+// market_pro.json의 breadth_hist는 날짜축 공유 압축 포맷({t:[…], adr:[…]}) — 1회만 {t,v} 배열로 복원
+function unpackBreadth(bh) {
+  if (!bh || bh._u) return bh;
+  for (const mk of Object.keys(bh)) {
+    const h = bh[mk];
+    if (!h || !Array.isArray(h.t)) continue;
+    const t = h.t, o = {};
+    for (const k of Object.keys(h)) {
+      if (k === "t") continue;
+      o[k] = h[k].map((v, i) => (v == null ? null : { t: t[i], v })).filter(Boolean);
+    }
+    bh[mk] = o;
+  }
+  bh._u = true;
+  return bh;
+}
+
+// 시장 진단 차트 스펙 — k(단일)/ks(복수 시리즈), base=기준선, mk 지정 시 해당 시장만
+const INT_CHARTS = [
+  { k: "adr", c: "#2563eb", base: 100, t: "ADR (20일 등락비율)",
+    n: "100↑ 상승 종목 우위. <b>지수는 오르는데 ADR이 내려가면</b> 소수 주도 장세(경고)" },
+  { k: "nhnl", c: "#8e44ad", t: "신고가−신저가 누적 지수",
+    n: "우상향=시장 체력 확장. 지수는 신고가인데 이 선이 꺾이면 다이버전스" },
+  { ks: ["ma50", "ma200"], cs: ["#f59e0b", "#0891b2"], labs: ["MA50 상회", "MA200 상회"], base: 50,
+    t: "MA50/MA200 상회 종목 비율(%)", n: "추세 참여도 — 50% 아래면 절반이 하락추세" },
+  { ks: ["hi52", "lo52"], cs: ["#d93036", "#1e63e0"], labs: ["신고가 비율", "신저가 비율"],
+    t: "신고가·신저가 비율(%)", n: "<b>둘 다 동시에 높으면 시장 분열</b> — 추세가 갈라지는 위험 구간(Hindenburg류)" },
+  { k: "mcc", c: "#0891b2", base: 0, t: "McClellan 오실레이터",
+    n: "등락 <b>모멘텀</b>(EMA19−EMA39) — 0선 돌파가 ADR 레벨보다 먼저 전환을 알림" },
+  { k: "ddmed", c: "#e11d48", base: 0, t: "52주 고점 대비 낙폭 중앙값(%)",
+    n: "<b>체감 하락률</b> — 지수가 아니라 '중간 종목'이 고점에서 얼마나 빠졌는지" },
+  { k: "corr60", c: "#7c3aed", t: "종목 간 평균 상관계수(60일)",
+    n: "급등=동조화(시스템 리스크·패닉), 하락=종목 선별 장세. <span class='sub-note'>변동성 가중 평균</span>" },
+  { k: "rv20", c: "#f59e0b", t: "지수 실현변동성(20일, 연율 %)",
+    n: "변동성 체제 — 급등 구간에선 원칙 신호보다 리스크 관리 우선" },
+  { k: "ewcw", c: "#16a34a", base: 0, t: "동일가중 − 시총가중 60일 수익률차(%p)",
+    n: "양수=상승이 <b>폭넓게 확산</b>, 음수=<b>대형주 쏠림</b>(지수만 오르는 장세)" },
+  { k: "conc10", c: "#ea580c", t: "거래대금 상위 10종목 집중도(%)",
+    n: "유동성 쏠림 — 높을수록 소수 종목에 자금이 몰림(순환매 약화)" },
+  { ks: ["frgn20", "inst20"], cs: ["#1e63e0", "#ea580c"], labs: ["외국인", "기관"], base: 0, mk: "kr",
+    t: "외국인·기관 20일 누적 순매수(억원)",
+    n: "수급 주체 방향. <span class='sub-note'>네이버 수급 데이터 · 노트북 배치라 갱신 주기가 김</span>" },
+  { curve: true, c: "#0f766e", base: 0, mk: "kr", t: "국고채 장단기 스프레드(10Y−2Y, %p)",
+    n: "<b>음수=장단기 역전</b>(경기 침체 선행 신호). <span class='sub-note'>토스 스냅샷을 매일 적재 — 소급 백필 불가</span>" },
+];
+
 function renderInternals() {
   if (!MPRO) { $("#int-context").textContent = "market_pro.json 없음 — python analysis\\market_pro.py 실행 필요"; return; }
+  unpackBreadth(MPRO.breadth_hist);
   internalsRendered = true;
 
   if (MPRO.brief) {
@@ -3197,15 +3244,52 @@ function renderIntVerdict(mk) {
     cards.push(["200일선 위 종목", ma200.toFixed(0) + "%", st,
       ma200 >= 50 ? "장기 추세 건재" : ma200 >= 30 ? "장기 추세 약화" : "장기 하락장 성격", "50%=중립"]);
   }
+  // ── 신규 지표 판정 ─────────────────────────────────────────────
+  const dd = last(h.ddmed), cor = last(h.corr60), ew = last(h.ewcw);
+  const hiR = last(h.hi52), loR = last(h.lo52);
+  // 집중도는 시장별 구조적 수준이 달라 절대값 대신 자기 이력(최근 1년) 백분위로 판정
+  const pct1y = (arr, v) => {
+    const w = (arr || []).slice(-250).map((p) => p.v);
+    return w.length < 30 || v == null ? null : w.filter((x) => x <= v).length / w.length * 100;
+  };
+  const conc = last(h.conc10), concP = pct1y(h.conc10, conc);
+  if (dd != null) {
+    const st = dd >= -10 ? "good" : dd >= -20 ? "warn" : "bad";
+    cards.push(["52주 고점 대비 낙폭(중앙값)", dd.toFixed(0) + "%", st,
+      dd >= -10 ? "대다수 종목이 고점 부근" : dd >= -20 ? "평균적 조정 국면" : "체감상 이미 하락장 — 지수보다 개별 종목 피해 큼",
+      "0%=고점"]);
+  }
+  if (cor != null) {
+    const st = cor <= 0.3 ? "good" : cor <= 0.5 ? "warn" : "bad";
+    cards.push(["종목 간 평균 상관", cor.toFixed(2), st,
+      cor <= 0.3 ? "종목별로 따로 움직임 — 선별 효과 큼" : cor <= 0.5 ? "동조화 진행 중"
+        : "전 종목 동반 등락 — 분산 효과 소멸(시스템 리스크)", "낮을수록 좋음"]);
+  }
+  if (ew != null) {
+    const st = ew > 0 ? "good" : ew > -5 ? "warn" : "bad";
+    cards.push(["동일가중 − 시총가중(60일)", (ew > 0 ? "+" : "") + ew.toFixed(1) + "%p", st,
+      ew > 0 ? "상승이 폭넓게 확산" : ew > -5 ? "대형주가 소폭 우위" : "지수만 오르는 대형주 쏠림 장세", "0=중립"]);
+  }
+  if (concP != null) {
+    const st = concP <= 60 ? "good" : concP <= 85 ? "warn" : "bad";
+    cards.push(["거래대금 상위10 집중도", conc.toFixed(0) + "%", st,
+      `최근 1년 중 ${concP.toFixed(0)}번째 백분위 — ` +
+      (concP <= 60 ? "유동성 분산 양호" : concP <= 85 ? "쏠림 진행" : "소수 종목 과열"), "1년 백분위 기준"]);
+  }
+  if (hiR != null && loR != null && hiR >= 2.5 && loR >= 2.5) {
+    cards.push(["신고가·신저가 동시 과다", `${hiR.toFixed(1)}% / ${loR.toFixed(1)}%`, "bad",
+      "시장이 두 방향으로 갈라짐 — 추세 신뢰도 하락(Hindenburg류 경고)", "둘 다 2.5%↑면 경고"]);
+  }
 
+  // 카드 수가 4개→최대 9개로 늘어 절대 개수 대신 비율로 판정
   const nBad = cards.filter((c) => c[2] === "bad").length;
   const nGood = cards.filter((c) => c[2] === "good").length;
   const risk = MPRO.risk?.score;
   let emoji, verdict;
-  if (nBad >= 2) {
+  if (nBad >= Math.max(2, cards.length * 0.4)) {
     emoji = "⚠️";
     verdict = `<b>시장 내부 체력이 약합니다.</b> 지수 방향과 별개로 다수 종목이 하락 추세 — 신규 진입은 보수적으로, 매수 원칙은 종목별 신호 확인 후.`;
-  } else if (nGood >= 3) {
+  } else if (nGood >= cards.length * 0.6) {
     emoji = "✅";
     verdict = `<b>시장 체력 양호.</b> 상승이 소수 주도가 아니라 폭넓게 확산 — 원칙 신호의 신뢰도가 높은 환경.`;
   } else {
@@ -3233,19 +3317,45 @@ function drawInternals() {
   renderIntVerdict(mk);
   const h = MPRO.breadth_hist?.[mk];
   if (!h) return;
-  lineChart("#int-adr", intSlice(h.adr), "#2563eb", 100);
-  lineChart("#int-nhnl", intSlice(h.nhnl), "#8e44ad", null);
-  // MA50/200 두 선을 한 차트에
-  const el = $("#int-ma");
-  el.innerHTML = "";
-  const c = LightweightCharts.createChart(el, baseChartOpts(el, el.clientHeight || 200));
-  const s50 = c.addLineSeries({ color: "#f59e0b", lineWidth: 2, priceLineVisible: false, title: "MA50 상회 %" });
-  s50.setData(intSlice(h.ma50).map((p) => ({ time: p.t, value: p.v })));
-  const s200 = c.addLineSeries({ color: "#0891b2", lineWidth: 2, priceLineVisible: false, title: "MA200 상회 %" });
-  s200.setData(intSlice(h.ma200).map((p) => ({ time: p.t, value: p.v })));
-  s50.createPriceLine({ price: 50, color: "#9ca3af", lineWidth: 1, lineStyle: 2 });
-  c.timeScale().fitContent();
-  intCharts.push(c);
+  const host = $("#int-charts");
+  const specs = INT_CHARTS.filter((s) => !s.mk || s.mk === mk);
+  host.innerHTML = specs.map((s, i) => `
+    <div class="int-card">
+      <h3>${s.t}</h3>
+      <p class="int-note">${s.n}</p>
+      <div class="int-chart" id="intc-${i}"></div>
+      ${s.labs ? `<div class="int-legend">${s.labs.map((l, j) =>
+        `<span style="color:${s.cs[j]}">━</span> ${l}`).join(" · ")}</div>` : ""}
+    </div>`).join("");
+
+  specs.forEach((s, i) => {
+    const sel = `#intc-${i}`;
+    const sets = s.curve ? [intCurveSpread()] : (s.ks || [s.k]).map((k) => intSlice(h[k]));
+    if (!sets.some((a) => a && a.length > 1)) {
+      $(sel).outerHTML = `<p class="int-empty">${s.curve
+        ? `적재 중 — 아직 ${sets[0]?.length || 0}일치 (매일 1점씩 쌓임)`
+        : "데이터 없음(다음 갱신 후 표시)"}</p>`;
+      return;
+    }
+    if (sets.length === 1) { lineChart(sel, sets[0], s.c, s.base ?? null); return; }
+    const el = $(sel); el.innerHTML = "";
+    const c = LightweightCharts.createChart(el, baseChartOpts(el, el.clientHeight || 170));
+    sets.forEach((data, j) => {
+      const ser = c.addLineSeries({ color: s.cs[j], lineWidth: 2, priceLineVisible: false, title: s.labs[j] });
+      ser.setData((data || []).map((p) => ({ time: p.t, value: p.v })));
+      if (j === 0 && s.base != null)
+        ser.createPriceLine({ price: s.base, color: "#9ca3af", lineWidth: 1, lineStyle: 2 });
+    });
+    c.timeScale().fitContent();
+    intCharts.push(c);
+  });
+}
+
+// 국고채 10Y−2Y 스프레드 시계열 (toss_market.json curve_hist — 매일 1점씩 적재, 소급 백필 불가)
+function intCurveSpread() {
+  return (TOSSM?.curve_hist || [])
+    .filter((r) => r && r["10_2"] != null)
+    .map((r) => ({ t: r.t, v: r["10_2"] }));
 }
 
 /* ---------- 마켓: 섹터 로테이션 ---------- */
