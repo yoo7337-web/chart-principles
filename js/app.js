@@ -4478,6 +4478,33 @@ function pfHoldings() {
   if (d) return d.holdings;
   return pfLoad().map((x) => ({ ...x }));
 }
+/* ── 실시간 평가 — 저장된 평균가·수량(사실)은 두고, 현재가만 최신 시세로 갈아끼워 재계산 ──
+   저장값(price/val/pl)은 토스 동기화 시점(15:40)에 굳은 값이라 그대로 쓰면 시세가 멈춰 보임.
+   시세 소스: MARKET.quotes(30분 갱신) — 미국은 native USD라 원/달러(KRW=X)로 환산해 원화 통일 유지. */
+function pfFxRate() {
+  const m = (MARKET?.macro || []).find((x) => x.id === "KRW=X");
+  return m?.last || tossLoad()?.fx || null;   // 30분 갱신 환율 우선, 없으면 동기화 시점 환율
+}
+function pfLiveRow(h) {
+  const q = MARKET?.quotes?.[`${h.mk}_${h.ticker}`];
+  if (!q || !(+h.qty > 0)) return h;                       // 시세 없음(유니버스 밖 등) → 저장값 유지
+  let price = +q[0];
+  if (h.mk === "us") {
+    const fx = pfFxRate();
+    if (!fx) return h;                                     // 환율 불명 → 원화 통일 깨지므로 저장값 유지
+    price *= fx;
+  }
+  if (!(price > 0)) return h;
+  const val = Math.round(price * h.qty);
+  const cost = h.cost;                                     // 원금 = 평균가×수량 (불변)
+  const pl = val - cost;
+  const r = +q[1];                                         // 당일 등락률
+  const dayPl = r != null && !isNaN(r) && 1 + r !== 0 ? Math.round(val - val / (1 + r)) : h.dayPl;
+  return { ...h, price, val, pl, plRate: cost ? pl / cost : null,
+           dayPl, dayRate: r != null && !isNaN(r) ? r : h.dayRate, live: true };
+}
+function pfHoldingsLive() { return pfHoldings().map(pfLiveRow); }
+
 // 누락 필드 파생 (평가금·원금·손익·손익률). 입력값 우선, 없으면 계산.
 function pfDerive(h) {
   const qty = +h.qty || 0, avg = +h.avg || 0, price = +h.price || 0;
@@ -4667,7 +4694,7 @@ function hldSubmit() {
 
 function hldRender() {
   const host = $("#hld-list"), sumEl = $("#hld-summary");
-  const all = pfHoldings();
+  const all = pfHoldingsLive();   // 현재가·평가금·수익률은 최신 시세로 재계산
   if (!all.length) {
     sumEl.style.display = "none";
     host.innerHTML = `<div class="card-flat" style="text-align:center;padding:40px 16px;color:var(--muted)">
@@ -4724,15 +4751,22 @@ function hldRender() {
     <div class="idx-card"><div class="sub-note">총 손익</div>
       <div class="pf-day ${gPl >= 0 ? "pos" : "neg"}">${won(gPl, true)}</div>
       <div class="sub-note">${pct(gCost ? gPl / gCost : 0, 2)}</div></div>
-    ${gDayHas ? `<div class="idx-card"><div class="sub-note">오늘 손익 (동기 시점)</div>
+    ${gDayHas ? `<div class="idx-card"><div class="sub-note">오늘 손익</div>
       <div class="pf-day ${gDay >= 0 ? "pos" : "neg"}">${won(gDay, true)}</div>
       <div class="sub-note">${pct(gVal - gDay ? gDay / (gVal - gDay) : 0, 2)}</div></div>` : ""}
     <div class="idx-card"><div class="sub-note">보유 종목</div>
       <div class="lk-name">${all.length}<span class="sub-note"> 국내 ${all.filter((h) => h.mk === "kr").length} · 해외 ${all.filter((h) => h.mk === "us").length}</span></div>
       <div class="sub-note">${toss ? "동기 " + (pf2Load()?.updated || "") : "수기 입력"}</div></div>`;
 
-  host.innerHTML = secHtml + `<p class="sub-note" style="margin-top:10px">해외주식 금액은 토스 화면과 동일한 <b>원화 환산</b> 기준입니다.
-    행을 클릭하면 편집·삭제할 수 있어요. 산업·수급·원칙 진단은 <b>포트폴리오 점검</b> 탭에서 확인하세요.</p>`;
+  const liveN = all.filter((h) => h.live).length;
+  const fx = pfFxRate();
+  host.innerHTML = secHtml + `<p class="sub-note" style="margin-top:10px">
+    ${liveN ? `💹 <b>${liveN}/${all.length}종목</b>은 <b>최신 시세</b>(${MARKET?.generated || ""} · 30분 갱신)로 평가금·수익률을 다시 계산했습니다`
+            : `⚠️ 최신 시세를 찾지 못해 <b>동기화 시점 가격</b>으로 표시 중입니다`}${
+      all.length - liveN > 0 && liveN ? ` · 나머지 ${all.length - liveN}종목은 동기화 시점 가격(유니버스 밖)` : ""}.
+    평균가·수량·원금은 토스 동기화 값 그대로입니다.<br>
+    해외주식은 <b>원화 환산</b>(${fx ? "1$≈" + Math.round(fx).toLocaleString() + "원" : "환율 불명"}) 기준이라 토스 앱 화면과 소폭 다를 수 있어요.
+    행을 클릭하면 편집·삭제할 수 있고, 산업·수급·원칙 진단은 <b>포트폴리오 점검</b> 탭에서 확인하세요.</p>`;
   host.querySelectorAll(".hld-table tbody tr").forEach((tr) => tr.onclick = () =>
     hldOpenModal(pfHoldings().find((h) => h.ticker === tr.dataset.tk)));
 }
@@ -4744,7 +4778,7 @@ function initPortfolio() {
 }
 
 async function pfRender() {
-  const arr = pfHoldings();
+  const arr = pfHoldingsLive();   // 점검 탭도 동일하게 최신 시세 기준
   const statsEl = $("#pf-stats"), listEl = $("#pf-list");
   pfMarketRender();  // 수급 컨텍스트는 보유 여부와 무관(토스 스냅샷 존재 시)
   if (!arr.length) {
