@@ -430,6 +430,17 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-memo-itxt { font-size: .9rem; color: var(--ink); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .lk-memo-meta { display: flex; align-items: center; margin-top: 6px; }
 .lk-memo-meta a, .lk-memo-edit, .lk-memo-del { font-size: .8rem; }
+/* 주식찾기(스크리너) — 좌: 결과 / 우: 필터 2단 레이아웃 */
+.scr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
+.scr-side { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+.scr-side .scr-chain, .scr-side .scr-detail { margin-top: 0; }
+.scr-side .scr-label { flex-basis: 56px; }
+.scr-main .scr-bar { margin-top: 2px; }
+@media (max-width: 1000px) {
+  .scr-layout { grid-template-columns: 1fr; }
+  .scr-side { position: static; max-height: none; overflow: visible; order: -1; }
+}
 /* 주식찾기(스크리너) */
 .scr-filters { padding: 14px 16px; display: flex; flex-direction: column; gap: 13px; }
 .scr-frow { display: flex; align-items: center; gap: 12px; }
