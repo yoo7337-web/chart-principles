@@ -2857,7 +2857,7 @@ function openChartDialog(title, statsHtml, dates, values, opts) {
   const dlg = $("#world-dialog");
   $("#wd-title").textContent = title;
   $("#wd-stats").innerHTML = statsHtml;
-  dlg.showModal();
+  if (!dlg.open) dlg.showModal();   // 이미 열려 있을 때 재호출하면 InvalidStateError → 아래 차트 생성이 통째로 건너뛰어짐
   if (worldChart) { worldChart.remove(); worldChart = null; }
   const el = $("#wd-chart"); el.innerHTML = "";
   const pts = (dates || []).map((d, i) => ({ time: d, value: values[i] })).filter((x) => x.value != null);
