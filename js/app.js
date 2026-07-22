@@ -2567,13 +2567,19 @@ function renderRankings() {
     const sub = rankCat === "volume"
       ? `거래량 ${(r.volume || 0).toLocaleString()}주`
       : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
+    // 변동액 = 현재가 - 전일종가(현재가/(1+등락률)). 국내 관례: 상승 빨강 / 하락 파랑
+    const c = r.chg;
+    const flat = c == null || isNaN(c) || c === 0;
+    const cls = flat ? "" : up ? "kup" : "kdn";
+    const diff = c != null && !isNaN(c) && 1 + c !== 0 ? r.last - r.last / (1 + c) : null;
+    const diffTxt = diff == null ? "" : `${up ? "▲" : "▼"} ${fmtPrice(Math.abs(diff), homeMk)} `;
     return `<div class="mv-row" data-t="${r.t}">
       <span class="mv-rank">${r.rank}</span>
       <img class="mv-logo" src="${logoUrl(homeMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span>${r.halted ? ` <span class="rank-halt">거래정지</span>` : ""}<br>
         <span class="mv-sub">${sub}</span></span>
-      <span class="mv-price">${fmtPrice(r.last, homeMk)}
-        <span class="${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(r.chg, 1)}</span></span>
+      <span class="mv-price"><span class="${cls}">${fmtPrice(r.last, homeMk)}</span>
+        <span class="${cls}">${diffTxt}${flat ? "" : "("}${pct(r.chg, 1)}${flat ? "" : ")"}</span></span>
     </div>`;
   }).join("") || `<p class="mini-note">데이터 없음</p>`;
 

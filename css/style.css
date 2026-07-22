@@ -537,6 +537,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .rank-halt { font-size: .68rem; font-weight: 700; color: #b91c1c; background: #fee2e2;
   border-radius: 4px; padding: 1px 5px; margin-left: 4px; }
 .mv-row-flat { cursor: default; opacity: .75; }
+/* 국내 관례 색상: 상승 빨강 / 하락 파랑 (가격·변동액 모두) */
+.kup { color: #d93036; } .kdn { color: #1e63e0; }
 /* 국고채 금리 커브 */
 .bond-spreads { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .bond-sp { font-size: .84rem; background: var(--bg); border: 1px solid var(--line);
