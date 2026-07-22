@@ -2426,7 +2426,7 @@ function renderHome() {
       hmZoomSector = null;
       $("#hm-back").style.display = "none";
       $("#home-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
-      renderIdxCards(); drawTreemap(); renderMovers(); renderRankings();
+      renderIdxCards(); drawTreemap(); renderMovers(); renderRankings(); renderHomeNews();
     };
   });
   $("#hm-back").onclick = () => {
@@ -2595,12 +2595,16 @@ function renderRankings() {
   });
 }
 
+// 홈 주요 뉴스 — 국내/미국 토글 연동(mk 태그가 없는 구버전 news.json이면 전체 표시)
 function renderHomeNews() {
   const host = $("#home-news");
   if (!host) return;
-  host.innerHTML = NEWS?.market?.length
-    ? newsList(NEWS.market.slice(0, 5), false)
-    : `<p class="mini-note">뉴스 데이터 없음</p>`;
+  const all = NEWS?.market || [];
+  const tagged = all.filter((n) => n.mk === homeMk);
+  const rows = tagged.length ? tagged : all.some((n) => n.mk) ? [] : all;
+  host.innerHTML = rows.length
+    ? newsList(rows.slice(0, 5), false)
+    : `<p class="mini-note">${all.length ? "이 시장 뉴스가 아직 없습니다(다음 갱신 후 표시)" : "뉴스 데이터 없음"}</p>`;
 }
 
 function hmTooltip() {
