@@ -2376,24 +2376,25 @@ function relTime(genStr) {
   return `${Math.floor(min / 1440)}일 전`;
 }
 
-// TradingView 티커 로딩 감시 — 6초 내 iframe 미렌더 시 숨기고 자체 티커 유지("!" 재발 방지)
+// TradingView 티커 로딩 감시 — 6초 내 iframe 미렌더 시에만 자체 티커로 완전 대체(정상 로딩 시 이중 티커
+// 노출 방지 — TV 티커+자체 티커가 동시에 보이는 것은 중복 UI였음). "!" 문제는 TV 실패 시의 자체 티커
+// 기본 목록에 DX-Y.NYB를 포함시켜 해결(TV 심볼 자체가 불안정했던 것).
 function watchTvTicker() {
   const tv = $("#tv-ticker");
   if (!tv) return;
   setTimeout(() => {
     const frame = tv.querySelector("iframe");
     const ok = frame && frame.clientHeight > 10;
-    // TV가 못 싣는(또는 심볼이 불안정한) 지표만 자체 티커로 — 달러인덱스는 TV 심볼이 오류(!)나서 자체 데이터 사용
-    if (ok) { renderMacroTicker(["^KS11", "^KQ11", "^SOX", "^VIX", "DX-Y.NYB"]); }
+    if (ok) { $("#macro-ticker").style.display = "none"; }
     else tv.style.display = "none";
   }, 6000);
 }
 
-// 자체 매크로 데이터로 지수 티커 스트립 렌더 (TradingView 로딩 실패 시 폴백 — 사이트 데이터와 일치)
+// 자체 매크로 데이터로 지수 티커 스트립 렌더 — TradingView 로딩 실패 시의 전체 대체용(정상 로딩 시 watchTvTicker가 숨김)
 function renderMacroTicker(pickOverride) {
   const host = $("#macro-ticker");
   if (!host || !MARKET?.macro) return;
-  const pick = pickOverride || ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X", "^VIX", "^TNX", "CL=F"];
+  const pick = pickOverride || ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X", "^VIX", "DX-Y.NYB", "CL=F"];
   const byId = Object.fromEntries(MARKET.macro.map((m) => [m.id, m]));
   host.innerHTML = pick.filter((id) => byId[id]).map((id) => {
     const m = byId[id]; const up = m.chg >= 0;
