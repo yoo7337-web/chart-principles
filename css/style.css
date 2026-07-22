@@ -565,6 +565,35 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 }
 .lk-short-badge { display: inline-block; margin-left: 8px; font-size: .72rem; font-weight: 700;
   color: #b45309; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 999px; padding: 2px 9px; vertical-align: middle; }
+/* 📖 기업 이해 보고서 */
+.lk-report { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; flex-wrap: wrap; }
+.rep-btn { font-size: .88rem; font-weight: 700; padding: 8px 16px; border: 1px solid #7c3aed;
+  border-radius: 999px; background: #f6f2ff; color: #6d28d9; cursor: pointer; }
+.rep-btn:hover { background: #7c3aed; color: #fff; }
+#report-overlay { display: none; position: fixed; inset: 0; background: rgba(17,24,39,.5);
+  z-index: 60; overflow-y: auto; padding: 24px 12px; }
+.rep-doc { max-width: 860px; margin: 0 auto; background: #fff; border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.rep-head { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; z-index: 2;
+  padding: 14px 22px; background: #fff; border-bottom: 1px solid var(--line); border-radius: 14px 14px 0 0; }
+.rep-head b { font-size: 1.02rem; }
+.rep-body { padding: 8px 26px 30px; font-size: .9rem; line-height: 1.7; color: var(--ink); }
+.rep-body h2 { font-size: 1.15rem; margin: 24px 0 6px; }
+.rep-body h3 { font-size: 1rem; margin: 22px 0 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rep-body h4 { font-size: .92rem; margin: 16px 0 4px; }
+.rep-body p { margin: 6px 0; }
+.rep-body ul { margin: 6px 0; padding-left: 20px; }
+.rep-body li { margin: 3px 0; }
+.rep-body blockquote { margin: 10px 0; padding: 8px 14px; background: #f7f8fb;
+  border-left: 3px solid #7c3aed; border-radius: 6px; color: var(--muted); font-size: .84rem; }
+.rep-body hr { border: none; border-top: 2px solid #eceff4; margin: 20px 0; }
+.rep-body code { background: #f1f4f9; border-radius: 4px; padding: 1px 5px; font-size: .84em; }
+.rep-twrap { overflow-x: auto; margin: 8px 0; }
+.rep-body table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+.rep-body th, .rep-body td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+.rep-body th { background: #f7f8fb; font-weight: 700; }
+.rep-todo { color: #b45309; background: #fef3c7; border-radius: 4px; padding: 0 5px; font-weight: 600; font-size: .92em; }
+.rep-ok { color: #15803d; background: #dcfce7; border-radius: 4px; padding: 0 5px; font-weight: 600; font-size: .92em; }
 /* 종목조회 산업·밸류체인 배지 */
 .lk-industry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }
 .lk-ind-label { font-size: .82rem; font-weight: 700; color: var(--muted); }

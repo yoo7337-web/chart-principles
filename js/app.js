@@ -1053,6 +1053,7 @@ function loadLookup(key) {
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
+    renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     loadExtras().then(() => {
       if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
       renderLookupHead(st);
@@ -2000,6 +2001,103 @@ function scrOpenFromGroupUS(gk, sector) {
   buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
   renderScrChain(); renderScreener();
 }
+/* ---------- 📖 기업 이해 보고서 (감사관점×투자관점, 분기 갱신) ---------- */
+// 저장: data/reports/{mk}_{ticker}.json — {name, tier, date(기준일), next_due, version, md, changelog}
+// 심층(deep)은 Claude 세션에서 DART·웹 검증 후 작성, 골격(auto)은 추후 report_gen.py(분기 클라우드).
+let REPORTS_IDX = null;
+function loadReportsIdx() {
+  if (REPORTS_IDX) return Promise.resolve(REPORTS_IDX);
+  return fetch("data/reports/index.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (REPORTS_IDX = j || { reports: {} }));
+}
+const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+
+function renderLookupReportBtn(st) {
+  const host = $("#lookup-report");
+  if (!host) return;
+  host.style.display = "none";
+  host.innerHTML = "";
+  loadReportsIdx().then((idx) => {
+    const key = `${st.market}_${st.ticker}`;
+    const meta = idx.reports?.[key];
+    if (!meta || LOOKUP_ST !== st) return;   // 종목 전환 경쟁 방지
+    const stale = meta.next_due && kstDay() > meta.next_due;
+    host.style.display = "";
+    host.innerHTML = `<button class="rep-btn" id="rep-open">📖 기업 이해 보고서</button>
+      <span class="sub-note">기준일 ${meta.date} · ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"} · 분기 갱신</span>
+      ${stale ? `<span class="lk-stale">⚠ 갱신 필요(분기 경과)</span>` : ""}`;
+    $("#rep-open").onclick = () => openReport(key);
+  });
+}
+
+function openReport(key) {
+  fetch(`data/reports/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((rep) => {
+    if (!rep) return;
+    let ov = document.getElementById("report-overlay");
+    if (!ov) { ov = document.createElement("div"); ov.id = "report-overlay"; document.body.appendChild(ov); }
+    const close = () => { ov.style.display = "none"; document.body.style.overflow = ""; };
+    ov.innerHTML = `<div class="rep-doc">
+      <div class="rep-head"><b>📖 ${rep.name}</b>
+        <span class="sub-note">기준일 ${rep.date} · v${rep.version} · 다음 갱신 예정 ${rep.next_due || "-"}</span>
+        <span style="flex:1"></span><button class="jr-x" id="rep-close">✕</button></div>
+      <div class="rep-body">${mdToHtml(rep.md)}</div></div>`;
+    ov.style.display = "block";
+    document.body.style.overflow = "hidden";
+    document.getElementById("rep-close").onclick = close;
+    ov.onclick = (e) => { if (e.target === ov) close(); };
+  });
+}
+
+// 최소 마크다운 렌더러 — 보고서에 필요한 부분집합만(제목·굵게·표·목록·인용·수평선·코드).
+// 외부 라이브러리 없이 유지(오프라인·보안). XSS 방지 위해 전부 이스케이프 후 인라인만 되살림.
+function mdToHtml(md) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (s) => s
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[DART 확인 필요\]|\[[^\]]*확인 필요[^\]]*\]/g, (m) => `<span class="rep-todo">${m}</span>`)
+    .replace(/✅ 확인/g, `<span class="rep-ok">✅ 확인</span>`);
+  const lines = md.split("\n");
+  let html = "", i = 0, listOpen = false, quoteOpen = false;
+  const closeAll = () => {
+    if (listOpen) { html += "</ul>"; listOpen = false; }
+    if (quoteOpen) { html += "</blockquote>"; quoteOpen = false; }
+  };
+  while (i < lines.length) {
+    const l = lines[i].trimEnd();
+    if (l.startsWith("|") && lines[i + 1] && /^\|[\s:|-]+\|?$/.test(lines[i + 1].trim())) {  // 표
+      closeAll();
+      const cells = (s) => s.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(esc(c.trim())));
+      const heads = cells(l);
+      i += 2;
+      let rows = "";
+      for (; i < lines.length && lines[i].trim().startsWith("|"); i++)
+        rows += "<tr>" + cells(lines[i]).map((c) => `<td>${c}</td>`).join("") + "</tr>";
+      html += `<div class="rep-twrap"><table><thead><tr>${heads.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      continue;
+    }
+    const h = l.match(/^(#{1,4})\s+(.*)/);
+    if (h) { closeAll(); const n = Math.min(h[1].length + 1, 5); html += `<h${n}>${inline(esc(h[2]))}</h${n}>`; i++; continue; }
+    if (/^-{3,}$/.test(l)) { closeAll(); html += "<hr>"; i++; continue; }
+    if (l.startsWith("> ")) {
+      if (!quoteOpen) { closeAll(); html += "<blockquote>"; quoteOpen = true; }
+      html += inline(esc(l.slice(2))) + " ";
+      i++; continue;
+    }
+    if (/^[-*]\s+/.test(l)) {
+      if (!listOpen) { closeAll(); html += "<ul>"; listOpen = true; }
+      html += `<li>${inline(esc(l.replace(/^[-*]\s+/, "")))}</li>`;
+      i++; continue;
+    }
+    if (!l.trim()) { closeAll(); i++; continue; }
+    closeAll();
+    html += `<p>${inline(esc(l))}</p>`;
+    i++;
+  }
+  closeAll();
+  return html;
+}
+
 function renderLookupIndustry(st) {
   const host = $("#lookup-industry"); if (!host) return;
   const tileSec = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.sector;
