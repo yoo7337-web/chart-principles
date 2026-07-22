@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 r"""마켓 전문 분석 → app\data\market_pro.json
 
-A. Breadth 시계열(120일, 시장별): ADR(20일 등락비율), 신고-신저 지수(누적), MA50/200 상회 비율
+A. Breadth 시계열(5년, 시장별): ADR(20일 등락비율), 신고-신저 지수(누적), MA50/200 상회 비율
+   ⚠클라우드는 2년 캐시(hi52 워밍업 252일 차감 → 실질 ~1년)라 매 실행 새로 계산하면 5년이 무너짐.
+   → 기존 published 시계열과 **날짜 키 병합**(신규 우선) + 1년 이전 구간은 주1회로 솎아 용량 억제.
+   누적 지표(nhnl)는 시작점이 창(window)마다 달라지므로 겹치는 마지막 날짜에 **레벨 리베이스** 후 병합.
 B. 섹터 로테이션: 섹터 시총가중 수익률 1주/1M/3M + 시장 대비 상대강도
 C. 리스크 게이지: 코스피↔달러/미10Y/VIX 60일 상관, 실현변동성 vs VIX, 리스크온/오프 점수(0~100)
 D. AI 마켓 브리핑: Gemini — 매크로+breadth+오늘의 신호+뉴스 헤드라인 종합
@@ -23,11 +26,59 @@ from common import APP_DATA, ROOT
 
 KST = timezone(timedelta(hours=9))  # 클라우드 러너=UTC 대응
 
-HIST_DAYS = 120
+HIST_DAYS = 1300      # 5년치 거래일(252×5≈1260) + 여유
+DAILY_DAYS = 400      # 최근 이 일수까지는 일별 유지, 그 이전은 주1회로 솎음
 
 
 def close_matrix(data: dict, mk: str) -> pd.DataFrame:
     return pd.DataFrame({tk: df["close"] for (m, tk), df in data.items() if m == mk}).sort_index()
+
+
+def _thin(points: list) -> list:
+    """1년(DAILY_DAYS) 이전 구간은 주당 1개(그 주의 마지막)만 남김.
+    ⚠멱등(idempotent)이어야 함 — 매 실행 재적용되므로 '매 5번째' 같은 인덱스 방식은 점점 성겨져 금지."""
+    if not points:
+        return points
+    cutoff = (datetime.now(KST).date() - timedelta(days=DAILY_DAYS)).strftime("%Y-%m-%d")
+    recent = [p for p in points if p["t"] >= cutoff]
+    older = [p for p in points if p["t"] < cutoff]
+    by_week = {}
+    for p in older:                      # 같은 ISO주면 뒤 날짜가 덮어씀 → 그 주의 마지막만 생존(멱등)
+        y, w, _ = datetime.strptime(p["t"], "%Y-%m-%d").isocalendar()
+        by_week[(y, w)] = p
+    return sorted(by_week.values(), key=lambda p: p["t"]) + recent
+
+
+def _merge_series(old: list, new: list, cumulative: bool = False) -> list:
+    """published 시계열(old)과 이번 계산분(new)을 날짜 키로 병합 — 클라우드 짧은 창이 과거를 잘라먹지 않게.
+    cumulative=True면 겹치는 마지막 날짜 기준으로 new의 레벨을 old에 맞춰 평행이동(누적 지표의 원점 차이 보정)."""
+    if not old:
+        return _thin(new)
+    if not new:
+        return _thin(old)
+    omap = {p["t"]: p["v"] for p in old}
+    if cumulative:
+        common = [p["t"] for p in new if p["t"] in omap]
+        if common:
+            anchor = common[-1]
+            nmap = {p["t"]: p["v"] for p in new}
+            off = omap[anchor] - nmap[anchor]
+            new = [{"t": p["t"], "v": round(p["v"] + off, 2)} for p in new]
+        else:
+            return _thin(old)          # 겹침 없음 → 레벨 보정 불가, 과거 보존 우선
+    omap.update({p["t"]: p["v"] for p in new})
+    merged = [{"t": t, "v": omap[t]} for t in sorted(omap)]
+    return _thin(merged[-(HIST_DAYS + 300):])   # 5년 + 솎임 여유까지만 보관
+
+
+def merge_breadth(old_hist: dict, new_hist: dict) -> dict:
+    """시장×지표별 병합. nhnl만 누적 지표."""
+    out = {}
+    for mk in ("kr", "us"):
+        o, n = (old_hist or {}).get(mk, {}), new_hist.get(mk, {})
+        out[mk] = {k: _merge_series(o.get(k, []), n.get(k, []), cumulative=(k == "nhnl"))
+                   for k in ("adr", "nhnl", "ma50", "ma200")}
+    return out
 
 
 def breadth_series(data: dict) -> dict:
@@ -185,7 +236,12 @@ def main():
     # ⚠load_research()는 클라우드(2년 캐시)에서 항상 빈 결과 → 크래시(2026-07-20 사고). 이 스크립트는
     # refresh.yml 30분 클라우드 루프에 포함되므로 market_dash와 동일하게 유동성 코어만 사용.
     data = core_data(load_all())
-    breadth = breadth_series(data)
+    out_path = APP_DATA / "market_pro.json"
+    prev = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else {}
+    # 기존 published 시계열과 병합 — 클라우드(2년 캐시)가 로컬 백필한 5년 이력을 잘라먹지 않게
+    breadth = merge_breadth(prev.get("breadth_hist"), breadth_series(data))
+    _n = len(breadth.get("kr", {}).get("adr", []))
+    print(f"      breadth KR {_n}p ({breadth['kr']['adr'][0]['t'] if _n else '-'} ~)")
 
     print("[2/4] 섹터 로테이션...")
     rotation = sector_rotation(data)
@@ -193,12 +249,10 @@ def main():
     print("[3/4] 리스크 게이지...")
     risk = risk_gauge()
 
-    out_path = APP_DATA / "market_pro.json"
     if args.no_brief:
         print("[4/4] AI 브리핑 생략(--no-brief) — 기존 브리핑 보존")
-        old = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else {}
-        brief = old.get("brief")
-        brief_at = old.get("brief_at")
+        brief = prev.get("brief")
+        brief_at = prev.get("brief_at")
         payload = {
             "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
             "breadth_hist": breadth, "rotation": rotation, "risk": risk,
