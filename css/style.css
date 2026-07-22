@@ -131,6 +131,7 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .goto-lookup { color: var(--accent); text-decoration: none; }
 .goto-lookup:hover { text-decoration: underline; }
 #today-table td, #today-table th { font-size: .85rem; }
+#today-table { width: 100%; }   /* 차트 행 펼침 시 표 전체 폭이 출렁이지 않게 항상 컨테이너 가득 */
 
 /* 자체 지수 티커 스트립 */
 .macro-ticker { display: flex; gap: 6px; overflow-x: auto; padding: 8px 4px; margin-bottom: 10px;
@@ -436,12 +437,52 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-memo-meta { display: flex; align-items: center; margin-top: 6px; }
 .lk-memo-meta a, .lk-memo-edit, .lk-memo-del { font-size: .8rem; }
 /* 주식찾기(스크리너) — 좌: 결과 / 우: 필터 2단 레이아웃 */
-.scr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
+/* ── 주식찾기 2단: 결과(넓게) + 필터(콤팩트 330px) ──
+   2026-07-23 재설계: 결과 영역이 좁고 필터가 번잡하다는 피드백 → 필터 400→330px·폰트 한 단계 축소·
+   설명문 최소화·밸류체인은 사이드에선 2열 그리드(화살표 숨김). 기능·id는 전부 그대로. */
+.scr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
 .scr-side { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto;
-  display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+  display: flex; flex-direction: column; gap: 10px; padding-right: 2px; font-size: .84rem; }
 .scr-side .scr-chain, .scr-side .scr-detail { margin-top: 0; }
-.scr-side .scr-label { flex-basis: 56px; }
+.scr-side .card-flat { padding: 12px 14px; }
+.scr-side .scr-label { flex: 0 0 100%; padding-top: 0; font-size: .8rem; }
+.scr-side .scr-frow { flex-wrap: wrap; gap: 6px; }
+.scr-side .scr-filters { gap: 12px; }
+/* 사이드 칩류 일괄 콤팩트 */
+.scr-side .scr-gchip { font-size: .8rem; padding: 5px 10px; gap: 5px; }
+.scr-side .scr-gchip .scr-gi { font-size: .92rem; }
+.scr-side .scr-sub { font-size: .76rem; padding: 4px 8px; }
+.scr-side .scr-subs { padding: 8px; gap: 5px; margin: 6px 0 2px 2px; }
+.scr-side .scr-cind { font-size: .78rem; padding: 5px 10px; }
+.scr-side .scr-theme { font-size: .78rem; padding: 5px 10px; }
+.scr-side .scr-tier { font-size: .76rem; padding: 4px 9px; }
+.scr-side .scr-num { width: 76px; padding: 5px 7px; font-size: .8rem; }
+.scr-side .scr-bk { font-size: .74rem; padding: 3px 8px; }
+.scr-side .scr-mlabel { flex: 0 0 100%; font-size: .8rem; }
+.scr-side .scr-metric-row { gap: 4px; padding: 5px 0 7px 2px; border-bottom: 1px dashed #eef0f4; }
+.scr-side .scr-metric-row:last-child { border-bottom: none; }
+.scr-side .scr-chain-head, .scr-side .scr-detail-head { margin-bottom: 8px; gap: 8px; }
+.scr-side .scr-chain-head b, .scr-side .scr-detail-head b { font-size: .86rem; }
+.scr-side .scr-chain-inds { gap: 5px; margin-bottom: 8px; padding-bottom: 8px; }
+/* 사이드 밸류체인 단계: 화살표 대신 2열 그리드 + 순서 번호 */
+.scr-side .scr-arrow { display: none; }
+.scr-side .scr-chain-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; counter-reset: stage; }
+.scr-side .scr-stage { flex-direction: row; justify-content: flex-start; gap: 6px; min-width: 0;
+  padding: 6px 9px; border-radius: 9px; counter-increment: stage; }
+.scr-side .scr-stage::before { content: counter(stage); font-size: .68rem; font-weight: 700;
+  color: var(--muted); background: #eef1f6; border-radius: 999px; padding: 0 6px; flex: none; }
+.scr-side .scr-stage.on::before { background: rgba(255,255,255,.25); color: #fff; }
+.scr-side .scr-stage .scr-si { font-size: .95rem; }
+.scr-side .scr-stage .scr-sn { font-size: .76rem; white-space: normal; text-align: left; line-height: 1.2; }
+.scr-side .scr-stage .scr-sc { margin-left: auto; font-size: .7rem; }
+.scr-side .scr-themes-head { font-size: .82rem; margin-bottom: 6px; }
+.scr-side .scr-sec-actions { margin-bottom: 6px; gap: 6px; }
+.scr-side .sub-note { font-size: .72rem; }
 .scr-main .scr-bar { margin-top: 2px; }
+/* 결과 테이블 폴리시: 촘촘한 행 + 줄무늬 + 헤더 고정 */
+.scr-main .tablewrap { max-height: calc(100vh - 130px); overflow-y: auto; }
+#scr-table thead th { position: sticky; top: 0; background: #fff; z-index: 2; box-shadow: 0 1px 0 var(--line); }
+#scr-table tbody tr:nth-child(even) { background: #fafbfd; }
 @media (max-width: 1000px) {
   .scr-layout { grid-template-columns: 1fr; }
   .scr-side { position: static; max-height: none; overflow: visible; order: -1; }
@@ -488,7 +529,7 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-sortlbl { font-size: .86rem; color: var(--muted); }
 .scr-sortlbl select { font: inherit; font-size: .86rem; padding: 4px 6px; }
 #scr-table { width: 100%; border-collapse: collapse; }
-#scr-table th, #scr-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: .9rem; text-align: left; }
+#scr-table th, #scr-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: .88rem; text-align: left; }
 #scr-table th { font-size: .8rem; color: var(--muted); font-weight: 700; }
 #scr-table .scr-r { text-align: right; white-space: nowrap; }
 #scr-table .scr-row { cursor: pointer; }

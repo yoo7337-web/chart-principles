@@ -911,10 +911,14 @@ function toggleTodayChart(btn, sig) {
   document.querySelectorAll(".today-chart-btn").forEach((x) => { x.textContent = "📈 보기"; });
   if (open) return;  // 이미 열려 있었으면 닫기만
   btn.textContent = "▲ 닫기";
+  // 표 폭을 삽입 '전'에 측정해 차트를 그 폭에 고정 — 차트가 표를 밀어 넓히는 되먹임 방지
+  const fixedW = Math.max(320, tr.closest("table").clientWidth - 24);
   const row = document.createElement("tr");
   row.className = "today-chart-row";
-  row.innerHTML = `<td colspan="7"><div class="chart" style="height:300px"></div>
-    <div class="chart today-ind" style="height:150px;margin-top:6px;display:none"></div><p class="legend"></p></td>`;
+  row.innerHTML = `<td colspan="7"><div class="chart" style="height:300px;width:${fixedW}px;max-width:100%"></div>
+    <div class="chart today-ind" style="height:150px;margin-top:6px;display:none;width:${fixedW}px;max-width:100%"></div>
+    <p class="legend" style="width:${fixedW}px;max-width:100%"></p></td>`;
+  // 범례도 고정폭 필수 — 표 셀은 한 줄 텍스트의 최대폭만큼 늘어나 표 전체를 밀어냄(1,314px 실측)
   tr.after(row);
   fetch(`data/stocks/${sig.market}_${sig.ticker}.json` + _cb)
     .then((r) => (r.ok ? r.json() : null)).then((st) => {
@@ -945,6 +949,11 @@ function toggleTodayChart(btn, sig) {
       }
       const t0 = s[0].t;
       const marks = st.markers.filter((m) => m.rule_id === sig.rule_id && m.t >= t0);
+      // ⚠stocks/*.json의 markers는 주1 재생성이라 '오늘 신호'(scan_today, 매일)가 아직 없을 수 있음.
+      // 그 경우 과거 마커(예: 한 달 전)가 최신처럼 보임(2026-07-23 제보) → 신호 자신을 반드시 추가.
+      if (!marks.some((m) => m.t === sig.date))
+        marks.push({ t: sig.date, side: sig.side, rule_id: sig.rule_id });
+      marks.sort((a, b) => (a.t < b.t ? -1 : 1));
       cd.setMarkers(marks.map((m) => ({
         time: m.t, position: m.side === "buy" ? "belowBar" : "aboveBar",
         color: m.t === sig.date ? "#111827" : (m.side === "buy" ? "#16a34a" : "#dc2626"),
@@ -2855,6 +2864,40 @@ function paintWorld() {
     (MARKET.cbanks || []).forEach((cb) => place(
       CB_SVG[cb.code] || [], CB_XY[cb.code], rateColor(cb.changed?.bp),
       `${cb.flag} ${CB_SHORT[cb.code] || ""} <b>${cb.rate}%</b>`, "rate", () => openCbDialog(cb)));
+  }
+  deconflictChips(host);
+}
+
+// 지도 칩 겹침 해소 — 수기 좌표는 화면 폭에 따라 겹칠 수 있어(유럽·동아시아 밀집) 배치 후 보정.
+// 겹치는 쌍은 아래쪽 칩을 필요한 만큼 아래로 밀어냄(%가 아닌 px로 재고정, 3패스면 수렴).
+function deconflictChips(host) {
+  const chips = [...host.querySelectorAll(".world-chip")];
+  if (chips.length < 2) return;
+  const hostR = host.getBoundingClientRect();
+  // %좌표 → px 고정(이후 계산 안정)
+  chips.forEach((c) => {
+    const r = c.getBoundingClientRect();
+    c.style.left = (r.left - hostR.left + r.width / 2) + "px";
+    c.style.top = (r.top - hostR.top + r.height / 2) + "px";
+  });
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    const rs = chips.map((c) => c.getBoundingClientRect());
+    for (let i = 0; i < chips.length; i++) {
+      for (let j = i + 1; j < chips.length; j++) {
+        const a = rs[i], b = rs[j];
+        const ovX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const ovY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ovX > 2 && ovY > 1) {                 // 실질 겹침
+          const lower = a.top <= b.top ? j : i;   // 더 아래에 있는 쪽을 밀어냄
+          const dy = ovY + 3;
+          chips[lower].style.top = (parseFloat(chips[lower].style.top) + dy) + "px";
+          rs[lower] = chips[lower].getBoundingClientRect();
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
   }
 }
 
