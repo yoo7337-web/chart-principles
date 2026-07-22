@@ -2382,7 +2382,8 @@ function watchTvTicker() {
   setTimeout(() => {
     const frame = tv.querySelector("iframe");
     const ok = frame && frame.clientHeight > 10;
-    if (ok) { renderMacroTicker(["^KS11", "^KQ11", "^SOX", "^VIX"]); }  // TV가 못 싣는 지수(라이선스)만 자체 배치 티커로
+    // TV가 못 싣는(또는 심볼이 불안정한) 지표만 자체 티커로 — 달러인덱스는 TV 심볼이 오류(!)나서 자체 데이터 사용
+    if (ok) { renderMacroTicker(["^KS11", "^KQ11", "^SOX", "^VIX", "DX-Y.NYB"]); }
     else tv.style.display = "none";
   }, 6000);
 }
@@ -2450,26 +2451,52 @@ function renderIdxCards() {
   const cards = [];
   for (const id of idxIds) {
     const m = byId[id];
-    if (m) cards.push({ name: m.name, last: m.last, chg: m.chg, spark: m.spark, unit: m.unit });
+    if (m) cards.push({ id: m.id, name: m.name, last: m.last, chg: m.chg, spark: m.spark, unit: m.unit });
   }
   for (const f of (MARKET.featured?.[homeMk] || [])) {
     cards.push({ name: f.name, last: f.last, chg: f.chg, spark: f.spark, unit: homeMk === "kr" ? "원" : "$", t: f.t });
   }
-  host.innerHTML = cards.map((c) => {
+  host.innerHTML = cards.map((c, i) => {
     const up = c.chg >= 0;
     const val = c.unit === "$" ? `$${c.last.toLocaleString()}` : `${c.last.toLocaleString()}${c.unit || ""}`;
-    return `<div class="idx-card${c.t ? " clickable" : ""}" ${c.t ? `data-t="${c.t}"` : ""}>
+    return `<div class="idx-card clickable" data-i="${i}" ${c.t ? `data-t="${c.t}"` : ""} ${c.id ? `data-mid="${c.id}"` : ""} title="클릭 = 5년 차트">
       <div class="idx-name">${c.name}</div>
       <div class="idx-val">${val}</div>
       <div class="idx-chg ${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(c.chg, 2)}</div>
       ${sparkSvg(c.spark, up ? "#dc2626" : "#2563eb")}
     </div>`;
   }).join("");
+  // 카드 클릭 = 5년 차트 팝업 (지수=macro w5 / 개별종목=종목파일 5년 시계열 lazy 로드)
   host.querySelectorAll(".idx-card.clickable").forEach((el) => {
     el.onclick = () => {
-            gotoTabFull("lookup");
+      const c = cards[+el.dataset.i];
+      if (c.id) { openMacroDialog(byId[c.id]); return; }
+      openStockDialog(homeMk, c.t, c.name, c.last, c.chg, c.unit);
+    };
+  });
+}
+
+// 개별종목 5년 차트 팝업 — data/stocks/{key}.json(주1 갱신)의 5년 일봉을 주봉으로 솎아 표시
+function openStockDialog(mk, t, name, last, chg, unit) {
+  const key = `${mk}_${t}`;
+  openChartDialog(name, `<p class="mini-note">5년 차트 불러오는 중…</p>`, [], []);
+  fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => {
+    const s = st?.series || [];
+    if (!s.length) {
+      openChartDialog(name, `현재 <b>${(last ?? 0).toLocaleString()}${unit || ""}</b> · <span class="sub-note">5년 데이터를 찾지 못했습니다</span>`, [], []);
+      return;
+    }
+    const w = s.filter((_, i) => i % 5 === 0);           // 주 1개꼴로 솎기(약 260포인트)
+    const dates = w.map((x) => x.t), vals = w.map((x) => x.c);
+    const link = `<div style="margin-top:8px"><a href="#" id="wd-golookup" class="home-more">종목 조회에서 자세히 보기 →</a></div>`;
+    openChartDialog(name, _fiveYrStats(last, chg, vals, unit) + link, dates, vals);
+    const a = document.getElementById("wd-golookup");
+    if (a) a.onclick = (e) => {
+      e.preventDefault();
+      $("#world-dialog").close();
+      gotoTabFull("lookup");
       if (!lookupRendered) initLookup();
-      loadLookup(`${homeMk}_${el.dataset.t}`);
+      loadLookup(key);
     };
   });
 }
