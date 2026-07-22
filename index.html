@@ -348,7 +348,12 @@
 
   <section id="tab-internals" class="panel">
     <div class="criteria" id="int-context"></div>
-    <div class="controls"><label>시장 <select id="int-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label></div>
+    <div class="controls">
+      <label>시장 <select id="int-mk"><option value="kr">🇰🇷 한국</option><option value="us">🇺🇸 미국</option></select></label>
+      <span class="mk-toggle" id="int-range">
+        <button data-r="1">1년</button><button data-r="3">3년</button><button data-r="5" class="active">5년</button>
+      </span>
+    </div>
     <div id="int-verdict" class="card-flat"></div>
     <div id="risk-gauge" class="card-flat risk-box"></div>
     <div id="int-brief" class="commentary" style="display:none"></div>
