@@ -2555,8 +2555,14 @@ function renderRankings() {
   if (!cats.some(([k]) => k === rankCat)) rankCat = cats[0][0];
 
   const g = rk[`${homeMk}_${rankCat}`];
-  $("#rank-note").textContent =
-    `(${g.duration === "realtime" ? "실시간" : "1일"} · ${TOSSM.generated} 수집 · 토스증권)`;
+  // 토스는 15:40 노트북 배치라 노트북이 꺼져 있으면 스냅샷이 하루 이상 낡는다. "실시간"으로만 적으면
+  // 홈 '오늘의 종목'(30분 클라우드 갱신)과 값이 달라 보여 오해 → 경과 시간을 반드시 함께 표기.
+  const ageH = TOSSM.generated
+    ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
+  const stale = ageH != null && ageH >= 12;
+  $("#rank-note").innerHTML =
+    `(토스증권 ${g.duration === "realtime" ? "체결 기준" : "1일"} · ${relTime(TOSSM.generated)} 수집)` +
+    (stale ? ` <span class="rank-stale">⚠ ${Math.floor(ageH)}시간 전 스냅샷 — 위 '오늘의 종목'이 최신</span>` : "");
 
   $("#rank-chips").innerHTML = cats.map(([k, lab]) =>
     `<button class="chip${k === rankCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
@@ -3664,10 +3670,18 @@ function loadExtras() {
 // 최신 시세: market.json quotes(30분 갱신, 히트맵과 동일 소스) 우선 → 없으면 종목 시계열 폴백
 function freshQuote(st) {
   const q = MARKET?.quotes?.[`${st.market}_${st.ticker}`];
-  if (q) return { cur: q[0], chg: q[1], src: `${relTime(MARKET.generated)} 시세 (히트맵과 동일 · 30분 갱신)` };
-  const s = st.series;
-  const cur = s[s.length - 1]?.c, prev = s[s.length - 2]?.c;
-  return { cur, chg: cur != null && prev ? cur / prev - 1 : null, src: `종가 기준 ${st.asof}` };
+  const s = st.series || [];
+  const barLast = s[s.length - 1]?.c;
+  if (q) {
+    // 헤더 시세(30분 갱신)와 차트 마지막 봉(stocks/*.json, 노트북 배치)이 어긋나면 반드시 표시.
+    // 2026-07-23 실사고: 헤더 260,500원인데 차트 끝은 243,000원(7/20)이었음 — 같은 화면 다른 숫자.
+    const gap = barLast != null && barLast > 0 ? Math.abs(q[0] / barLast - 1) : 0;
+    const warn = gap > 0.005
+      ? ` <span class="lk-stale">⚠ 차트는 ${st.asof} 종가까지 — 시세와 ${pct(q[0] / barLast - 1, 1)} 차이</span>` : "";
+    return { cur: q[0], chg: q[1], src: `${relTime(MARKET.generated)} 시세 (히트맵과 동일 · 30분 갱신)${warn}` };
+  }
+  const prev = s[s.length - 2]?.c;
+  return { cur: barLast, chg: barLast != null && prev ? barLast / prev - 1 : null, src: `종가 기준 ${st.asof}` };
 }
 
 // 헤더: 로고 + 종목명 + 현재가/등락
