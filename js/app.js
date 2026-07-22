@@ -3143,7 +3143,23 @@ function renderInternals() {
     </div>`;
 
   $("#int-mk").onchange = drawInternals;
+  $("#int-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    intRange = +b.dataset.r;
+    $("#int-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    drawInternals();
+  });
   drawInternals();
+}
+
+// 시장 진단 차트 표시 기간(년) — 데이터는 5년 보관, 1/3/5년 확대만 조절
+let intRange = 5;
+function intSlice(arr) {
+  if (!arr?.length) return arr || [];
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - intRange);
+  const cut = d.toISOString().slice(0, 10);
+  const out = arr.filter((p) => p.t >= cut);
+  return out.length > 1 ? out : arr;
 }
 
 // 시장내부 결론 대시보드 — 지표별 신호등 + 룰 기반 한 줄 결론 (AI 아님, 항상 표시)
@@ -3207,7 +3223,7 @@ function renderIntVerdict(mk) {
         <div class="vd-val">${ICON[st]} <b>${val}</b></div>
         <div class="vd-note">${note}</div>
       </div>`).join("")}</div>
-    <p class="sub-note" style="margin-top:8px">판정 기준은 카드에 표기 — 룰 기반 자동 판정(참고용, 매수·매도 지시 아님) · 상세 추이는 아래 120일 차트</p>`;
+    <p class="sub-note" style="margin-top:8px">판정 기준은 카드에 표기 — 룰 기반 자동 판정(참고용, 매수·매도 지시 아님) · 상세 추이는 아래 5년 차트(1년 이전 구간은 주 1회 표본)</p>`;
 }
 
 function drawInternals() {
@@ -3217,16 +3233,16 @@ function drawInternals() {
   renderIntVerdict(mk);
   const h = MPRO.breadth_hist?.[mk];
   if (!h) return;
-  lineChart("#int-adr", h.adr, "#2563eb", 100);
-  lineChart("#int-nhnl", h.nhnl, "#8e44ad", null);
+  lineChart("#int-adr", intSlice(h.adr), "#2563eb", 100);
+  lineChart("#int-nhnl", intSlice(h.nhnl), "#8e44ad", null);
   // MA50/200 두 선을 한 차트에
   const el = $("#int-ma");
   el.innerHTML = "";
   const c = LightweightCharts.createChart(el, baseChartOpts(el, el.clientHeight || 200));
   const s50 = c.addLineSeries({ color: "#f59e0b", lineWidth: 2, priceLineVisible: false, title: "MA50 상회 %" });
-  s50.setData(h.ma50.map((p) => ({ time: p.t, value: p.v })));
+  s50.setData(intSlice(h.ma50).map((p) => ({ time: p.t, value: p.v })));
   const s200 = c.addLineSeries({ color: "#0891b2", lineWidth: 2, priceLineVisible: false, title: "MA200 상회 %" });
-  s200.setData(h.ma200.map((p) => ({ time: p.t, value: p.v })));
+  s200.setData(intSlice(h.ma200).map((p) => ({ time: p.t, value: p.v })));
   s50.createPriceLine({ price: 50, color: "#9ca3af", lineWidth: 1, lineStyle: 2 });
   c.timeScale().fitContent();
   intCharts.push(c);
