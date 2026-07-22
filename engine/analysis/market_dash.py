@@ -91,6 +91,23 @@ def _kr_index_fix(df: pd.DataFrame, days: int = 400) -> pd.DataFrame:
     return df
 
 
+def _sync_tail(wk_d: list, wk_c: list, d_str: str, v: float) -> tuple:
+    """주봉 시계열의 마지막 점을 일봉 최신 종가로 동기화 — 카드(30분 갱신)와 팝업 차트(주봉 20h 캐시)의
+    최종값 불일치 방지(2026-07-23 사용자 제보: VIX +1.4%, 대만 -1.3% 등 어긋남).
+    같은 주(7일 이내)면 마지막 점을 교체, 아니면 새 점 추가. 날짜 규약(주초/주말)이 섞여도 안전."""
+    if not wk_d or v is None:
+        return wk_d, wk_c
+    try:
+        gap = (datetime.strptime(d_str, "%Y-%m-%d") - datetime.strptime(wk_d[-1], "%Y-%m-%d")).days
+    except Exception:
+        return wk_d, wk_c
+    if gap < 0:
+        return wk_d, wk_c
+    if gap <= 7:
+        return wk_d[:-1] + [d_str], wk_c[:-1] + [round(float(v), 2)]
+    return wk_d + [d_str], wk_c + [round(float(v), 2)]
+
+
 def _macro_5y(tickers: list) -> dict:
     """매크로 티커 5년 주봉(카드 클릭 시 팝업 차트용). 20h 가드 캐시."""
     if MACRO5Y_CACHE.exists():
@@ -166,13 +183,16 @@ def fetch_macro() -> list:
             continue
         spark = s.tail(SPARK_DAYS)
         wk = weekly.get(t) or {}
+        last_v = round(float(s.iloc[-1]), 2)
+        last_d = s.index[-1].strftime("%Y-%m-%d")
+        w5d, w5 = _sync_tail(list(wk.get("d", [])), list(wk.get("c", [])), last_d, last_v)
         out.append({
             "id": t, "name": name, "group": group, "unit": unit, "note": note,
-            "last": round(float(s.iloc[-1]), 2),
+            "last": last_v,
             "chg": round(float(s.iloc[-1] / s.iloc[-2] - 1), 4),
             "spark": [round(float(v), 2) for v in spark],
-            "asof": s.index[-1].strftime("%Y-%m-%d"),
-            "w5": wk.get("c", []), "w5d": wk.get("d", []),
+            "asof": last_d,
+            "w5": w5, "w5d": w5d,
         })
     return out
 
@@ -568,7 +588,8 @@ def fetch_world() -> list:
             try:
                 s = d2[t].dropna()
                 if len(s) >= 2:
-                    last_chg[t] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4))
+                    last_chg[t] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4),
+                                   s.index[-1].strftime("%Y-%m-%d"))
             except Exception:
                 pass
     except Exception:
@@ -580,7 +601,8 @@ def fetch_world() -> list:
         try:
             s = naver_index_daily(code, days=30)
             if len(s) >= 2:
-                last_chg[tk] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4))
+                last_chg[tk] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4),
+                                s.index[-1].strftime("%Y-%m-%d"))
             d5 = naver_index_daily(code, days=1900)
             if len(d5) > 50 and weekly.get(tk):
                 wsr = d5.resample("W").last().dropna()
@@ -596,9 +618,11 @@ def fetch_world() -> list:
             continue
         last = lc[0] if lc else (wk["c"][-1] if wk and wk["c"] else None)
         chg = lc[1] if lc else None
+        w5d, w5 = (list(wk["d"]), list(wk["c"])) if wk else ([], [])
+        if lc:   # 주봉 마지막 점을 카드와 동일한 일봉 최신치로 동기화(팝업 차트 최종값 일치)
+            w5d, w5 = _sync_tail(w5d, w5, lc[2] if len(lc) > 2 else datetime.now(KST).strftime("%Y-%m-%d"), lc[0])
         out.append({"id": t, "country": country, "name": name, "flag": flag, "x": x, "y": y,
-                    "last": last, "chg": chg,
-                    "w5d": wk["d"] if wk else [], "w5": wk["c"] if wk else []})
+                    "last": last, "chg": chg, "w5d": w5d, "w5": w5})
     return out
 
 
