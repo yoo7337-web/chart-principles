@@ -51,6 +51,46 @@ SPARK_DAYS = 60
 MACRO5Y_CACHE = DATA_DIR / "macro5y_cache.json"
 
 
+# 한국 지수는 yfinance가 신뢰 불가(2026-07-23 실사고): ^KS11 7/22 = 7161.08을 주는데 이는 종가가 아니라
+# 그날 **장중 고가(네이버 일봉 high 7166.00)** 부근 값이고 확정 종가(6797.70)로 갱신되지 않는다.
+# → 일간 등락률이 +9.8%(실제 +0.74%)로 튀었음. 우리 812종목(pykrx) 시총가중 등락률 +0.80%이 네이버와
+# 일치해 네이버가 정답임을 확인 → KR 지수만 네이버 일봉으로 대체(무키·클라우드 접근 검증됨).
+NAVER_INDEX = {"^KS11": "KOSPI", "^KQ11": "KOSDAQ"}
+
+
+def naver_index_daily(code: str, days: int = 400) -> pd.Series:
+    """네이버 국내 지수 일봉 종가 시리즈(확정 종가)."""
+    import urllib.request
+    from datetime import date as _date
+    end = _date.today() + timedelta(days=1)
+    start = _date.today() - timedelta(days=days)
+    url = ("https://api.stock.naver.com/chart/domestic/index/" + code
+           + f"?periodType=dayCandle&startDateTime={start:%Y%m%d}0000&endDateTime={end:%Y%m%d}0000")
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                               "Referer": "https://m.stock.naver.com/"})
+    j = json.loads(urllib.request.urlopen(req, timeout=25).read().decode("utf-8"))
+    rows = j.get("priceInfos") or []
+    s = pd.Series({pd.Timestamp(r["localDate"]): float(r["closePrice"])
+                   for r in rows if r.get("closePrice") is not None}).sort_index()
+    s.index.name = "Date"
+    return s
+
+
+def _kr_index_fix(df: pd.DataFrame, days: int = 400) -> pd.DataFrame:
+    """DataFrame의 ^KS11/^KQ11 컬럼을 네이버 확정 종가로 교체(실패 시 원본 유지)."""
+    for tk, code in NAVER_INDEX.items():
+        if tk not in df.columns:
+            continue
+        try:
+            s = naver_index_daily(code, days)
+            if len(s) < 5:
+                continue
+            df[tk] = s.reindex(df.index).combine_first(df[tk])   # 네이버 우선, 없는 날짜만 yfinance 유지
+        except Exception as e:
+            print(f"  네이버 지수 {code} 실패({e}) — yfinance 값 유지", file=sys.stderr)
+    return df
+
+
 def _macro_5y(tickers: list) -> dict:
     """매크로 티커 5년 주봉(카드 클릭 시 팝업 차트용). 20h 가드 캐시."""
     if MACRO5Y_CACHE.exists():
@@ -65,6 +105,15 @@ def _macro_5y(tickers: list) -> dict:
     weekly = {}
     try:
         w = yf.download(tickers, period="5y", interval="1wk", progress=False, threads=True)["Close"]
+        for tk, code in NAVER_INDEX.items():   # KR 지수 주봉도 네이버 일봉→주 마지막값으로 교체
+            if tk not in w.columns:
+                continue
+            try:
+                d = naver_index_daily(code, days=1900)
+                if len(d) > 50:
+                    w[tk] = d.resample("W").last().reindex(w.index).combine_first(w[tk])
+            except Exception as e:
+                print(f"  네이버 지수 5y {code} 실패({e})", file=sys.stderr)
         for t in tickers:
             try:
                 s = (w[t] if len(tickers) > 1 else w).dropna()
@@ -93,11 +142,17 @@ def fetch_macro() -> list:
         except Exception:
             pass
     new = pd.DataFrame(closes)
-    if MACRO_PARQUET.exists():  # 증분 병합(과거 보존) — 기존 값 우선, 신규 티커 컬럼·신규 날짜는 new로 채움
+    if MACRO_PARQUET.exists():
+        # ⚠병합 방향이 핵심(2026-07-23 실사고). old.combine_first(new)=기존값 우선이면 **장중에 처음 잡은
+        # 잠정 시세가 영구 동결**된다(코스피 7/22 저장 7161.08 vs 실제 종가 6797.70, +5.1% 오차 →
+        # 일간 등락률도 +9.8% 같은 허수). collect._append_new가 2026-07-17 GOOGL 사고로 이미 배운 규칙과
+        # 동일하게 **겹치는 날짜는 항상 새 fetch가 이겨야** 확정 종가로 보정된다.
+        # new.combine_first(old): new 우선 + new에 없는 과거 날짜/신규 티커 컬럼은 old로 채움(과거 보존 유지).
         old = pd.read_parquet(MACRO_PARQUET)
-        merged = old.combine_first(new).sort_index()  # combine_first: 겹치면 old, 결측(신규 컬럼/날짜)은 new
+        merged = new.combine_first(old).sort_index()
     else:
         merged = new
+    merged = _kr_index_fix(merged, days=400)   # KR 지수는 네이버 확정 종가로 교체(yfinance 장중값 방지)
     merged = merged[~merged.index.duplicated(keep="last")]
     merged.to_parquet(MACRO_PARQUET)
 
