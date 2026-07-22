@@ -388,6 +388,19 @@ CB_MEETINGS = {
 CBANKS_CACHE = DATA_DIR / "cbanks_cache.json"
 
 
+def bok_base_rate() -> list:
+    """한국은행 공식 기준금리 변경 이력 [(ISO날짜, 금리), 최신순].
+    ⚠BIS WS_CBPOL의 KR 시계열은 ~3주 지연(2026-07-23 실사고: 7/16 인상 2.75%가 BIS엔 7/1자 2.50%로
+    남아 있었음) → 한은 공식 페이지가 유일하게 즉시 정확."""
+    import urllib.request
+    url = "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"
+    h = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}),
+                               timeout=30).read().decode("utf-8", "ignore")
+    rows = re.findall(r"<td[^>]*>\s*(\d{4})\s*</td>\s*<td[^>]*>\s*(\d{1,2})월\s*(\d{1,2})일\s*</td>"
+                      r"\s*<td[^>]*>\s*([\d.]+)\s*</td>", h)
+    return [(f"{y}-{int(m):02d}-{int(d):02d}", float(r)) for y, m, d, r in rows]
+
+
 def fetch_cbanks() -> list:
     """BIS 정책금리 + 최근 변경 + 다음 회의 + 시장 내재 기대(US·KR). 20h 가드·실패 시 캐시."""
     from datetime import date as _date
@@ -435,8 +448,27 @@ def fetch_cbanks() -> list:
                          "changed": ({"d": chg_d, "bp": chg_bp} if chg_d else None),
                          "next": nxt, "asof": str(s.TIME_PERIOD.iloc[-1]),
                          "rhist": rhist, "rhistd": rhistd})
-        # --- 시장 내재 기대 ---
+        # --- KR: 한은 공식 이력으로 교체(BIS 지연 보정) ---
         by = {r["code"]: r for r in rows}
+        try:
+            hist = bok_base_rate()          # 최신순 [(date, rate)]
+            if hist and "KR" in by:
+                kr = by["KR"]
+                latest_d, latest_r = hist[0]
+                if latest_r != kr["rate"]:
+                    print(f"  KR 기준금리 BIS {kr['rate']}% → 한은 공식 {latest_r}% ({latest_d}) 보정")
+                kr["rate"] = round(latest_r, 3)
+                kr["asof"] = latest_d
+                if len(hist) >= 2:
+                    kr["changed"] = {"d": latest_d, "bp": round((latest_r - hist[1][1]) * 100)}
+                # 스텝차트 이력도 변경점 기준으로 재구성(최근 6년) + 오늘 시점 연장
+                pts = sorted([(d, r) for d, r in hist
+                              if d >= (_date.today() - timedelta(days=2200)).isoformat()])
+                if pts:
+                    kr["rhistd"] = [p[0] for p in pts] + [_date.today().isoformat()]
+                    kr["rhist"] = [round(p[1], 3) for p in pts] + [round(latest_r, 3)]
+        except Exception as e:
+            print(f"  BOK 보정 실패({e}) — BIS 값 유지", file=sys.stderr)
         try:  # US: 30일 Fed Funds 선물(front) 내재금리 vs 현재 목표 midpoint
             import yfinance as yf
             zq = yf.Ticker("ZQ=F").history(period="5d")["Close"].dropna()
@@ -541,6 +573,21 @@ def fetch_world() -> list:
                 pass
     except Exception:
         pass
+    # KR 지수는 네이버 확정 종가로 교체 — yfinance ^KS11 장중값 오염(카드와 동일 사유, 2026-07-23)
+    for tk, code in NAVER_INDEX.items():
+        if tk not in tickers:
+            continue
+        try:
+            s = naver_index_daily(code, days=30)
+            if len(s) >= 2:
+                last_chg[tk] = (round(float(s.iloc[-1]), 2), round(float(s.iloc[-1] / s.iloc[-2] - 1), 4))
+            d5 = naver_index_daily(code, days=1900)
+            if len(d5) > 50 and weekly.get(tk):
+                wsr = d5.resample("W").last().dropna()
+                weekly[tk] = {"d": [d.strftime("%Y-%m-%d") for d in wsr.index],
+                              "c": [round(float(v), 2) for v in wsr]}
+        except Exception as e:
+            print(f"  world 네이버 {code} 실패({e})", file=sys.stderr)
     out = []
     for t, country, name, flag, x, y in WORLD_IDX:
         wk = weekly.get(t)
