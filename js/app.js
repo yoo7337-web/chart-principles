@@ -1181,25 +1181,42 @@ function appendLiveBar(st) {
   const s = st.series;
   if (!q || !s?.length || !(q[0] > 0)) return;
   const clk = marketClock(st.market);
-  if (clk.dow === "Sat" || clk.dow === "Sun") return;
-  if ((TOSSM?.calendar?.[st.market]?.holidays || []).includes(clk.day)) return;
+  const hol = TOSSM?.calendar?.[st.market]?.holidays || [];
   const openHm = st.market === "us" ? "09:30" : "09:00";
   const closeHm = st.market === "us" ? "16:00" : "15:30";
+  const isTradingDay = clk.dow !== "Sat" && clk.dow !== "Sun" && !hol.includes(clk.day);
+  // 봉을 붙일 날짜: 개장 후=오늘 / 개장 전(자정~)·주말·휴장일=직전 영업일
+  // (자정 넘으면 잠정 당일봉이 '내일 장 시작 전'으로 판정돼 어제 봉이 사라지던 문제 — 확정 배치는 07:40에나 붙음)
+  let barDay;
+  if (isTradingDay && clk.hm >= openHm) {
+    barDay = clk.day;
+  } else {
+    const [y, m, d] = clk.day.split("-").map(Number);
+    let dt = new Date(y, m - 1, d);
+    for (let i = 0; i < 10 && !barDay; i++) {
+      dt = new Date(dt.getTime() - 864e5);
+      const ds = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      if (dt.getDay() !== 0 && dt.getDay() !== 6 && !hol.includes(ds)) barDay = ds;
+    }
+    if (!barDay) return;
+  }
+  const inSession = isTradingDay && clk.hm >= openHm && clk.hm <= closeHm;
   const last = s[s.length - 1];
-  if (last.t === clk.day) {
-    // 오늘 봉이 이미 있음(따라잡기 배치의 장중 스냅샷 등) — 장중이면 종가·고저만 최신 시세로 갱신.
-    // 장 마감 후엔 갱신 금지: 애프터마켓 시세(미국)가 확정 종가를 덮으면 안 됨.
-    if (clk.hm >= openHm && clk.hm <= closeHm && q[0] !== last.c) {
+  if (last.t === barDay) {
+    // 해당 봉이 이미 있음(따라잡기 배치의 장중 스냅샷 등) — 최신 시세로 종가·고저 갱신.
+    // 한국: 마감 후 시세=정규장 확정 종가라 항상 안전(장중 스냅샷이 멈춘 종가도 교정).
+    // 미국: 장중에만 — 애프터마켓 시세가 확정 종가를 덮으면 안 됨.
+    const canUpdate = st.market === "kr" ? true : inSession;
+    if (canUpdate && q[0] !== last.c) {
       last.c = q[0]; last.h = Math.max(last.h, q[0]); last.l = Math.min(last.l, q[0]);
       last.live = true; st._live = true;
     }
     return;
   }
-  if (last.t > clk.day) return;
-  if (clk.hm < openHm) return;
+  if (last.t > barDay) return;
   const c = q[0], r = q[1];
   const o = r != null && 1 + r !== 0 ? +(c / (1 + r)).toFixed(4) : c;
-  st.series = s.concat([{ t: clk.day, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 0, live: true }]);
+  st.series = s.concat([{ t: barDay, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 0, live: true }]);
   st._live = true;
 }
 
@@ -1216,7 +1233,7 @@ function drawLookupChart() {
     + (isMin
       ? `${INTRADAY?.date || ""} 당일 1분봉 · ${INTRADAY?.generated || ""} 수집 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`
       : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 5년 (좌우로 드래그·스크롤)`
-        + (st._live ? ` · <b>오늘 봉=30분 지연 잠정치</b><span class="sub-note">(고저 미확정 · 확정봉은 다음날 07:40)</span>` : "")
+        + (st._live ? ` · <b>최신 봉=30분 지연 잠정치</b><span class="sub-note">(고저 미확정 · 확정봉은 다음 배치 07:40)</span>` : "")
         + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
@@ -4906,76 +4923,109 @@ function finVal(row, key, prevRow) {
   return row[key];
 }
 
+let finMode = "annual", finFsSel = "cfs", finUnitSel = "eok";
+// 단위 배율(저장: KR=억원, US=백만$)
+const FIN_UNITS_KR = { eok: ["억원", 1], mil: ["백만원", 100], won: ["원", 1e8] };
+const FIN_UNITS_US = { musd: ["백만$", 1], kusd: ["천$", 1e3] };
+
+function finDataOf(fin) {
+  // KR 새 포맷 {cfs, ofs} / 구 포맷·US {annual, quarter} 모두 지원
+  if (fin.cfs || fin.ofs) {
+    const sel = fin[finFsSel] || fin.cfs || fin.ofs;
+    return sel || { annual: {} };
+  }
+  return fin;
+}
+
 function renderLookupFinancials(st) {
   const host = $("#lookup-financials");
   const key = `${st.market}_${st.ticker}`;
   host.style.display = "";
   host.innerHTML = `<h3 class="lk-h3">📊 상세 재무제표 <span class="sub-note">불러오는 중…</span></h3>`;
   fetch(`data/financials/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((fin) => {
-    if (!fin || !fin.annual || !Object.keys(fin.annual).length) { host.style.display = "none"; return; }
+    const has = fin && ((fin.annual && Object.keys(fin.annual).length) ||
+      (fin.cfs?.annual && Object.keys(fin.cfs.annual).length) ||
+      (fin.ofs?.annual && Object.keys(fin.ofs.annual).length));
+    if (!has) { host.style.display = "none"; return; }
     FIN_CACHE[key] = fin;
-    finDraw(st, "annual");
+    finMode = "annual";
+    finFsSel = fin.cfs ? "cfs" : "ofs";
+    finUnitSel = st.market === "kr" ? "eok" : "musd";
+    finDraw(st);
   }).catch(() => { host.style.display = "none"; });
 }
 
-function finDraw(st, mode) {
+function finPeriods(fin, mode) {
+  const data0 = finDataOf(fin);
+  if (mode === "quarter" && data0.quarter && Object.keys(data0.quarter).length) {
+    return { periods: Object.keys(data0.quarter).sort(), data: data0.quarter, mode };
+  }
+  const est = fin.est || {};
+  const annual = data0.annual || {};
+  const actualYrs = Object.keys(annual).sort();
+  const estYrs = Object.keys(est).filter((y) => !annual[y]).sort();
+  const data = { ...annual };
+  estYrs.forEach((y) => (data[y] = { ...est[y], _est: true }));
+  return { periods: [...actualYrs, ...estYrs], data, mode: "annual" };
+}
+
+function finDraw(st) {
   const host = $("#lookup-financials");
   const key = `${st.market}_${st.ticker}`;
   const fin = FIN_CACHE[key];
   if (!fin) return;
-  const unit = st.market === "kr" ? "억원" : "백만$";
-  const src = st.market === "kr" ? "DART 재무제표" : "yfinance";
-  // 컬럼(기간): 실적 오름차순 + 추정(E)
-  let periods, data;
-  if (mode === "quarter" && fin.quarter && Object.keys(fin.quarter).length) {
-    periods = Object.keys(fin.quarter).sort();
-    data = fin.quarter;
-  } else {
-    mode = "annual";
-    const est = fin.est || {};
-    const actualYrs = Object.keys(fin.annual).sort();
-    const estYrs = Object.keys(est).filter((y) => !fin.annual[y]).sort();
-    periods = [...actualYrs, ...estYrs];
-    data = { ...fin.annual };
-    estYrs.forEach((y) => (data[y] = { ...est[y], _est: true }));
-  }
-  const hasQuarter = fin.quarter && Object.keys(fin.quarter).length;
-  // 표 생성
+  const units = st.market === "kr" ? FIN_UNITS_KR : FIN_UNITS_US;
+  if (!units[finUnitSel]) finUnitSel = Object.keys(units)[0];
+  const [unitLab, unitMul] = units[finUnitSel];
+  const src = st.market === "kr" ? "DART" : "yfinance";
+  const { periods, data, mode } = finPeriods(fin, finMode);
+  finMode = mode;
+  const d0 = finDataOf(fin);
+  const hasQuarter = d0.quarter && Object.keys(d0.quarter).length;
+  const hasBothFs = fin.cfs && fin.ofs;
+
   const rowsDef = [...FIN_ROWS_IS, ...FIN_ROWS_BS, ...FIN_ROWS_CF];
   const nf = (v, isPct) => v == null ? "-" : isPct
     ? `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(1)}%</span>`
-    : Math.round(v).toLocaleString();
+    : Math.round(v * unitMul).toLocaleString();
   let body = "";
   rowsDef.forEach(([k, lab, type]) => {
     if (type === "head") { body += `<tr class="fin-head"><td colspan="${periods.length + 1}">${lab}</td></tr>`; return; }
-    // EBITDA는 US만(KR은 미제공) — 값이 전부 없으면 행 생략
     const cells = periods.map((p, i) => {
       const row = data[p] || {};
       const prev = i > 0 ? data[periods[i - 1]] : null;
       const v = finVal(row, k, prev);
-      if ((type === "pct" || type === "yoy") && row._est) return `<td>-</td>`;  // 추정연도는 비율 생략
+      if ((type === "pct" || type === "yoy") && row._est) return `<td>-</td>`;
       return `<td>${nf(v, type === "pct" || type === "yoy")}</td>`;
     });
-    if (cells.every((c) => c === "<td>-</td>")) return;  // 전부 빈 행 생략(예: KR EBITDA)
+    if (cells.every((c) => c === "<td>-</td>")) return;
     body += `<tr class="${type === "yoy" || type === "pct" ? "fin-sub" : ""}"><td class="fin-lab">${lab}</td>${cells.join("")}</tr>`;
   });
   const cols = periods.map((p) => {
     const isEst = data[p]?._est;
-    const label = mode === "annual" ? p + (isEst ? "(E)" : "") : p;
-    return `<th class="${isEst ? "fin-est" : ""}">${label}</th>`;
+    return `<th class="${isEst ? "fin-est" : ""}">${mode === "annual" ? p + (isEst ? "(E)" : "") : p}</th>`;
   }).join("");
   host.innerHTML = `<h3 class="lk-h3">📊 상세 재무제표
-      <span class="sub-note">(단위 ${unit} · ${src}${st.market === "kr" ? " · 추정은 네이버 컨센서스" : ""})</span>
+      <span class="sub-note">(${src}${st.market === "kr" ? ` · ${finFsSel === "cfs" ? "연결" : "별도"} 기준 · 추정=네이버 컨센서스` : ""})</span>
       <span style="flex:1"></span>
+      ${hasBothFs ? `<span class="mk-toggle fin-fs">
+        <button data-fs="cfs" class="${finFsSel === "cfs" ? "active" : ""}">연결</button>
+        <button data-fs="ofs" class="${finFsSel === "ofs" ? "active" : ""}">별도</button>
+      </span>` : (st.market === "kr" ? `<span class="sub-note">${fin.cfs ? "연결만 공시" : "별도만 공시"}</span>` : "")}
       <span class="mk-toggle fin-mode">
         <button data-m="annual" class="${mode === "annual" ? "active" : ""}">연간</button>
         ${hasQuarter ? `<button data-m="quarter" class="${mode === "quarter" ? "active" : ""}">분기</button>` : ""}
       </span>
+      <select id="fin-unit" title="단위">${Object.entries(units).map(([k, [lab]]) =>
+        `<option value="${k}"${k === finUnitSel ? " selected" : ""}>${lab}</option>`).join("")}</select>
       <button class="today-chart-btn" id="fin-xlsx">⬇ 엑셀</button></h3>
     <div class="fin-wrap"><table class="fin-table">
       <thead><tr><th class="fin-lab">지표</th>${cols}</tr></thead><tbody>${body}</tbody></table></div>`;
-  host.querySelectorAll(".fin-mode button").forEach((b) => b.onclick = () => finDraw(st, b.dataset.m));
-  $("#fin-xlsx").onclick = () => finExportXlsx(st, mode);
+  host.querySelectorAll(".fin-mode button").forEach((b) => b.onclick = () => { finMode = b.dataset.m; finDraw(st); });
+  host.querySelectorAll(".fin-fs button").forEach((b) => b.onclick = () => { finFsSel = b.dataset.fs; finDraw(st); });
+  const us = document.getElementById("fin-unit");
+  if (us) us.onchange = () => { finUnitSel = us.value; finDraw(st); };
+  $("#fin-xlsx").onclick = () => finExportXlsx(st, finMode);
 }
 
 function finExportXlsx(st, mode) {
