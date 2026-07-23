@@ -153,7 +153,7 @@ function activateTab(tabId) {
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
-  if (tabId === "heatmap" && !heatmapRendered) renderHome();
+  if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
@@ -2619,11 +2619,19 @@ function renderHome() {
     drawTreemap();
   };
   $("#home-news-more").onclick = (e) => { e.preventDefault(); activateTab("news"); };
+  const dealsMore = $("#home-deals-more");
+  if (dealsMore) dealsMore.onclick = (e) => { e.preventDefault(); activateTab("news"); };  // 딜=뉴스·일정 탭 내 딜 코너
   renderIdxCards();
   drawTreemap();
   renderMovers();
   renderRankings();
   renderHomeNews();
+  renderHomeDeals();
+  setTimeout(syncHomeHeights, 60);   // 레이아웃 안정 후 재동기화(초기 렌더 타이밍 보정)
+  if (!renderHome._resizeBound) {   // 리사이즈 시 우측 높이 재동기화(1회 바인딩)
+    renderHome._resizeBound = true;
+    window.addEventListener("resize", () => { if (heatmapRendered) syncHomeHeights(); });
+  }
 }
 
 // 지수 2(macro 재사용) + 시총 대표종목 2(featured) 카드
@@ -2801,8 +2809,32 @@ function renderHomeNews() {
   const tagged = all.filter((n) => n.mk === homeMk);
   const rows = tagged.length ? tagged : all.some((n) => n.mk) ? [] : all;
   host.innerHTML = rows.length
-    ? newsList(rows.slice(0, 10), false)   // 히트맵과 동일 높이 컬럼 — 10건으로 채움
+    ? newsList(rows.slice(0, 12), false)   // 우측 절반 스크롤 영역 — 넉넉히 채움
     : `<p class="mini-note">${all.length ? "이 시장 뉴스가 아직 없습니다(다음 갱신 후 표시)" : "뉴스 데이터 없음"}</p>`;
+  syncHomeHeights();
+}
+
+// 💼 딜 레이더 — deals.json(더벨·딜사이트 등) 상위. 시장 토글과 무관(국내외 자본거래).
+function renderHomeDeals() {
+  const host = $("#home-deals");
+  if (!host) return;
+  const d = DEALS || {};
+  const items = [...(d.premium || []), ...(d.kr || []), ...(d.global || [])]
+    .filter((x) => x && x.title)
+    .sort((a, b) => (b.t || "").localeCompare(a.t || ""))
+    .slice(0, 12);
+  host.innerHTML = items.length ? newsList(items, false)
+    : `<p class="mini-note">딜 데이터 없음(다음 갱신 후 표시)</p>`;
+  syncHomeHeights();
+}
+
+// 우측(뉴스+딜) 전체 높이를 히트맵 컬럼 높이에 맞춤 → 각 절반은 grid 1fr, 넘치면 자체 스크롤
+function syncHomeHeights() {
+  const heat = document.querySelector(".home-heat"), right = document.querySelector(".home-right");
+  if (!heat || !right) return;
+  if (window.innerWidth <= 1100) { right.style.height = ""; return; }  // 1열 스택 구간은 자연 높이
+  const h = heat.offsetHeight;
+  if (h > 100) right.style.height = h + "px";   // 패널 숨김(offsetHeight≈0) 땐 건드리지 않음
 }
 
 function hmTooltip() {

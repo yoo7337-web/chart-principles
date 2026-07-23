@@ -346,7 +346,7 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 #rot-table td:first-child { text-align: left; }
 
 /* TradingView 실시간 티커 (로딩 실패 시 JS가 숨김) */
-.tv-ticker { margin-bottom: 8px; min-height: 46px; border-radius: 8px; overflow: hidden; }
+.tv-ticker { margin-bottom: 8px; min-height: 46px; border-radius: 8px; overflow: hidden; background: #131722; }
 
 /* 마켓 — 경제일정 */
 .cal-list { padding: 4px 0; }
@@ -416,14 +416,14 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .world-svg { width: 100%; height: auto; display: block; }
 .world-chip { position: absolute; transform: translate(-50%, -50%); z-index: 4;
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-  font-size: .68rem; font-weight: 600; color: var(--ink); cursor: pointer;
-  background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 999px;
-  padding: 2px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
-.world-chip b { font-size: .7rem; }
-.world-chip.up b { color: #f5445a; }
-.world-chip.down b { color: #4391ff; }
-.world-chip.rate b { color: #9d7bff; }
-.world-chip:hover { background: var(--card); border-color: rgba(67,145,255,.45); z-index: 6; }
+  font-size: .68rem; font-weight: 700; color: #f2f3f7; cursor: pointer;
+  background: rgba(20,20,26,.92); border: 1px solid rgba(255,255,255,.22); border-radius: 999px;
+  padding: 3px 9px; box-shadow: 0 1px 5px rgba(0,0,0,.6); }
+.world-chip b { font-size: .72rem; }
+.world-chip.up b { color: #ff6b7d; }
+.world-chip.down b { color: #6ba7ff; }
+.world-chip.rate b { color: #b79bff; }
+.world-chip:hover { background: rgba(38,38,48,.98); border-color: rgba(67,145,255,.7); z-index: 6; }
 .macro-card.clickable { cursor: pointer; transition: box-shadow .12s, transform .12s; }
 .macro-card.clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,.45); transform: translateY(-1px); }
 .cb-detail > div { padding: 3px 0; font-size: .9rem; }
@@ -496,8 +496,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-side .sub-note { font-size: .72rem; }
 .scr-main .scr-bar { margin-top: 2px; }
 /* 결과 테이블 폴리시: 촘촘한 행 + 줄무늬 + 헤더 고정 */
-.scr-main .tablewrap { max-height: calc(100vh - 130px); overflow-y: auto; }
+/* 스크롤 컨테이너 상단 패딩 제거 — sticky 헤더(top:0)가 패딩만큼 내려가 위로 행이 비치던 '빈틈' 해소 */
+.scr-main .tablewrap { max-height: calc(100vh - 130px); overflow-y: auto; padding-top: 0; }
 #scr-table thead th { position: sticky; top: 0; background: var(--card); z-index: 2; box-shadow: 0 1px 0 var(--line); }
+#scr-table thead th::before {   /* 헤더 상단 모서리를 카드 배경으로 막아 스크롤 내용이 위로 새지 않게 */
+  content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; background: var(--card); }
 #scr-table tbody tr:nth-child(even) { background: #212127; }
 @media (max-width: 1000px) {
   .scr-layout { grid-template-columns: 1fr; }
@@ -918,10 +921,14 @@ select option { background: var(--card); color: var(--ink); }
 dialog { background: var(--card); color: var(--ink); }
 
 /* ── 레이아웃 재배치(2026-07-23): 전역 1440px + 홈·종목조회 2단 ── */
-/* 홈: 히트맵 | 주요뉴스 동일폭 2열 → 그 아래 실시간 랭킹 풀폭 */
-.home-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+/* 홈: 히트맵(왼) | 우측 상하 2분할(시장뉴스/딜) — 우측 전체 높이 = 히트맵 높이 → 그 아래 랭킹 풀폭 */
+.home-grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; }
 .home-col { min-width: 0; }
 .home-col .home-h { margin-top: 0; }
+.home-right { min-width: 0; display: grid; grid-template-rows: 1fr 1fr; gap: 18px; min-height: 0; }
+.home-rblock { min-height: 0; display: flex; flex-direction: column; }
+.home-rblock .home-h { margin-top: 0; flex: none; }
+.home-rblock .news-list { flex: 1 1 0; min-height: 0; overflow-y: auto; }
 #rank-wrap { margin-top: 22px; }
 .rank-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
 .rank-grid .mv-row:nth-last-child(2) { border-bottom: none; }   /* 각 열 마지막 행 라인 정리(짝수개 기준) */
