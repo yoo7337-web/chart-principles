@@ -867,6 +867,8 @@ a.lk-rep:hover { border-color: var(--accent); }
 .lk-rep-prev { font-size: .76rem; color: var(--muted); margin-top: 4px; line-height: 1.4;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .lk-rep-act { font-size: .74rem; border-radius: 6px; padding: 1px 6px; background: rgba(67,145,255,.15); color: #6ba7ff; }
+.lk-rep-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; font-size: .78rem; }
+.lk-rep-op { border-radius: 6px; padding: 1px 7px; background: rgba(245,68,90,.15); color: #ff8c9a; font-weight: 600; }
 @media (max-width: 720px) { .lk-reports { grid-template-columns: 1fr; } }
 
 .guru-cash { margin: 8px 0 12px; padding: 10px 12px; background: #212127; border: 1px solid var(--line); border-radius: 8px; }

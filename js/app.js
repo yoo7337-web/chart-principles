@@ -5036,13 +5036,19 @@ function renderLookupReports(st) {
   host.style.display = "";
   const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
   if (st.market === "kr") {
-    // 네이버 증권사 리서치 — 제목·미리보기·상세(PDF 다운로드 버튼 포함) 링크
-    host.innerHTML = `<h3 class="lk-h3">📑 증권사 리포트 <span class="sub-note">(네이버 리서치 · 최신순)</span></h3>
+    // 증권사 리서치 — 한경 컨센서스(목표가·투자의견·애널리스트·PDF) 우선, 네이버(미리보기) 폴백
+    const isHankyung = reps.some((r) => r.target != null || r.opinion || r.analyst);
+    const priceKo = (v) => v == null ? "" : v.toLocaleString() + "원";
+    host.innerHTML = `<h3 class="lk-h3">📑 증권사 리포트 <span class="sub-note">(${isHankyung ? "한경 컨센서스 · 전 증권사" : "네이버 리서치"} · 최신순)</span></h3>
       <div class="lk-reports">` + reps.map((r) => `<a class="lk-rep" href="${r.link}" target="_blank" rel="noopener">
         <div class="lk-rep-top"><span class="lk-rep-broker">${esc(r.broker)}</span><span class="lk-rep-date">${esc(r.d)}</span></div>
         <div class="lk-rep-title">${esc(r.title)}</div>
+        ${(r.target != null || r.opinion || r.analyst) ? `<div class="lk-rep-meta">
+          ${r.opinion ? `<span class="lk-rep-op">${esc(r.opinion)}</span>` : ""}
+          ${r.target != null ? `<span>목표 ${priceKo(r.target)}</span>` : ""}
+          ${r.analyst ? `<span class="sub-note">${esc(r.analyst)}</span>` : ""}</div>` : ""}
         ${r.preview ? `<div class="lk-rep-prev">${esc(r.preview)}</div>` : ""}</a>`).join("") + `</div>
-      <p class="sub-note" style="margin:6px 0 0">클릭 시 네이버 리서치 상세(원문 PDF 다운로드 가능)로 이동</p>`;
+      <p class="sub-note" style="margin:6px 0 0">클릭 시 ${isHankyung ? "리포트 원문 PDF 다운로드" : "네이버 리서치 상세(PDF 가능)"}</p>`;
   } else {
     // 미국 — 애널리스트 등급변경(증권사·등급·목표가 변화)
     host.innerHTML = `<h3 class="lk-h3">📑 애널리스트 등급 변경 <span class="sub-note">(최근 6건 · yfinance)</span></h3>
