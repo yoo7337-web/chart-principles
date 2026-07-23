@@ -106,7 +106,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -166,6 +166,7 @@ function activateTab(tabId) {
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "econcal" && !ecRendered) renderEconCal();
+  if (tabId === "trends" && !trendsRendered) renderTrends();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -3721,6 +3722,94 @@ function drawEcDay() {
       <td>${e.tm}</td><td>${EC_FLAG[e.c] || e.c}</td>
       <td>${e.imp >= 1 ? "⭐ " : ""}${ecKo(e.t)}${e.per ? ` <span class="sub-note">(${e.per})</span>` : ""}</td>
       <td><b>${n(e.a, e.u)}</b></td><td>${n(e.f, e.u)}</td><td>${n(e.p, e.u)}</td></tr>`).join("") + `</table>`;
+}
+
+/* ---------- 트렌드 레이더 (trends.json — 네이버 데이터랩+구글 급상승) ---------- */
+let trendsRendered = false, TRENDS = null, trGeo = "kr";
+
+function trGoto(code) {
+  gotoTabFull("lookup");
+  if (!lookupRendered) initLookup();
+  loadLookup(`kr_${code}`);
+}
+
+function trSpark(weekly, d30, w, h) {
+  // 주간(1년) + 최근 30일 일간 이어붙인 스파크라인
+  const pts = (weekly || []).map((x) => x[1]).concat((d30 || []).map((x) => x[1]));
+  if (pts.length < 5) return "";
+  const max = Math.max(...pts, 1), min = Math.min(...pts, 0);
+  const xs = (i) => (i / (pts.length - 1)) * w;
+  const ys = (v) => h - 3 - ((v - min) / (max - min || 1)) * (h - 8);
+  const line = pts.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
+    <polyline points="${line}" fill="none" stroke="#4391ff" stroke-width="1.6"/>
+    <circle cx="${xs(pts.length - 1)}" cy="${ys(pts[pts.length - 1])}" r="2.5" fill="#f5445a"/></svg>`;
+}
+
+function renderTrends() {
+  trendsRendered = true;
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  fetch("data/trends.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((t) => {
+    TRENDS = t;
+    if (!t) {
+      $("#tr-context").textContent = "trends.json 없음 — python analysis\\trend_radar.py 실행 필요";
+      return;
+    }
+    $("#tr-context").innerHTML = `<b>트렌드 레이더</b> — 검색 데이터로 소비 트렌드를 선제 포착해 관련주와 연결합니다.
+      ${t.generated} 갱신(하루 1회) · 네이버 지수는 <b>상대값</b>(기간 내 최대=100, 절대 검색량 아님) ·
+      구글 급상승은 순위성 데이터 · 관련주 연결은 참고용(투자 판단 아님) · 틱톡·인스타는 공식 API 부재로 미지원`;
+
+    // ① 구글 급상승
+    const drawGoogle = () => {
+      const list = t.google?.[trGeo] || [];
+      $("#tr-google").innerHTML = list.length ? `<div class="tr-glist">` + list.map((g, i) => `
+        <div class="tr-gitem">
+          <span class="tr-rank">${i + 1}</span>
+          <div class="tr-gbody">
+            <div class="tr-gq">${esc(g.q)} <span class="tr-traffic">${esc(g.traffic)}</span>
+              ${(g.stocks || []).map((s) => `<button class="tr-stock" data-c="${s.code}">📈 ${esc(s.name)}</button>`).join("")}</div>
+            ${g.news ? `<a class="tr-gnews" href="${g.link}" target="_blank" rel="noopener">${esc(g.news)}</a>` : ""}
+          </div>
+        </div>`).join("") + `</div>`
+        : `<p class="mini-note">급상승 데이터 없음</p>`;
+      $("#tr-google").querySelectorAll(".tr-stock").forEach((b) => b.onclick = () => trGoto(b.dataset.c));
+    };
+    drawGoogle();
+    $("#tr-geo").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      trGeo = b.dataset.g;
+      $("#tr-geo").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      drawGoogle();
+    });
+
+    // ② 워치리스트
+    const wl = t.watchlist || [];
+    if (!t.naver_ok || !wl.length) {
+      $("#tr-watchlist").innerHTML = `<div class="card-flat"><p class="mini-note">
+        네이버 데이터랩 미연결 — <b>developers.naver.com</b>의 내 애플리케이션에서
+        <b>'데이터랩(검색어트렌드)'와 '데이터랩(쇼핑인사이트)' API를 추가</b>하면 다음 갱신부터 표시됩니다.<br>
+        워치리스트 키워드 추가·수정은 <code>data\\trend_watchlist.json</code> 편집(Claude에게 "트렌드 키워드에 ○○ 추가해줘").</p></div>`;
+    } else {
+      const badge = (r) => r == null ? "" : `<span class="tr-surge ${r >= 1.5 ? "hot" : r >= 1.1 ? "warm" : ""}">${r >= 1 ? "×" + r.toFixed(1) : "×" + r.toFixed(1)}</span>`;
+      $("#tr-watchlist").innerHTML = `<div class="tr-wgrid">` + wl.map((w0) => `
+        <div class="card-flat tr-wcard">
+          <div class="tr-whead"><b>${esc(w0.kw)}</b>${badge(w0.surge?.r7)}
+            <span class="sub-note" style="margin-left:auto">${esc(w0.memo)}</span></div>
+          ${trSpark(w0.w, w0.d30, 300, 54)}
+          <div class="tr-wstocks">${(w0.stocks || []).map((s) =>
+            `<button class="tr-stock" data-c="${s.code}">${esc(s.name)}</button>`).join("")}</div>
+        </div>`).join("") + `</div>`;
+      $("#tr-watchlist").querySelectorAll(".tr-stock").forEach((b) => b.onclick = () => trGoto(b.dataset.c));
+    }
+
+    // ③ 쇼핑 카테고리
+    const sh = t.shopping || [];
+    $("#tr-shopping").innerHTML = sh.length ? sh.map((c) => {
+      const w = Math.min(100, Math.max(4, (c.r4 - 0.5) * 100));
+      return `<div class="tr-shrow"><span class="tr-shname">${esc(c.cat)}</span>
+        <div class="tr-shbar"><span style="width:${w}%" class="${c.r4 >= 1.15 ? "hot" : c.r4 >= 1 ? "" : "cold"}"></span></div>
+        <b class="${c.r4 >= 1.15 ? "pos" : c.r4 < 0.95 ? "neg" : ""}">×${c.r4?.toFixed(2)}</b></div>`;
+    }).join("") : `<p class="mini-note">네이버 데이터랩 연결 후 표시됩니다.</p>`;
+  });
 }
 
 /* ---------- 마켓: 뉴스·속보 ---------- */
