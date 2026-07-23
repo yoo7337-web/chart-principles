@@ -14,13 +14,13 @@
       ov.id = "auth-gate";
       ov.style.cssText =
         "position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;" +
-        "justify-content:center;gap:18px;background:#f7f8fa;font-family:'Segoe UI','Malgun Gothic',sans-serif;visibility:visible";
+        "justify-content:center;gap:18px;background:#17171c;font-family:'Segoe UI','Malgun Gothic',sans-serif;visibility:visible";
       ov.innerHTML =
         `<div style="font-size:2rem">📈</div>
-         <div style="font-size:1.2rem;font-weight:700;color:#1f2937">주식차트분석</div>
-         <div id="auth-msg" style="font-size:.9rem;color:#6b7280"></div>
-         <button id="auth-google" style="padding:12px 22px;font-size:1rem;border:1px solid #d1d5db;border-radius:10px;
-           background:#fff;cursor:pointer;font-weight:600">🔐 Google 계정으로 로그인</button>`;
+         <div style="font-size:1.2rem;font-weight:700;color:#e7e7ec">주식차트분석</div>
+         <div id="auth-msg" style="font-size:.9rem;color:#8b8b93"></div>
+         <button id="auth-google" style="padding:12px 22px;font-size:1rem;border:1px solid rgba(218,223,233,.18);border-radius:10px;
+           background:#26262e;color:#e7e7ec;cursor:pointer;font-weight:600">🔐 Google 계정으로 로그인</button>`;
       document.documentElement.appendChild(ov);
       document.getElementById("auth-google").addEventListener("click", () => {
         firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())
@@ -64,8 +64,8 @@
           const btn = document.createElement("button");
           btn.id = "auth-out";
           btn.textContent = "로그아웃";
-          btn.style.cssText = "float:right;font-size:.75rem;padding:4px 10px;border:1px solid #e5e7eb;" +
-            "border-radius:8px;background:#fff;color:#6b7280;cursor:pointer";
+          btn.style.cssText = "float:right;font-size:.75rem;padding:4px 10px;border:1px solid rgba(218,223,233,.14);" +
+            "border-radius:8px;background:#26262e;color:#8b8b93;cursor:pointer";
           btn.addEventListener("click", () => firebase.auth().signOut());
           document.querySelector("header")?.appendChild(btn);
         }

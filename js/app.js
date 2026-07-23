@@ -225,8 +225,8 @@ const MINI_NOTE = {
 const _T = (x, y, s, c = "#475569", a = "start", w = "") =>
   `<text x="${x}" y="${y}" font-size="9" fill="${c}" text-anchor="${a}" font-weight="${w || 400}" font-family="'Segoe UI','Malgun Gothic',sans-serif">${s}</text>`;
 const _SIG = (x, y, buy) => buy
-  ? `<path d="M${x},${y} l-5,9 h10 z" fill="#16a34a"/>${_T(x, y + 19, "매수", "#16a34a", "middle", 700)}`
-  : `<path d="M${x},${y} l-5,-9 h10 z" fill="#dc2626"/>${_T(x, y - 13, "매도", "#dc2626", "middle", 700)}`;
+  ? `<path d="M${x},${y} l-5,9 h10 z" fill="#22c07a"/>${_T(x, y + 19, "매수", "#22c07a", "middle", 700)}`
+  : `<path d="M${x},${y} l-5,-9 h10 z" fill="#f5445a"/>${_T(x, y - 13, "매도", "#f5445a", "middle", 700)}`;
 const _VOLS = (bars) => bars.map(([x, h, big]) =>
   `<rect x="${x - 4}" y="${78 - h}" width="8" height="${h}" fill="${big ? "#f59e0b" : "#cbd5e1"}"/>`).join("");
 
@@ -234,126 +234,126 @@ const MINI = {
   dispLow: (b) => `${_T(6, 14, "주가가 20일선에서 -15% 이상 급락", "#64748b")}
     <path d="M6,30 Q100,32 194,38" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 27, "20일선", "#f39c12", "end")}
     <polyline points="6,30 40,35 75,40 118,58 150,50 194,42" stroke="#64748b" fill="none" stroke-width="2"/>
-    <line x1="118" y1="35" x2="118" y2="56" stroke="#16a34a" stroke-dasharray="3 2"/>${_T(124, 48, "-15%↓", "#16a34a", "start", 700)}
+    <line x1="118" y1="35" x2="118" y2="56" stroke="#22c07a" stroke-dasharray="3 2"/>${_T(124, 48, "-15%↓", "#22c07a", "start", 700)}
     ${_SIG(118, 62, b)}`,
   dispHigh: (b) => `${_T(6, 78, "주가가 20일선에서 +15% 이상 과열", "#64748b")}
     <path d="M6,48 Q100,46 194,42" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 56, "20일선", "#f39c12", "end")}
     <polyline points="6,48 40,42 75,36 118,14 150,22 194,30" stroke="#64748b" fill="none" stroke-width="2"/>
-    <line x1="118" y1="16" x2="118" y2="40" stroke="#dc2626" stroke-dasharray="3 2"/>${_T(124, 30, "+15%↑", "#dc2626", "start", 700)}
+    <line x1="118" y1="16" x2="118" y2="40" stroke="#f5445a" stroke-dasharray="3 2"/>${_T(124, 30, "+15%↑", "#f5445a", "start", 700)}
     ${_SIG(118, 10, b)}`,
   bandLower: (b) => `<path d="M6,16 Q100,13 194,18" stroke="#94a3b8" stroke-dasharray="4 3" fill="none" stroke-width="1.5"/>${_T(8, 12, "볼린저 상단(+2σ)", "#94a3b8")}
     <path d="M6,56 Q100,60 194,52" stroke="#94a3b8" stroke-dasharray="4 3" fill="none" stroke-width="1.5"/>${_T(8, 70, "볼린저 하단(-2σ)", "#94a3b8")}
     <polyline points="6,32 45,40 90,58 135,44 194,28" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="90" cy="58" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(100, 62, "종가가 하단 터치", "#16a34a", "start", 700)}${_SIG(90, 64, b)}`,
+    <circle cx="90" cy="58" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(100, 62, "종가가 하단 터치", "#22c07a", "start", 700)}${_SIG(90, 64, b)}`,
   bandUpper: (b) => `<path d="M6,16 Q100,13 194,18" stroke="#94a3b8" stroke-dasharray="4 3" fill="none" stroke-width="1.5"/>${_T(8, 12, "볼린저 상단(+2σ)", "#94a3b8")}
     <path d="M6,56 Q100,60 194,52" stroke="#94a3b8" stroke-dasharray="4 3" fill="none" stroke-width="1.5"/>${_T(8, 70, "볼린저 하단(-2σ)", "#94a3b8")}
     <polyline points="6,42 45,34 90,14 135,28 194,44" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="90" cy="14" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(100, 14, "종가가 상단 터치", "#dc2626", "start", 700)}${_SIG(90, 8, b)}`,
-  rsiLow: (b) => `${_T(8, 14, "RSI(14)", "#2563eb", "start", 700)}
-    <line x1="6" y1="52" x2="194" y2="52" stroke="#16a34a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 48, "RSI 30 (과매도선)", "#16a34a", "end")}
-    <polyline points="6,28 45,40 85,60 112,52 150,38 194,24" stroke="#2563eb" fill="none" stroke-width="2"/>
-    <circle cx="112" cy="52" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(118, 68, "30을 상향 돌파", "#16a34a", "start", 700)}${_SIG(112, 58, b)}`,
-  rsiHigh: (b) => `${_T(8, 76, "RSI(14)", "#2563eb", "start", 700)}
-    <line x1="6" y1="30" x2="194" y2="30" stroke="#dc2626" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 26, "RSI 70 (과열선)", "#dc2626", "end")}
-    <polyline points="6,54 45,42 85,20 112,30 150,44 194,58" stroke="#2563eb" fill="none" stroke-width="2"/>
-    <circle cx="112" cy="30" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(118, 18, "70을 하향 이탈", "#dc2626", "start", 700)}${_SIG(112, 24, b)}`,
+    <circle cx="90" cy="14" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(100, 14, "종가가 상단 터치", "#f5445a", "start", 700)}${_SIG(90, 8, b)}`,
+  rsiLow: (b) => `${_T(8, 14, "RSI(14)", "#4391ff", "start", 700)}
+    <line x1="6" y1="52" x2="194" y2="52" stroke="#22c07a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 48, "RSI 30 (과매도선)", "#22c07a", "end")}
+    <polyline points="6,28 45,40 85,60 112,52 150,38 194,24" stroke="#4391ff" fill="none" stroke-width="2"/>
+    <circle cx="112" cy="52" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(118, 68, "30을 상향 돌파", "#22c07a", "start", 700)}${_SIG(112, 58, b)}`,
+  rsiHigh: (b) => `${_T(8, 76, "RSI(14)", "#4391ff", "start", 700)}
+    <line x1="6" y1="30" x2="194" y2="30" stroke="#f5445a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 26, "RSI 70 (과열선)", "#f5445a", "end")}
+    <polyline points="6,54 45,42 85,20 112,30 150,44 194,58" stroke="#4391ff" fill="none" stroke-width="2"/>
+    <circle cx="112" cy="30" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(118, 18, "70을 하향 이탈", "#f5445a", "start", 700)}${_SIG(112, 24, b)}`,
   crossUp: (b) => `<line x1="6" y1="40" x2="194" y2="40" stroke="#9ca3af" stroke-dasharray="4 3"/>${_T(192, 37, "0선", "#9ca3af", "end")}
-    <polyline points="6,64 60,58 110,56 194,26" stroke="#2563eb" fill="none" stroke-width="2"/>${_T(8, 60, "MACD", "#2563eb", "start", 700)}
+    <polyline points="6,64 60,58 110,56 194,26" stroke="#4391ff" fill="none" stroke-width="2"/>${_T(8, 60, "MACD", "#4391ff", "start", 700)}
     <polyline points="6,54 60,58 110,58 194,48" stroke="#f59e0b" fill="none" stroke-width="1.8"/>${_T(8, 46, "시그널(9)", "#f59e0b")}
-    <circle cx="116" cy="57" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(124, 74, "시그널 상향 교차", "#16a34a", "start", 700)}${_SIG(116, 63, b)}`,
+    <circle cx="116" cy="57" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(124, 74, "시그널 상향 교차", "#22c07a", "start", 700)}${_SIG(116, 63, b)}`,
   crossDn: (b) => `<line x1="6" y1="44" x2="194" y2="44" stroke="#9ca3af" stroke-dasharray="4 3"/>${_T(192, 56, "0선", "#9ca3af", "end")}
-    <polyline points="6,20 60,26 110,28 194,58" stroke="#2563eb" fill="none" stroke-width="2"/>${_T(8, 18, "MACD", "#2563eb", "start", 700)}
+    <polyline points="6,20 60,26 110,28 194,58" stroke="#4391ff" fill="none" stroke-width="2"/>${_T(8, 18, "MACD", "#4391ff", "start", 700)}
     <polyline points="6,30 60,26 110,26 194,36" stroke="#f59e0b" fill="none" stroke-width="1.8"/>${_T(8, 40, "시그널(9)", "#f59e0b")}
-    <circle cx="116" cy="27" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(124, 16, "시그널 하향 교차", "#dc2626", "start", 700)}${_SIG(116, 21, b)}`,
+    <circle cx="116" cy="27" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(124, 16, "시그널 하향 교차", "#f5445a", "start", 700)}${_SIG(116, 21, b)}`,
   maCrossUp: (b) => `<polyline points="6,56 80,48 130,38 194,18" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 14, "단기선", "#f39c12", "end", 700)}
     <polyline points="6,40 100,42 194,40" stroke="#8e44ad" fill="none" stroke-width="2"/>${_T(192, 52, "장기선", "#8e44ad", "end")}
-    <circle cx="122" cy="41" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(10, 20, "단기선이 장기선을 상향 돌파", "#16a34a", "start", 700)}${_SIG(122, 47, b)}`,
+    <circle cx="122" cy="41" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(10, 20, "단기선이 장기선을 상향 돌파", "#22c07a", "start", 700)}${_SIG(122, 47, b)}`,
   maCrossDn: (b) => `<polyline points="6,24 80,32 130,42 194,60" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 70, "단기선", "#f39c12", "end", 700)}
     <polyline points="6,40 100,38 194,40" stroke="#8e44ad" fill="none" stroke-width="2"/>${_T(192, 32, "장기선", "#8e44ad", "end")}
-    <circle cx="118" cy="39" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(10, 66, "단기선이 장기선을 하향 돌파", "#dc2626", "start", 700)}${_SIG(118, 27, b)}`,
+    <circle cx="118" cy="39" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(10, 66, "단기선이 장기선을 하향 돌파", "#f5445a", "start", 700)}${_SIG(118, 27, b)}`,
   maBreakDn: (b) => `<path d="M6,50 Q90,36 194,34" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 28, "추세선(MA)", "#f39c12", "end")}
     <polyline points="6,30 60,36 100,38 130,52 194,60" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="116" cy="43" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(10, 16, "종가가 이동평균선을 하향 돌파", "#dc2626", "start", 700)}${_SIG(116, 32, b)}`,
+    <circle cx="116" cy="43" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(10, 16, "종가가 이동평균선을 하향 돌파", "#f5445a", "start", 700)}${_SIG(116, 32, b)}`,
   maBreakDnVol: (b) => `<path d="M6,42 Q90,30 194,28" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 24, "20일선", "#f39c12", "end")}
     <polyline points="6,24 60,28 100,32 130,46 194,54" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="114" cy="36" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(10, 14, "20일선 하향 돌파 + 거래량 2배", "#dc2626", "start", 700)}
+    <circle cx="114" cy="36" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(10, 14, "20일선 하향 돌파 + 거래량 2배", "#f5445a", "start", 700)}
     ${_VOLS([[40, 6], [60, 5], [80, 7], [100, 6], [116, 13, 1], [140, 5]])}${_T(126, 76, "거래량 2배↑", "#b45309", "start", 700)}
     ${_SIG(114, 8, b)}`,
   maBounce: (b) => `<path d="M6,58 Q90,46 194,26" stroke="#f39c12" fill="none" stroke-width="2"/>${_T(192, 40, "이동평균(우상향)", "#f39c12", "end")}
     <polyline points="6,40 50,46 90,54 130,42 194,22" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="90" cy="54" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(10, 16, "이동평균선 터치 후 양봉 반등", "#16a34a", "start", 700)}${_SIG(90, 60, b)}`,
-  bigBullVol: (b) => `${_T(10, 14, "장대양봉 + 거래량 3배", "#dc2626", "start", 700)}
+    <circle cx="90" cy="54" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(10, 16, "이동평균선 터치 후 양봉 반등", "#22c07a", "start", 700)}${_SIG(90, 60, b)}`,
+  bigBullVol: (b) => `${_T(10, 14, "장대양봉 + 거래량 3배", "#f5445a", "start", 700)}
     <g stroke="#94a3b8" stroke-width="1.5"><line x1="40" y1="36" x2="40" y2="52"/><line x1="64" y1="32" x2="64" y2="48"/><line x1="88" y1="34" x2="88" y2="50"/></g>
     <rect x="35" y="40" width="10" height="8" fill="#93c5fd"/><rect x="59" y="36" width="10" height="8" fill="#fecaca"/><rect x="83" y="38" width="10" height="8" fill="#93c5fd"/>
-    <line x1="126" y1="12" x2="126" y2="56" stroke="#ef4444" stroke-width="1.5"/><rect x="119" y="16" width="14" height="36" fill="#ef4444"/>
+    <line x1="126" y1="12" x2="126" y2="56" stroke="#f5445a" stroke-width="1.5"/><rect x="119" y="16" width="14" height="36" fill="#f5445a"/>
     ${_VOLS([[40, 5], [64, 6], [88, 5], [126, 14, 1]])}${_T(138, 76, "거래량 3배↑", "#b45309", "start", 700)}
     ${_SIG(160, 40, b)}`,
-  bigBearVol: (b) => `${_T(10, 78, "장대음봉 + 거래량 3배 (세력 이탈)", "#2563eb", "start", 700)}
+  bigBearVol: (b) => `${_T(10, 78, "장대음봉 + 거래량 3배 (세력 이탈)", "#4391ff", "start", 700)}
     <g stroke="#94a3b8" stroke-width="1.5"><line x1="40" y1="18" x2="40" y2="34"/><line x1="64" y1="14" x2="64" y2="30"/><line x1="88" y1="16" x2="88" y2="32"/></g>
     <rect x="35" y="20" width="10" height="8" fill="#fecaca"/><rect x="59" y="18" width="10" height="8" fill="#93c5fd"/><rect x="83" y="20" width="10" height="8" fill="#fecaca"/>
-    <line x1="126" y1="14" x2="126" y2="58" stroke="#3b82f6" stroke-width="1.5"/><rect x="119" y="18" width="14" height="36" fill="#3b82f6"/>
+    <line x1="126" y1="14" x2="126" y2="58" stroke="#4391ff" stroke-width="1.5"/><rect x="119" y="18" width="14" height="36" fill="#4391ff"/>
     ${_VOLS([[40, 5], [64, 6], [88, 5], [126, 14, 1]])}${_T(138, 76, "거래량 3배↑", "#b45309", "start", 700)}
     ${_SIG(126, 8, b)}`,
   divergence: (b) => `<polyline points="6,50 60,34 120,16 194,20" stroke="#64748b" fill="none" stroke-width="2"/>
     ${_T(116, 10, "주가는 52주 신고가", "#64748b", "start", 700)}
-    <polyline points="6,38 60,36 120,42 194,58" stroke="#2563eb" fill="none" stroke-width="2"/>
-    ${_T(126, 70, "OBV(수급)는 꺾임", "#2563eb", "start", 700)}
-    <circle cx="146" cy="48" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>${_SIG(158, 26, b)}`,
+    <polyline points="6,38 60,36 120,42 194,58" stroke="#4391ff" fill="none" stroke-width="2"/>
+    ${_T(126, 70, "OBV(수급)는 꺾임", "#4391ff", "start", 700)}
+    <circle cx="146" cy="48" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>${_SIG(158, 26, b)}`,
   obvUp: (b) => `<polyline points="6,36 70,34 130,32 194,30" stroke="#64748b" fill="none" stroke-width="2"/>${_T(8, 28, "주가(20일선 위)", "#64748b")}
-    <polyline points="6,60 70,54 110,52 194,24" stroke="#2563eb" fill="none" stroke-width="2"/>${_T(8, 74, "OBV가 OBV 20일선 돌파", "#2563eb", "start", 700)}
+    <polyline points="6,60 70,54 110,52 194,24" stroke="#4391ff" fill="none" stroke-width="2"/>${_T(8, 74, "OBV가 OBV 20일선 돌파", "#4391ff", "start", 700)}
     ${_SIG(116, 58, b)}`,
-  stochHigh: (b) => `${_T(8, 76, "스토캐스틱 K(14,3)", "#2563eb")}
-    <line x1="6" y1="24" x2="194" y2="24" stroke="#dc2626" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 20, "80 (과열)", "#dc2626", "end")}
-    <polyline points="6,58 60,30 100,16 130,26 194,48" stroke="#2563eb" fill="none" stroke-width="2"/>
-    <circle cx="112" cy="19" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(126, 12, "80 위에서 하락 반전", "#dc2626", "start", 700)}${_SIG(112, 13, b)}`,
-  stochLow: (b) => `${_T(8, 14, "스토캐스틱 K(14,3)", "#2563eb")}
-    <line x1="6" y1="56" x2="194" y2="56" stroke="#16a34a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 70, "20 (과매도)", "#16a34a", "end")}
-    <polyline points="6,22 60,48 100,62 130,52 194,32" stroke="#2563eb" fill="none" stroke-width="2"/>
-    <circle cx="112" cy="59" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(126, 74, "20 아래서 상승 반전", "#16a34a", "start", 700)}${_SIG(112, 65, b)}`,
+  stochHigh: (b) => `${_T(8, 76, "스토캐스틱 K(14,3)", "#4391ff")}
+    <line x1="6" y1="24" x2="194" y2="24" stroke="#f5445a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 20, "80 (과열)", "#f5445a", "end")}
+    <polyline points="6,58 60,30 100,16 130,26 194,48" stroke="#4391ff" fill="none" stroke-width="2"/>
+    <circle cx="112" cy="19" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(126, 12, "80 위에서 하락 반전", "#f5445a", "start", 700)}${_SIG(112, 13, b)}`,
+  stochLow: (b) => `${_T(8, 14, "스토캐스틱 K(14,3)", "#4391ff")}
+    <line x1="6" y1="56" x2="194" y2="56" stroke="#22c07a" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(192, 70, "20 (과매도)", "#22c07a", "end")}
+    <polyline points="6,22 60,48 100,62 130,52 194,32" stroke="#4391ff" fill="none" stroke-width="2"/>
+    <circle cx="112" cy="59" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(126, 74, "20 아래서 상승 반전", "#22c07a", "start", 700)}${_SIG(112, 65, b)}`,
   newHigh: (b) => `<line x1="6" y1="26" x2="140" y2="26" stroke="#9ca3af" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(8, 20, "기존 52주 최고가", "#9ca3af")}
     <polyline points="6,52 50,30 90,42 130,28 160,14 194,18" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="152" cy="18" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(120, 66, "종가가 신고가 경신", "#16a34a", "start", 700)}${_SIG(152, 24, b)}`,
+    <circle cx="152" cy="18" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(120, 66, "종가가 신고가 경신", "#22c07a", "start", 700)}${_SIG(152, 24, b)}`,
   newLow: (b) => `<line x1="6" y1="52" x2="140" y2="52" stroke="#9ca3af" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(8, 66, "기존 52주 최저가", "#9ca3af")}
     <polyline points="6,26 50,48 90,38 130,50 160,64 194,60" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="152" cy="61" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(120, 16, "종가가 신저가 경신", "#dc2626", "start", 700)}${_SIG(152, 55, b)}`,
+    <circle cx="152" cy="61" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(120, 16, "종가가 신저가 경신", "#f5445a", "start", 700)}${_SIG(152, 55, b)}`,
   boxUp: (b) => `<line x1="6" y1="26" x2="194" y2="26" stroke="#9ca3af" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(8, 20, "60일 박스 상단", "#9ca3af")}
     <polyline points="6,44 40,36 80,46 110,34 145,18 194,14" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="132" cy="26" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
-    ${_T(60, 68, "박스권 상향 돌파", "#16a34a", "start", 700)}${_SIG(132, 32, b)}`,
+    <circle cx="132" cy="26" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
+    ${_T(60, 68, "박스권 상향 돌파", "#22c07a", "start", 700)}${_SIG(132, 32, b)}`,
   boxUpVol: (b) => `<line x1="6" y1="26" x2="194" y2="26" stroke="#9ca3af" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(8, 20, "60일 박스 상단", "#9ca3af")}
     <polyline points="6,44 40,36 80,46 110,34 145,16 194,12" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="130" cy="26" r="3.5" fill="none" stroke="#16a34a" stroke-width="1.8"/>
+    <circle cx="130" cy="26" r="3.5" fill="none" stroke="#22c07a" stroke-width="1.8"/>
     ${_VOLS([[50, 5], [75, 6], [100, 5], [130, 13, 1], [160, 6]])}${_T(140, 76, "거래량 급증", "#b45309", "start", 700)}
     ${_SIG(130, 32, b)}`,
   boxDn: (b) => `<line x1="6" y1="52" x2="194" y2="52" stroke="#9ca3af" stroke-dasharray="4 3" stroke-width="1.5"/>${_T(8, 66, "60일 박스 하단", "#9ca3af")}
     <polyline points="6,34 40,42 80,32 110,44 145,60 194,64" stroke="#64748b" fill="none" stroke-width="2"/>
-    <circle cx="132" cy="52" r="3.5" fill="none" stroke="#dc2626" stroke-width="1.8"/>
-    ${_T(60, 16, "박스권 하향 이탈", "#dc2626", "start", 700)}${_SIG(132, 46, b)}`,
+    <circle cx="132" cy="52" r="3.5" fill="none" stroke="#f5445a" stroke-width="1.8"/>
+    ${_T(60, 16, "박스권 하향 이탈", "#f5445a", "start", 700)}${_SIG(132, 46, b)}`,
   gapUp: (b) => `<polyline points="6,54 60,50 100,46" stroke="#64748b" fill="none" stroke-width="2"/>
     <polyline points="112,26 150,22 194,16" stroke="#64748b" fill="none" stroke-width="2"/>
-    <line x1="100" y1="46" x2="112" y2="26" stroke="#dc2626" stroke-dasharray="3 2" stroke-width="1.5"/>
-    ${_T(118, 42, "시가 갭 +3%↑", "#dc2626", "start", 700)}
+    <line x1="100" y1="46" x2="112" y2="26" stroke="#f5445a" stroke-dasharray="3 2" stroke-width="1.5"/>
+    ${_T(118, 42, "시가 갭 +3%↑", "#f5445a", "start", 700)}
     ${_VOLS([[40, 5], [70, 6], [112, 13, 1], [150, 6]])}${_T(124, 76, "거래량 2배↑", "#b45309", "start", 700)}
     ${_SIG(112, 32, b)}`,
   gapDn: (b) => `<polyline points="6,24 60,28 100,32" stroke="#64748b" fill="none" stroke-width="2"/>
     <polyline points="112,52 150,56 194,62" stroke="#64748b" fill="none" stroke-width="2"/>
-    <line x1="100" y1="32" x2="112" y2="52" stroke="#3b82f6" stroke-dasharray="3 2" stroke-width="1.5"/>
-    ${_T(118, 40, "시가 갭 -3%↓", "#2563eb", "start", 700)}${_SIG(112, 46, b)}`,
+    <line x1="100" y1="32" x2="112" y2="52" stroke="#4391ff" stroke-dasharray="3 2" stroke-width="1.5"/>
+    ${_T(118, 40, "시가 갭 -3%↓", "#4391ff", "start", 700)}${_SIG(112, 46, b)}`,
   _default: (b) => `<polyline points="6,${b ? 58 : 22} 70,${b ? 50 : 30} 120,${b ? 38 : 42} 194,${b ? 16 : 60}"
     stroke="#64748b" fill="none" stroke-width="2"/>${_SIG(120, b ? 44 : 36, b)}`,
 };
@@ -458,11 +458,11 @@ const IND_PANE = {
   stoch_oversold_turn: "stoch", stoch_overbought_turn: "stoch",
 };
 const IND_LEGEND = {
-  rsi: '보조지표: <span style="color:#2563eb">RSI(14)</span> + 30/70 기준선',
-  macd: '보조지표: <span style="color:#2563eb">MACD(12,26)</span> · <span style="color:#f59e0b">시그널(9)</span> · 히스토그램 + 0선',
-  disp: '보조지표: <span style="color:#2563eb">20일선 이격도</span> + -15%/0% 기준선',
-  obv: '보조지표: <span style="color:#2563eb">OBV</span> · <span style="color:#f59e0b">OBV 20일선</span>',
-  stoch: '보조지표: <span style="color:#2563eb">스토캐스틱 K(14,3)</span> + 20/80 기준선',
+  rsi: '보조지표: <span style="color:#4391ff">RSI(14)</span> + 30/70 기준선',
+  macd: '보조지표: <span style="color:#4391ff">MACD(12,26)</span> · <span style="color:#f59e0b">시그널(9)</span> · 히스토그램 + 0선',
+  disp: '보조지표: <span style="color:#4391ff">20일선 이격도</span> + -15%/0% 기준선',
+  obv: '보조지표: <span style="color:#4391ff">OBV</span> · <span style="color:#f59e0b">OBV 20일선</span>',
+  stoch: '보조지표: <span style="color:#4391ff">스토캐스틱 K(14,3)</span> + 20/80 기준선',
 };
 
 function chartWidth(el) {
@@ -473,10 +473,10 @@ function chartWidth(el) {
 function baseChartOpts(el, height) {
   return {
     width: chartWidth(el), height,
-    layout: { background: { color: "#ffffff" }, textColor: "#374151" },
-    grid: { vertLines: { color: "#f3f4f6" }, horzLines: { color: "#f3f4f6" } },
-    rightPriceScale: { borderColor: "#e5e7eb", minimumWidth: 72 },
-    timeScale: { borderColor: "#e5e7eb" },
+    layout: { background: { color: "#1b1b21" }, textColor: "#9a9aa2" },
+    grid: { vertLines: { color: "#25252c" }, horzLines: { color: "#25252c" } },
+    rightPriceScale: { borderColor: "#33333b", minimumWidth: 72 },
+    timeScale: { borderColor: "#33333b" },
   };
 }
 
@@ -570,28 +570,28 @@ function drawOscKind(el, kind, s, markerDates, minWidth, rightOffset) {
 
   let main;
   if (kind === "rsi") {
-    main = addLine("rsi", "#2563eb");
-    hline(main, 30, "#16a34a");
-    hline(main, 70, "#dc2626");
+    main = addLine("rsi", "#4391ff");
+    hline(main, 30, "#22c07a");
+    hline(main, 70, "#f5445a");
   } else if (kind === "macd") {
     const hist = c.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false, priceFormat: OSC_PRICE_FMT });
     hist.setData(s.map((x) => (x.macd != null && x.macds != null
       ? { time: x.t, value: x.macd - x.macds, color: x.macd - x.macds >= 0 ? "#fca5a5" : "#93c5fd" }
       : { time: x.t })));
     addLine("macds", "#f59e0b");
-    main = addLine("macd", "#2563eb");
+    main = addLine("macd", "#4391ff");
     hline(main, 0, "#9ca3af");
   } else if (kind === "disp") {
-    main = addLine("disp", "#2563eb");
-    hline(main, -0.15, "#16a34a");
+    main = addLine("disp", "#4391ff");
+    hline(main, -0.15, "#22c07a");
     hline(main, 0, "#9ca3af");
   } else if (kind === "obv") {
     addLine("obvm", "#f59e0b");
-    main = addLine("obv", "#2563eb");
+    main = addLine("obv", "#4391ff");
   } else if (kind === "stoch") {
-    main = addLine("stoch", "#2563eb");
-    hline(main, 20, "#16a34a");
-    hline(main, 80, "#dc2626");
+    main = addLine("stoch", "#4391ff");
+    hline(main, 20, "#22c07a");
+    hline(main, 80, "#f5445a");
   }
   main.setMarkers((markerDates || []).map((d) => ({ time: d, position: "inBar", color: "#111827", shape: "circle" })));
   c._syncSeries = main;  // 십자선 동기화용 시리즈 참조
@@ -610,7 +610,7 @@ function drawChart() {
   $("#rule-info").innerHTML =
     `<b>${rule.name}</b> — ${rule.desc}<br>
      ${tickerLabel(ex.market, ex.ticker)} · 신호일 <b>${ex.date}</b> ·
-     이후 20영업일 실제 수익률 <b style="color:${(ex.fwd20 ?? 0) >= 0 ? "#16a34a" : "#dc2626"}">${pct(ex.fwd20)}</b>
+     이후 20영업일 실제 수익률 <b style="color:${(ex.fwd20 ?? 0) >= 0 ? "#22c07a" : "#f5445a"}">${pct(ex.fwd20)}</b>
      ${rule.side === "sell" ? "(매도원칙: 하락해야 성공)" : ""}`;
 
   if (chart) { chart.remove(); chart = null; }
@@ -620,8 +620,8 @@ function drawChart() {
 
   const s = ex.series;
   const candles = chart.addCandlestickSeries({
-    upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
-    borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+    upColor: "#f5445a", downColor: "#4391ff", borderUpColor: "#f5445a",
+    borderDownColor: "#4391ff", wickUpColor: "#f5445a", wickDownColor: "#4391ff",
   }); // 국내 관례: 상승=빨강, 하락=파랑
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
 
@@ -632,8 +632,8 @@ function drawChart() {
   };
   line("ma20", "#f39c12");
   line("ma60", "#8e44ad");
-  line("bbu", "#b0b8bf");
-  line("bbd", "#b0b8bf");
+  line("bbu", "#6a6a72");
+  line("bbd", "#6a6a72");
 
   const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "" });
   chart.priceScale("").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
@@ -642,7 +642,7 @@ function drawChart() {
   const isBuy = rule.side === "buy";
   candles.setMarkers([{
     time: ex.date, position: isBuy ? "belowBar" : "aboveBar",
-    color: isBuy ? "#16a34a" : "#dc2626", shape: isBuy ? "arrowUp" : "arrowDown",
+    color: isBuy ? "#22c07a" : "#f5445a", shape: isBuy ? "arrowUp" : "arrowDown",
     text: isBuy ? "매수신호" : "매도신호",
   }]);
 
@@ -710,8 +710,8 @@ function renderApply() {
   $("#apply-stocks").innerHTML =
     `<div class="chart-legend">
        <span><span class="mk buy">▲</span> 매수신호 · <span class="mk sell">▼</span> 매도신호 &nbsp;|&nbsp;
-       색: <span class="dot" style="background:#16a34a"></span> 적중 ·
-       <span class="dot" style="background:#dc2626"></span> 실패 ·
+       색: <span class="dot" style="background:#22c07a"></span> 적중 ·
+       <span class="dot" style="background:#f5445a"></span> 실패 ·
        <span class="dot" style="background:#9ca3af"></span> 진행중(20일 미경과)</span>
      </div>` +
     APPLY.stocks.map((s, i) => {
@@ -755,8 +755,8 @@ function drawStockChart(host, stock, ruleName) {
   if (!s || !s.length) return;
   const c = LightweightCharts.createChart(host, baseChartOpts(host, 300));
   const candles = c.addCandlestickSeries({
-    upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
-    borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+    upColor: "#f5445a", downColor: "#4391ff", borderUpColor: "#f5445a",
+    borderDownColor: "#4391ff", wickUpColor: "#f5445a", wickDownColor: "#4391ff",
   });
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
 
@@ -769,7 +769,7 @@ function drawStockChart(host, stock, ruleName) {
 
   // 신호 마커: 방향=화살표, 색=적중(초록)/실패(빨강)/진행중(회색)
   const markers = stock.signals.map((x) => {
-    const color = x.done ? (x.success ? "#16a34a" : "#dc2626") : "#9ca3af";
+    const color = x.done ? (x.success ? "#22c07a" : "#f5445a") : "#9ca3af";
     const buy = x.side === "buy";
     return {
       time: x.date, position: buy ? "belowBar" : "aboveBar",
@@ -928,8 +928,8 @@ function toggleTodayChart(btn, sig) {
       const s = st.series.slice(-130);
       todayChart = LightweightCharts.createChart(el, baseChartOpts(el, 300));
       const cd = todayChart.addCandlestickSeries({
-        upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
-        borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+        upColor: "#f5445a", downColor: "#4391ff", borderUpColor: "#f5445a",
+        borderDownColor: "#4391ff", wickUpColor: "#f5445a", wickDownColor: "#4391ff",
       });
       cd.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
       const line = (k, color) => {
@@ -941,7 +941,7 @@ function toggleTodayChart(btn, sig) {
       const bbRule = /^bb_|bollinger/.test(sig.rule_id);
       if (bbRule) {
         const dashed = (k) => {
-          const ser = todayChart.addLineSeries({ color: "#b0b8bf", lineWidth: 1, lineStyle: 2,
+          const ser = todayChart.addLineSeries({ color: "#6a6a72", lineWidth: 1, lineStyle: 2,
             priceLineVisible: false, lastValueVisible: false });
           ser.setData(s.filter((x) => x[k] != null).map((x) => ({ time: x.t, value: x[k] })));
         };
@@ -956,7 +956,7 @@ function toggleTodayChart(btn, sig) {
       marks.sort((a, b) => (a.t < b.t ? -1 : 1));
       cd.setMarkers(marks.map((m) => ({
         time: m.t, position: m.side === "buy" ? "belowBar" : "aboveBar",
-        color: m.t === sig.date ? "#111827" : (m.side === "buy" ? "#16a34a" : "#dc2626"),
+        color: m.t === sig.date ? "#111827" : (m.side === "buy" ? "#22c07a" : "#f5445a"),
         shape: m.side === "buy" ? "arrowUp" : "arrowDown",
         text: m.t === sig.date ? "★오늘" : "",
       })));
@@ -971,7 +971,7 @@ function toggleTodayChart(btn, sig) {
       }
       row.querySelector(".legend").innerHTML =
         `<b>${sig.rule}</b> 신호 — ★=이번 신호(${sig.date}) · 초록/빨강 화살표=같은 원칙의 최근 6개월 신호 ·
-         ─ <span style="color:#f39c12">MA20</span> <span style="color:#8e44ad">MA60</span>${bbRule ? ' · <span style="color:#b0b8bf">볼린저밴드(점선)</span>' : ""}${indLegend} ·
+         ─ <span style="color:#f39c12">MA20</span> <span style="color:#8e44ad">MA60</span>${bbRule ? ' · <span style="color:#6a6a72">볼린저밴드(점선)</span>' : ""}${indLegend} ·
          상세 분석은 종목명 클릭 → 종목 조회`;
     });
 }
@@ -1212,8 +1212,8 @@ function drawLookupChart() {
   opts.timeScale = { ...(opts.timeScale || {}), rightOffset: rOff };
   lookupChart = LightweightCharts.createChart(el, opts);
   const candles = lookupChart.addCandlestickSeries({
-    upColor: "#ef4444", downColor: "#3b82f6", borderUpColor: "#ef4444",
-    borderDownColor: "#3b82f6", wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+    upColor: "#f5445a", downColor: "#4391ff", borderUpColor: "#f5445a",
+    borderDownColor: "#4391ff", wickUpColor: "#f5445a", wickDownColor: "#4391ff",
     priceFormat: pxFormat,
   });
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
@@ -1230,8 +1230,8 @@ function drawLookupChart() {
   line("ma20", "#f39c12", 2);
   line("ma60", "#8e44ad", 2);
   line("ma120", "#0891b2", 2);         // 120일선 추가
-  line("bbu", "#b0b8bf", 1, true);     // 볼린저 상단(점선)
-  line("bbd", "#b0b8bf", 1, true);     // 볼린저 하단(점선)
+  line("bbu", "#6a6a72", 1, true);     // 볼린저 상단(점선)
+  line("bbd", "#6a6a72", 1, true);     // 볼린저 하단(점선)
 
   const vol = lookupChart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false });
   lookupChart.priceScale("").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
@@ -1262,7 +1262,7 @@ function drawLookupChart() {
     const on = ruleActive(m.rule_id, st.market);
     return {
       time: bt, position: m.side === "buy" ? "belowBar" : "aboveBar",
-      color: on ? (m.side === "buy" ? "#16a34a" : "#dc2626") : "#9ca3af",
+      color: on ? (m.side === "buy" ? "#22c07a" : "#f5445a") : "#9ca3af",
       shape: m.side === "buy" ? "arrowUp" : "arrowDown",
       text: selRule ? m.name.replace(/\(.*\)/, "").slice(0, 8) : (RULE_ABBR[m.rule_id] || ""),
     };
@@ -1296,7 +1296,7 @@ function drawLookupChart() {
   $("#lookup-legend").innerHTML =
     `─ <span style="color:#f39c12">MA20</span> · <span style="color:#8e44ad">MA60</span> ·
      <span style="color:#0891b2">MA120</span> · <span style="color:#95a5a6">볼린저밴드(20,2σ 점선)</span> ·
-     <span style="color:#16a34a">▲매수</span>/<span style="color:#dc2626">▼매도</span> ·
+     <span style="color:#22c07a">▲매수</span>/<span style="color:#f5445a">▼매도</span> ·
      <span style="color:#9ca3af">회색=현 국면 미적용 원칙</span>${legendExtra}<br>
      <span class="sub-note">신호 축약: ${abbrLegend}</span>`;
 
@@ -2402,7 +2402,7 @@ function renderScreener() {
   const colHead = cols.map((id) => `<th class="scr-r">${scrColLabel(id)}</th>`).join("");
   const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
   const body = rows.map((t) => {
-    const col = t.chg >= 0 ? "#d93036" : "#1e63e0";
+    const col = t.chg >= 0 ? "#f5445a" : "#4391ff";
     const vals = scrVals.get(t.m + "_" + t.t) || {};
     const extra = cols.map((id) => `<td class="scr-r">${scrFmtMetric(id, vals[id])}</td>`).join("");
     return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
@@ -2433,7 +2433,7 @@ function scrFmtMetric(id, v) {
 }
 
 /* ---------- 시뮬레이션 ---------- */
-const SIM_COLORS = { combo: "#2563eb", combo_regime: "#16a34a", combo_sellexit: "#8e44ad", bench: "#9ca3af" };
+const SIM_COLORS = { combo: "#4391ff", combo_regime: "#22c07a", combo_sellexit: "#8e44ad", bench: "#9ca3af" };
 const RULE_COLORS = ["#f59e0b", "#ec4899", "#14b8a6", "#f97316", "#6366f1"];
 
 function renderSim() {
@@ -2484,13 +2484,13 @@ function renderSim() {
 // 이산 7단계 다이버징, 라이트 배경용 (상승=빨강/하락=파랑 국내 관례 유지)
 // light=true 구간은 옅은 배경이라 진회색 글자를 써야 4.5:1 유지
 const HM_STEPS = [
-  { min: 3, c: "#d93036", label: "+3%↑" },
-  { min: 2, c: "#e0575c", label: "+2%" },
-  { min: 0.25, c: "#f2b0b3", label: "+1%", light: true },
-  { min: -0.25, c: "#e8eaef", label: "0", light: true },
-  { min: -2, c: "#adc6f0", label: "-1%", light: true },
-  { min: -3, c: "#4f7de0", label: "-2%" },
-  { min: -Infinity, c: "#1e63e0", label: "-3%↓" },
+  { min: 3, c: "#e5384e", label: "+3%↑" },
+  { min: 2, c: "#a63042", label: "+2%" },
+  { min: 0.25, c: "#55272f", label: "+1%" },
+  { min: -0.25, c: "#2a2a31", label: "0" },
+  { min: -2, c: "#274468", label: "-1%" },
+  { min: -3, c: "#2f65b8", label: "-2%" },
+  { min: -Infinity, c: "#3f8cf5", label: "-3%↓" },
 ];
 function hmStep(chgPct) {
   if (chgPct >= 3) return HM_STEPS[0];
@@ -2602,7 +2602,7 @@ function renderHome() {
   // 그라데이션 범례: -3% 파랑 → 중립 → +3% 빨강 (국내 관례)
   $("#hm-legend").innerHTML =
     `<span class="hm-leg-lab">-3%</span>
-     <span class="hm-grad" style="background:linear-gradient(90deg,#1e63e0,#adc6f0,#e8eaef,#f2b0b3,#d93036)"></span>
+     <span class="hm-grad" style="background:linear-gradient(90deg,#4391ff,#274468,#2a2a31,#55272f,#f5445a)"></span>
      <span class="hm-leg-lab">+3%</span>`;
   // 국내/미국 토글 → 카드+히트맵+오늘의종목 동기 재렌더 (rAF 금지 — 동기 실행)
   $("#home-mk").querySelectorAll("button").forEach((btn) => {
@@ -2648,7 +2648,7 @@ function renderIdxCards() {
       <div class="idx-name">${c.name}</div>
       <div class="idx-val">${val}</div>
       <div class="idx-chg ${up ? "pos" : "neg"}">${up ? "▲" : "▼"} ${pct(c.chg, 2)}</div>
-      ${sparkSvg(c.spark, up ? "#dc2626" : "#2563eb")}
+      ${sparkSvg(c.spark, up ? "#f5445a" : "#4391ff")}
     </div>`;
   }).join("");
   // 카드 클릭 = 5년 차트 팝업 (지수=macro w5 / 개별종목=종목파일 5년 시계열 lazy 로드)
@@ -2838,7 +2838,7 @@ function drawTreemap() {
     const secPct = pct(sr.chg, 1);
     const zoomBtn = hmZoomSector ? "" : `<button class="hm-zoom" title="이 섹터만 크게 보기">⤢</button>`;
     block.innerHTML = `<div class="hm-sec-head"><span class="hm-sec-name">${sr.name}</span>
-      <span class="hm-sec-chg" style="color:${sr.chg >= 0.0025 ? "#d93036" : sr.chg <= -0.0025 ? "#1e63e0" : "#6b7280"}">${secPct}</span>${zoomBtn}</div>`;
+      <span class="hm-sec-chg" style="color:${sr.chg >= 0.0025 ? "#f5445a" : sr.chg <= -0.0025 ? "#4391ff" : "#6b7280"}">${secPct}</span>${zoomBtn}</div>`;
     const zb = block.querySelector(".hm-zoom");
     if (zb) zb.onclick = (e) => {
       e.stopPropagation();
@@ -2900,7 +2900,7 @@ function renderMacro() {
         <span class="badge dim">${m.group}</span></div>
       <div class="macro-val"><b>${m.last.toLocaleString()}${m.unit}</b>
         <span class="${up ? "pos" : "neg"}">${pct(m.chg)}</span></div>
-      ${sparkSvg(m.spark, up ? "#dc2626" : "#2563eb")}
+      ${sparkSvg(m.spark, up ? "#f5445a" : "#4391ff")}
       <div class="desc">${m.note}</div>
     </div>`;
   }).join("");
@@ -2963,11 +2963,11 @@ let worldSvgLoaded = false;
 
 function worldColor(chg) {
   if (chg == null) return "#d8dce3";
-  if (chg >= 0.02) return "#d93036";
+  if (chg >= 0.02) return "#f5445a";
   if (chg >= 0.003) return "#e8888c";
   if (chg > -0.003) return "#c9ced8";
   if (chg > -0.02) return "#8fb0e8";
-  return "#1e63e0";
+  return "#4391ff";
 }
 function rateColor(bp) {  // 최근 변경 방향: 인상=빨강 / 인하=파랑 / 동결=회색
   if (bp == null || bp === 0) return "#c9ced8";
@@ -3008,7 +3008,7 @@ function paintWorld() {
   if (!svg) return;
   host.querySelectorAll(".world-chip").forEach((c) => c.remove());
   svg.querySelectorAll("path").forEach((p) => {
-    p.style.fill = "#e7eaef"; p.style.stroke = "#fff"; p.style.strokeWidth = ".5"; p.style.cursor = ""; p.onclick = null;
+    p.style.fill = "#26262c"; p.style.stroke = "#17171c"; p.style.strokeWidth = ".5"; p.style.cursor = ""; p.onclick = null;
   });
   const byId = (id) => svg.querySelector(`path[id="${id}"]`);
   // 국가 path는 id로 색칠, 칩 위치는 수기 xy(%)로 고정 → 동아시아(한국·일본·중국 등) 칩 겹침 방지
@@ -3101,7 +3101,7 @@ function openChartDialog(title, statsHtml, dates, values, opts) {
     const stepType = (LightweightCharts.LineType && LightweightCharts.LineType.WithSteps) ?? 1;
     const ser = opts.step
       ? worldChart.addLineSeries({ color: "#e0912f", lineWidth: 2, lineType: stepType, priceLineVisible: false })
-      : worldChart.addAreaSeries({ lineColor: "#1e63e0", topColor: "rgba(30,99,224,.25)", bottomColor: "rgba(30,99,224,.02)", lineWidth: 2 });
+      : worldChart.addAreaSeries({ lineColor: "#4391ff", topColor: "rgba(30,99,224,.25)", bottomColor: "rgba(30,99,224,.02)", lineWidth: 2 });
     ser.setData(pts);
     worldChart.timeScale().fitContent();
   } else {
@@ -3364,13 +3364,13 @@ function unpackBreadth(bh) {
 
 // 시장 진단 차트 스펙 — k(단일)/ks(복수 시리즈), base=기준선, mk 지정 시 해당 시장만
 const INT_CHARTS = [
-  { k: "adr", c: "#2563eb", base: 100, t: "ADR (20일 등락비율)",
+  { k: "adr", c: "#4391ff", base: 100, t: "ADR (20일 등락비율)",
     n: "100↑ 상승 종목 우위. <b>지수는 오르는데 ADR이 내려가면</b> 소수 주도 장세(경고)" },
   { k: "nhnl", c: "#8e44ad", t: "신고가−신저가 누적 지수",
     n: "우상향=시장 체력 확장. 지수는 신고가인데 이 선이 꺾이면 다이버전스" },
   { ks: ["ma50", "ma200"], cs: ["#f59e0b", "#0891b2"], labs: ["MA50 상회", "MA200 상회"], base: 50,
     t: "MA50/MA200 상회 종목 비율(%)", n: "추세 참여도 — 50% 아래면 절반이 하락추세" },
-  { ks: ["hi52", "lo52"], cs: ["#d93036", "#1e63e0"], labs: ["신고가 비율", "신저가 비율"],
+  { ks: ["hi52", "lo52"], cs: ["#f5445a", "#4391ff"], labs: ["신고가 비율", "신저가 비율"],
     t: "신고가·신저가 비율(%)", n: "<b>둘 다 동시에 높으면 시장 분열</b> — 추세가 갈라지는 위험 구간(Hindenburg류)" },
   { k: "mcc", c: "#0891b2", base: 0, t: "McClellan 오실레이터",
     n: "등락 <b>모멘텀</b>(EMA19−EMA39) — 0선 돌파가 ADR 레벨보다 먼저 전환을 알림" },
@@ -3380,11 +3380,11 @@ const INT_CHARTS = [
     n: "급등=동조화(시스템 리스크·패닉), 하락=종목 선별 장세. <span class='sub-note'>변동성 가중 평균</span>" },
   { k: "rv20", c: "#f59e0b", t: "지수 실현변동성(20일, 연율 %)",
     n: "변동성 체제 — 급등 구간에선 원칙 신호보다 리스크 관리 우선" },
-  { k: "ewcw", c: "#16a34a", base: 0, t: "동일가중 − 시총가중 60일 수익률차(%p)",
+  { k: "ewcw", c: "#22c07a", base: 0, t: "동일가중 − 시총가중 60일 수익률차(%p)",
     n: "양수=상승이 <b>폭넓게 확산</b>, 음수=<b>대형주 쏠림</b>(지수만 오르는 장세)" },
   { k: "conc10", c: "#ea580c", t: "거래대금 상위 10종목 집중도(%)",
     n: "유동성 쏠림 — 높을수록 소수 종목에 자금이 몰림(순환매 약화)" },
-  { ks: ["frgn20", "inst20"], cs: ["#1e63e0", "#ea580c"], labs: ["외국인", "기관"], base: 0, mk: "kr",
+  { ks: ["frgn20", "inst20"], cs: ["#4391ff", "#ea580c"], labs: ["외국인", "기관"], base: 0, mk: "kr",
     t: "외국인·기관 20일 누적 순매수(억원)",
     n: "수급 주체 방향. <span class='sub-note'>네이버 수급 데이터 · 노트북 배치라 갱신 주기가 김</span>" },
   { curve: true, c: "#0f766e", base: 0, mk: "kr", t: "국고채 장단기 스프레드(10Y−2Y, %p)",
@@ -3406,7 +3406,7 @@ function renderInternals() {
      지표 갱신 ${MPRO.generated} (${relTime(MPRO.generated)} · <b>클라우드 30분 주기</b>)`;
 
   const r = MPRO.risk || {};
-  const scoreColor = r.score >= 60 ? "#16a34a" : r.score <= 40 ? "#dc2626" : "#f59e0b";
+  const scoreColor = r.score >= 60 ? "#22c07a" : r.score <= 40 ? "#f5445a" : "#f59e0b";
   $("#risk-gauge").innerHTML = `
     <div class="risk-row">
       <div class="risk-score">
@@ -3798,17 +3798,17 @@ function drawSupply(st) {
     s.setData(sup.filter((x) => x[key] != null).map((x) => ({ time: x.t, value: x[key] })));
     return s;
   };
-  line("fc", "#2563eb");   // 외국인 누적 (좌축)
+  line("fc", "#4391ff");   // 외국인 누적 (좌축)
   line("ic", "#f59e0b");   // 기관 누적 (좌축)
-  const fr = line("fr", "#16a34a", "right");  // 외국인 보유율 (우축)
+  const fr = line("fr", "#22c07a", "right");  // 외국인 보유율 (우축)
   lookupSupply.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
   // 0선
   lookupSupply.addLineSeries({ color: "#9ca3af", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
     .setData(sup.map((x) => ({ time: x.t, value: 0 })));
   lookupSupply.timeScale().fitContent();
   $("#lookup-supply-legend").innerHTML =
-    `─ <span style="color:#2563eb">외국인 누적 순매수</span> · <span style="color:#f59e0b">기관 누적 순매수</span> (좌축, 억원) ·
-     <span style="color:#16a34a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)`;
+    `─ <span style="color:#4391ff">외국인 누적 순매수</span> · <span style="color:#f59e0b">기관 누적 순매수</span> (좌축, 억원) ·
+     <span style="color:#22c07a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)`;
 }
 
 function renderLookupStory(st) {
@@ -3922,7 +3922,7 @@ function renderLookupHead(st) {
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
   const { cur, chg, src } = freshQuote(st);
   const up = (chg ?? 0) >= 0;
-  const col = chg == null ? "" : (up ? "#d93036" : "#1e63e0");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
+  const col = chg == null ? "" : (up ? "#f5445a" : "#4391ff");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
   const shortBadge = st.short_history ? `<span class="lk-short-badge">이력 부족 · 원칙 검증 제외</span>` : "";
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
@@ -4023,8 +4023,8 @@ function renderConsAnalyst(st, co, cur) {
   }
   const op = a.opinion;
   if (op) {
-    const cats = [["strongBuy", "적극매수", "#d93036"], ["buy", "매수", "#e0575c"],
-                  ["hold", "중립", "#9aa4b2"], ["sell", "매도", "#5b8def"], ["strongSell", "적극매도", "#1e63e0"]];
+    const cats = [["strongBuy", "적극매수", "#f5445a"], ["buy", "매수", "#e0575c"],
+                  ["hold", "중립", "#9aa4b2"], ["sell", "매도", "#5b8def"], ["strongSell", "적극매도", "#4391ff"]];
     const total = cats.reduce((s, [k]) => s + (op[k] || 0), 0) || 1;
     const bars = cats.map(([k, lab, c]) => {
       const v = op[k] || 0, h = Math.max(3, v / total * 60);
@@ -4141,15 +4141,15 @@ function renderLookupFin(st) {
     }
     if (r.op != null) {
       const y = yScale(Math.max(0, r.op)), y2 = yScale(Math.min(0, r.op));
-      bars += `<rect x="${cx + 2}" y="${r.op >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.op >= 0 ? y : y2)))}" fill="${r.op >= 0 ? (r.est ? "#f6c8ad" : "#f0955a") : "#dc2626"}" rx="2"/>
+      bars += `<rect x="${cx + 2}" y="${r.op >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.op >= 0 ? y : y2)))}" fill="${r.op >= 0 ? (r.est ? "#f6c8ad" : "#f0955a") : "#f5445a"}" rx="2"/>
         <text x="${cx + bw / 2 + 2}" y="${(r.op >= 0 ? y : y2) - 4}" font-size="9" text-anchor="middle" fill="#92400e">${finFmt(r.op, co.fin_unit)}</text>`;
     }
     if (r.opm != null) pts.push([cx, opmY(r.opm), r.opm]);
     labels += `<text x="${cx}" y="${H - 14}" font-size="10" text-anchor="middle" fill="#6b7280">${r.y}${r.est ? "(E)" : ""}</text>`;
   });
   if (pts.length > 1) {
-    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#16a34a" stroke-width="2"/>` +
-      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#16a34a"/>
+    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#22c07a" stroke-width="2"/>` +
+      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#22c07a"/>
         <text x="${p[0]}" y="${p[1] + (i % 2 ? 14 : -6)}" font-size="9" text-anchor="middle" fill="#15803d">${p[2].toFixed(1)}%</text>`).join("");
   }
   // 확장 지표 표: 순이익·순이익률·EPS·ROE·부채비율·주당배당금
@@ -4180,7 +4180,7 @@ function renderLookupFin(st) {
       ${bars}${line}${labels}
     </svg>
     <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출액 ·
-      <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#16a34a">●─</span> 영업이익률(%)
+      <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#22c07a">●─</span> 영업이익률(%)
       · 옅은색 = 추정치</p>
     ${extTable}`;
 }
@@ -4214,7 +4214,7 @@ function renderLookupFinQ(st) {
     if (r.np != null) {
       const y = yS(Math.max(0, r.np)), y2 = yS(Math.min(0, r.np));
       const topY = r.np >= 0 ? y : y2;
-      bars += `<rect x="${cx + 1}" y="${r.np >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.np >= 0 ? y : y2)))}" fill="${r.np >= 0 ? (r.est ? "#b9c6dd" : "#3f6fb5") : "#dc2626"}" rx="1.5"/>
+      bars += `<rect x="${cx + 1}" y="${r.np >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.np >= 0 ? y : y2)))}" fill="${r.np >= 0 ? (r.est ? "#b9c6dd" : "#3f6fb5") : "#f5445a"}" rx="1.5"/>
         <text x="${cx + bw / 2 + 1}" y="${r.np >= 0 ? topY - (i % 2 ? 4 : 13) : topY + 11}" font-size="8.5" text-anchor="middle" fill="${r.np >= 0 ? "#274e86" : "#b91c1c"}">${finFmt(r.np, unit)}</text>`;
     }
     if (r.npm != null) pts.push([cx, npmY(r.npm), r.npm]);
@@ -4343,7 +4343,7 @@ function renderLookupSurprise(st) {
       bars += `<text x="${cx + bw / 2 + 1}" y="${ay - 4}" font-size="8" text-anchor="middle" fill="#274e86">$${r.actual}</text>`;
     }
     if (r.pct != null) {
-      bars += `<text x="${cx}" y="${padT - 16}" font-size="9" font-weight="700" text-anchor="middle" fill="${r.pct >= 0 ? "#d93036" : "#1e63e0"}">${r.pct >= 0 ? "+" : ""}${r.pct}%</text>`;
+      bars += `<text x="${cx}" y="${padT - 16}" font-size="9" font-weight="700" text-anchor="middle" fill="${r.pct >= 0 ? "#f5445a" : "#4391ff"}">${r.pct >= 0 ? "+" : ""}${r.pct}%</text>`;
     }
     labels += `<text x="${cx}" y="${H - 14}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}</text>`;
   });
@@ -5232,7 +5232,7 @@ function pfMarketRender() {
     const max = Math.max(1, ...recs.flatMap((r) => [Math.abs(r.indiv || 0), Math.abs(r.frgn || 0), Math.abs(r.inst || 0)]));
     const gw = (W - pad * 2) / recs.length;
     const bw = Math.max(2, gw / 3 - 1.5);
-    const colors = { indiv: "#9aa4b2", frgn: "#d93036", inst: "#1e63e0" };
+    const colors = { indiv: "#9aa4b2", frgn: "#f5445a", inst: "#4391ff" };
     let bars = "";
     recs.forEach((r, i) => ["indiv", "frgn", "inst"].forEach((k, j) => {
       const v = r[k] || 0;
@@ -5257,7 +5257,7 @@ function pfMarketRender() {
         <button data-m="kosdaq" class="${pfMkSel === "kosdaq" ? "active" : ""}">코스닥</button></span>` : ""}
     </div>
     ${recs.length ? `${svg}
-      <p class="legend"><span style="color:#9aa4b2">■</span> 개인 · <span style="color:#d93036">■</span> 외국인 · <span style="color:#1e63e0">■</span> 기관 — 일별 순매수 (최근 ${recs.length}일)</p>
+      <p class="legend"><span style="color:#9aa4b2">■</span> 개인 · <span style="color:#f5445a">■</span> 외국인 · <span style="color:#4391ff">■</span> 기관 — 일별 순매수 (최근 ${recs.length}일)</p>
       <div class="prof-grid wide">
         <div class="prof-row"><span>외국인 ${recs.length}일 누적 순매수</span>
           <span><b class="${frgnSum >= 0 ? "pos" : "neg"}">${won(frgnSum)}</b></span></div>
@@ -5475,11 +5475,11 @@ function renderGurus() {
       pts.push([cx, yR(r.ratio), r.ratio]);
       labels += `<text x="${cx}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.d.slice(2, 7).replace("-", ".")}</text>`;
     });
-    const line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#dc2626" stroke-width="2"/>` +
-      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#dc2626"/>` +
+    const line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#f5445a" stroke-width="2"/>` +
+      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#f5445a"/>` +
         (i === pts.length - 1 || i % 2 === 0 ? `<text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#b91c1c">${p[2]}%</text>` : "")).join("");
     return `<div class="guru-cash"><b>💰 현금성 자산 추이</b>
-        <span class="sub-note">(막대=현금·현금성+채권 $B · <span style="color:#dc2626">라인=현금비중</span>
+        <span class="sub-note">(막대=현금·현금성+채권 $B · <span style="color:#f5445a">라인=현금비중</span>
         =현금성/(현금성+주식포트) · SEC 10-Q, 단기 T-bill 별도태그 미포함)</span>
       <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${line}${labels}</svg></div>`;
   };
@@ -5732,7 +5732,7 @@ function calcValue() {
   }
   const buyBelow = iv * (1 - mos);
   const gap = rec.price ? iv / rec.price - 1 : null;
-  const gapColor = gap == null ? "#6b7280" : gap > 0.15 ? "#16a34a" : gap < -0.15 ? "#dc2626" : "#f59e0b";
+  const gapColor = gap == null ? "#6b7280" : gap > 0.15 ? "#22c07a" : gap < -0.15 ? "#f5445a" : "#f59e0b";
   $("#val-result").innerHTML = `
     <div class="val-name">${VAL_CUR.name || VAL_CUR.key} <span class="sub-note">현재가 ${fmtPrice(rec.price, mk)} (${rec.price_date})</span></div>
     <div class="val-iv">내재가치 <b>${fmtPrice(iv, mk)}</b></div>
