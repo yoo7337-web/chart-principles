@@ -440,11 +440,18 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
 #world-dialog::backdrop { background: rgba(0,0,0,.62); }
 /* 차트 그리기 오버레이 */
+/* 차트 상단 캡션(기준일·주기·안내) — 작게 */
+.lk-caption { font-size: .74rem; color: var(--muted); margin: 2px 0 4px; line-height: 1.4; }
+.lk-caption b { color: var(--ink); font-weight: 600; }
 .draw-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; touch-action: none; }
-.draw-overlay .dw { fill: rgba(37,99,235,.08); stroke: #4391ff; stroke-width: 1.6; cursor: pointer; }
-.draw-overlay line.dw { fill: none; }
-.draw-overlay .dw-preview { stroke-dasharray: 4 3; opacity: .8; pointer-events: none; }
+.draw-overlay .dw { stroke-width: 1.6; cursor: pointer; }   /* 색·fill·선모양은 요소 inline style이 결정 */
+.draw-overlay .dw-preview { opacity: .8; pointer-events: none; }
 #draw-mode button { font-size: .8rem; }
+#draw-linestyle button { font-size: .8rem; letter-spacing: 1px; min-width: 34px; }
+/* 그리기 색 스와치 */
+.draw-swatches { display: inline-flex; gap: 4px; }
+.draw-sw { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.draw-sw.active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--bg); }
 /* 종목 메모 + 메모 탭 */
 .memo-row { padding: 12px 14px; margin-bottom: 10px; }
 .memo-head { display: flex; align-items: center; gap: 8px; font-size: .92rem; }

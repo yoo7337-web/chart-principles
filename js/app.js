@@ -37,6 +37,15 @@ let lookupInds = [];   // 보조지표 패널 차트들(복수)
 let lookupCandles = null;       // 메인 캔들 시리즈 (그리기 좌표 변환용)
 let _barIdxByTime = null, _barTimeByIdx = null;  // 봉 시간↔논리인덱스 (그리기 좌표 안정화)
 let drawMode = "";     // "" | "trend" | "box" | "erase"
+let drawColor = "#4391ff";   // 현재 펜 색(새로 그리는 선/박스에 적용)
+let drawStyle = "solid";     // solid | dashed | dotted
+const DRAW_COLORS = ["#4391ff", "#f5445a", "#22c07a", "#f0b34c", "#9d7bff", "#e7e7ec"];
+const DASH = { solid: "", dashed: "7 4", dotted: "2 3.5" };
+function hexRGBA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+function drawShapeStyle(color, style, isBox) {
+  const dash = DASH[style] || "";
+  return `stroke:${color};stroke-dasharray:${dash || "none"};fill:${isBox ? hexRGBA(color, 0.1) : "none"}`;
+}
 let lookupSupply = null;
 let simChart = null;
 let applyRendered = false;
@@ -1383,8 +1392,9 @@ function redrawDrawings() {
   svg.innerHTML = arr.map((d, i) => {
     const x1 = X(d.t1, d.fo1), y1 = Y(d.p1), x2 = X(d.t2, d.fo2), y2 = Y(d.p2);
     if ([x1, y1, x2, y2].some((v) => v == null)) return "";
-    if (d.type === "trend") return `<line class="dw" data-i="${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
-    return `<rect class="dw" data-i="${i}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
+    const stl = drawShapeStyle(d.color || "#4391ff", d.style || "solid", d.type === "box");
+    if (d.type === "trend") return `<line class="dw" data-i="${i}" style="${stl}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    return `<rect class="dw" data-i="${i}" style="${stl}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
   }).join("");
   if (drawMode === "erase") svg.querySelectorAll(".dw").forEach((sh) => sh.onclick = () => {
     const o = drawLoad(), k = drawKey();
@@ -1409,6 +1419,19 @@ function bindDrawTools() {
   if (!tools || tools.dataset.bound) return;
   tools.dataset.bound = "1";
   tools.querySelectorAll("#draw-mode button").forEach((b) => b.onclick = () => setDrawMode(b.dataset.dm));
+  // 색 스와치
+  const cwrap = document.getElementById("draw-color");
+  cwrap.innerHTML = DRAW_COLORS.map((c) =>
+    `<button class="draw-sw${c === drawColor ? " active" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+  cwrap.querySelectorAll(".draw-sw").forEach((b) => b.onclick = () => {
+    drawColor = b.dataset.c;
+    cwrap.querySelectorAll(".draw-sw").forEach((x) => x.classList.toggle("active", x === b));
+  });
+  // 선모양(실선/파선/점선)
+  document.querySelectorAll("#draw-linestyle button").forEach((b) => b.onclick = () => {
+    drawStyle = b.dataset.ls;
+    document.querySelectorAll("#draw-linestyle button").forEach((x) => x.classList.toggle("active", x === b));
+  });
   document.getElementById("draw-clear").onclick = () => {
     if (!confirm("이 종목의 그림을 모두 지울까요?")) return;
     const o = drawLoad(); delete o[drawKey()]; drawSaveAll(o); redrawDrawings();
@@ -1438,9 +1461,10 @@ function bindDrawTools() {
     if (!start) return;
     const c = toData(ev);
     const prev = svg.querySelector(".dw-preview"); if (prev) prev.remove();
+    const stl = drawShapeStyle(drawColor, drawStyle, drawMode === "box");
     const el = drawMode === "trend"
-      ? `<line class="dw dw-preview" x1="${start.x}" y1="${start.y}" x2="${c.x}" y2="${c.y}"/>`
-      : `<rect class="dw dw-preview" x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
+      ? `<line class="dw dw-preview" style="${stl}" x1="${start.x}" y1="${start.y}" x2="${c.x}" y2="${c.y}"/>`
+      : `<rect class="dw dw-preview" style="${stl}" x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
     svg.insertAdjacentHTML("beforeend", el);
   });
   const finish = (ev) => {
@@ -1449,7 +1473,8 @@ function bindDrawTools() {
     const okA = start.t != null || start.fo != null, okB = end.t != null || end.fo != null;
     if (okA && okB && start.p != null && end.p != null && (Math.abs(end.x - start.x) > 3 || Math.abs(end.y - start.y) > 3)) {
       const o = drawLoad(), k = drawKey();
-      (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, fo1: start.fo, p1: start.p, t2: end.t, fo2: end.fo, p2: end.p });
+      (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, fo1: start.fo, p1: start.p, t2: end.t, fo2: end.fo, p2: end.p,
+        color: drawColor, style: drawStyle });   // 선택한 색·선모양 저장
       drawSaveAll(o);
     }
     start = null;

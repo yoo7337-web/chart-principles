@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=120">
-<script src="firebase-config.js?v=120"></script>
-<script src="js/auth.js?v=120"></script>
+<link rel="stylesheet" href="css/style.css?v=121">
+<script src="firebase-config.js?v=121"></script>
+<script src="js/auth.js?v=121"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -160,9 +160,16 @@
         <button data-dm="box">▭ 박스권</button>
         <button data-dm="erase">🧽 지우기</button>
       </span>
+      <span class="draw-swatches" id="draw-color"></span>
+      <span class="mk-toggle" id="draw-linestyle">
+        <button data-ls="solid" class="active" title="실선">──</button>
+        <button data-ls="dashed" title="파선">– –</button>
+        <button data-ls="dotted" title="점선">···</button>
+      </span>
       <button class="today-chart-btn" id="draw-clear">전체 삭제</button>
       <span class="sub-note" id="draw-hint">추세선/박스권 선택 후 차트에서 드래그 · 이 브라우저에 저장</span>
     </div>
+    <div id="lookup-info" class="lk-caption" style="display:none"></div>
     <div id="lookup-chart-wrap" style="position:relative">
       <div id="lookup-chart" class="chart" style="display:none"></div>
       <svg id="lookup-draw" class="draw-overlay"></svg>
@@ -172,7 +179,6 @@
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
-    <div id="lookup-info" class="rule-info" style="display:none"></div>
     <!-- ⑤ 실적: 분기 → 연간 → 서프라이즈 → 안정성 → 배당 -->
     <div id="lookup-finq" class="card-flat" style="display:none"></div>
     <div id="lookup-fin" class="card-flat" style="display:none"></div>
@@ -660,6 +666,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=120"></script>
+<script src="js/app.js?v=121"></script>
 </body>
 </html>
