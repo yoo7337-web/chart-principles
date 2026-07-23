@@ -931,6 +931,7 @@ function toggleTodayChart(btn, sig) {
         upColor: "#f5445a", downColor: "#4391ff", borderUpColor: "#f5445a",
         borderDownColor: "#4391ff", wickUpColor: "#f5445a", wickDownColor: "#4391ff",
       });
+      todayChart._syncSeries = cd;   // 십자선 동기화용
       cd.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
       const line = (k, color) => {
         const ser = todayChart.addLineSeries({ color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
@@ -968,6 +969,7 @@ function toggleTodayChart(btn, sig) {
         todayInd = drawOscKind(row.querySelector(".today-ind"), kind, s, marks.map((m) => m.t));
         todayInd?.timeScale().fitContent();
         indLegend = " · " + IND_LEGEND[kind] + " (●=신호일)";
+        if (todayInd) syncCharts([todayChart, todayInd]);   // 종목조회처럼 시간축·십자선 연동(확대·축소 동기)
       }
       row.querySelector(".legend").innerHTML =
         `<b>${sig.rule}</b> 신호 — ★=이번 신호(${sig.date}) · 초록/빨강 화살표=같은 원칙의 최근 6개월 신호 ·
