@@ -170,12 +170,43 @@ def fetch_kr(probe: bool = False):
     return out
 
 
+def fetch_econ() -> list:
+    """경제지표 일정 — TradingView economic-calendar 공개 API(무키, Origin 헤더 필요).
+    미국·한국·중국·일본·유럽, 최근 3일~향후 35일, 중요도 중(0)·상(1)만(하=-1 제외 — 달력 과밀 방지).
+    시각은 KST로 변환해 저장(사이트 표기 기준)."""
+    frm = (datetime.now(timezone.utc) - timedelta(days=LOOKBACK_D)).strftime("%Y-%m-%dT00:00:00.000Z")
+    to = (datetime.now(timezone.utc) + timedelta(days=35)).strftime("%Y-%m-%dT00:00:00.000Z")
+    url = ("https://economic-calendar.tradingview.com/events?"
+           + urllib.parse.urlencode({"from": frm, "to": to, "countries": "US,KR,CN,JP,EU"}))
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0", "Origin": "https://kr.tradingview.com"})
+    data = json.loads(urllib.request.urlopen(req, timeout=25).read().decode("utf-8"))
+    out = []
+    for e in data.get("result", []):
+        imp = e.get("importance")
+        if imp is None or imp < 0:  # 주의: imp=0(중)이 falsy라 `or` 폴백 쓰면 안 됨
+            continue
+        try:
+            dt = datetime.fromisoformat(e["date"].replace("Z", "+00:00")).astimezone(KST)
+        except Exception:
+            continue
+        out.append({"d": dt.strftime("%Y-%m-%d"), "tm": dt.strftime("%H:%M"),
+                    "c": e.get("country"), "t": (e.get("title") or "")[:70],
+                    "imp": imp, "per": e.get("period") or "",
+                    "a": e.get("actual"), "f": e.get("forecast"), "p": e.get("previous"),
+                    "u": e.get("unit") or ""})
+    out.sort(key=lambda r: (r["d"], r["tm"]))
+    print(f"  경제지표 {len(out)}건 (중요도 중·상)")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--probe-kr", action="store_true")
     ap.add_argument("--us-only", action="store_true")
     ap.add_argument("--kr-only", action="store_true")
+    ap.add_argument("--econ-only", action="store_true")
     args = ap.parse_args()
 
     if args.probe_kr:
@@ -186,29 +217,42 @@ def main():
     earnings = cur.get("earnings", {"us": [], "kr": []})
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
 
-    if not args.kr_only:
+    if not args.kr_only and not args.econ_only:
         if args.force or not _fresh(cur.get("us_updated")):
             print("[1/2] US 실적일정 (yfinance)...")
             earnings["us"] = fetch_us()
             cur["us_updated"] = now
         else:
             print("[1/2] US 스킵 (20h 이내 갱신됨)")
-    if not args.us_only:
+    if not args.us_only and not args.econ_only:
         if args.force or not _fresh(cur.get("kr_updated")):
-            print("[2/2] KR IR일정 (KIND)...")
+            print("[2/3] KR IR일정 (KIND)...")
             try:
                 earnings["kr"] = fetch_kr()
                 cur["kr_updated"] = now
             except Exception as e:
                 print(f"  KR 실패({e}) — 기존 데이터 보존", file=sys.stderr)
         else:
-            print("[2/2] KR 스킵 (20h 이내 갱신됨)")
+            print("[2/3] KR 스킵 (20h 이내 갱신됨)")
+
+    econ = cur.get("econ") or []
+    if not args.us_only and not args.kr_only:
+        if args.force or not _fresh(cur.get("econ_updated")):
+            print("[3/3] 경제지표 (TradingView)...")
+            try:
+                econ = fetch_econ()
+                cur["econ_updated"] = now
+            except Exception as e:
+                print(f"  경제지표 실패({e}) — 기존 데이터 보존", file=sys.stderr)
+        else:
+            print("[3/3] 경제지표 스킵 (20h 이내 갱신됨)")
 
     payload = {"generated": now,
                "us_updated": cur.get("us_updated"), "kr_updated": cur.get("kr_updated"),
-               "earnings": earnings}
+               "econ_updated": cur.get("econ_updated"),
+               "earnings": earnings, "econ": econ}
     OUT.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
-    print(f"완료: calendar.json (US {len(earnings['us'])} / KR {len(earnings['kr'])})")
+    print(f"완료: calendar.json (US {len(earnings['us'])} / KR {len(earnings['kr'])} / 지표 {len(econ)})")
 
 
 if __name__ == "__main__":
