@@ -1,0 +1,76 @@
+name: Quarterly Financials (DART 연결·별도·분기 + yfinance)
+# 상세 재무제표(data/financials/*.json) 분기 갱신.
+#  - 한국 공시 마감 직후 실행: 사업보고서(3/31)→4월 초, 1Q(5/15)→5월 중, 반기(8/14)→8월 중, 3Q(11/14)→11월 중
+#  - DART 일일 호출 한도(20,000) 보호: financials.py가 18,000콜에서 중단 → 다음날 두 번째 cron이 이어받음(index.json 가드)
+#  - 수동 실행: Actions 탭 workflow_dispatch
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 23 1,2 4 *'      # 4/2·4/3 08:00 KST (사업보고서 반영)
+    - cron: '0 23 15,16 5 *'    # 5/16·17 (1분기보고서)
+    - cron: '0 23 14,15 8 *'    # 8/15·16 (반기보고서)
+    - cron: '0 23 14,15 11 *'   # 11/15·16 (3분기보고서)
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: financials-data
+  cancel-in-progress: false
+
+jobs:
+  financials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: engine/requirements.txt
+
+      - name: Install deps
+        run: pip install -r engine/requirements.txt
+
+      - name: Seed existing financials (index 가드 연속성 — 이어받기)
+        run: |
+          mkdir -p engine/app/data
+          cp -f data/*.json engine/app/data/ 2>/dev/null || true
+          [ -d data/financials ] && cp -r data/financials engine/app/data/financials || true
+
+      - name: Collect financials
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: |
+          cd engine
+          python analysis/financials.py
+
+      - name: Copy back + commit
+        run: |
+          mkdir -p data/financials
+          cp -f engine/app/data/financials/*.json data/financials/ 2>/dev/null || true
+          git config user.name "chart-cloud-bot"
+          git config user.email "actions@github.com"
+          git add data/financials
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+          else
+            git commit -m "financials(cloud) $(date '+%Y-%m-%d %H:%M') KST"
+            git pull --rebase origin main || (git rebase --abort || true)
+            git push origin HEAD:main || echo "push 실패(무시, 배포는 진행)"
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - id: deployment
+        uses: actions/deploy-pages@v4

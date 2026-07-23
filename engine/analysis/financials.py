@@ -129,34 +129,121 @@ def _extract(rows: list) -> dict:
     return out
 
 
-def fetch_kr(code: str, corp: str, key: str) -> dict | None:
-    """최근 YEARS년 연간 재무제표(사업보고서). CFS 우선, 실패 시 OFS."""
+_CALLS = {"n": 0, "max": 18000}  # DART 일일 한도(20,000) 보호 — 도달 시 중단, 다음 실행이 이어받음
+
+
+def _dart_call(url: str):
+    if _CALLS["n"] >= _CALLS["max"]:
+        raise RuntimeError("call-budget")
+    _CALLS["n"] += 1
+    time.sleep(0.07)  # 분당 1000회 제한 보호
+    return _getj(url)
+
+
+def _extract_full(rows: list) -> dict:
+    """전체계정 → {키: {v: thstrm, add: 누적}} — 분기 차감용으로 누적도 보존."""
+    out = {}
+    for r in rows:
+        aid = (r.get("account_id") or "").strip()
+        key = ACCT_ID.get(aid) or ACCT_NM.get((r.get("account_nm") or "").strip())
+        if not key or key in out:
+            continue
+        v = _num(r.get("thstrm_amount"))
+        if v is None:
+            continue
+        out[key] = {"v": v, "add": _num(r.get("thstrm_add_amount"))}
+    if "equity" not in out and "equity_owner" in out:
+        out["equity"] = out["equity_owner"]
+    out.pop("equity_owner", None)
+    return out
+
+
+def _fetch_report(corp: str, key: str, year: int, rc: str, fs: str) -> dict | None:
+    """단일 보고서 조회 → _extract_full 결과 (없으면 None)."""
+    try:
+        d = _dart_call(f"https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key={key}"
+                       f"&corp_code={corp}&bsns_year={year}&reprt_code={rc}&fs_div={fs}")
+    except RuntimeError:
+        raise
+    except Exception:
+        return None
+    if d.get("status") == "000" and d.get("list"):
+        return _extract_full(d["list"])
+    return None
+
+
+def _eok(d: dict) -> dict:
+    """{k:{v,add}} → 억원 단순값."""
+    return {k: round(x["v"] / 1e8, 1) for k, x in d.items()}
+
+
+def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
+    """한 재무제표 구분(CFS=연결/OFS=별도)의 연간 10년 + 최근 분기.
+    분기 손익=thstrm(3개월분), 현금흐름=누적 차감, 4Q=연간-3Q누적."""
     this_year = datetime.now(KST).year
-    annual = {}
+    annual_raw = {}   # {year:int → full dict}
     fail = 0
     for yr in range(this_year - 1, this_year - 1 - YEARS, -1):
-        got = None
-        for fs in ("CFS", "OFS"):
-            try:
-                d = _getj(f"https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key={key}"
-                          f"&corp_code={corp}&bsns_year={yr}&reprt_code=11011&fs_div={fs}")
-            except Exception:
-                continue
-            if d.get("status") == "000" and d.get("list"):
-                got = _extract(d["list"])
-                break
-            if d.get("status") == "013":  # 데이터 없음 → 더 옛날은 없을 가능성
-                fail += 1
-                break
+        got = _fetch_report(corp, key, yr, "11011", fs)
         if got:
-            annual[str(yr)] = {k: round(v / 1e8, 1) for k, v in got.items()}  # 원 → 억원(첨부 표 단위)
+            annual_raw[yr] = got
             fail = 0
-        time.sleep(0.06)
-        if fail >= 2:  # 연속 2년 없음 → 상장 이전 → 중단
-            break
-    if not annual:
+        else:
+            fail += 1
+            if fail >= 2:  # 연속 2년 없음 → 상장 이전/미작성 → 중단
+                break
+    if not annual_raw:
         return None
-    return {"annual": annual}
+    annual = {str(y): _eok(d) for y, d in annual_raw.items()}
+
+    # ---- 분기: 최근 ~6분기 (금년 + 전년 보고서) ----
+    QRC = [("11013", 1), ("11012", 2), ("11014", 3), ("11011", 4)]
+    reports = {}  # {(year, qn): full dict}
+    for yr in (this_year, this_year - 1):
+        for rc, qn in QRC:
+            if yr == this_year and rc == "11011":
+                continue  # 금년 사업보고서는 아직 없음
+            if rc == "11011" and yr in annual_raw:
+                reports[(yr, 4)] = annual_raw[yr]  # 이미 수집한 연간 재활용(호출 절약)
+                continue
+            got = _fetch_report(corp, key, yr, rc, fs)
+            if got:
+                reports[(yr, qn)] = got
+    quarter = {}
+    IS_SET = set(IS_KEYS)
+    for (yr, qn), cur in sorted(reports.items()):
+        prev = reports.get((yr, qn - 1))  # 같은 해 직전 분기(누적 차감용)
+        q = {}
+        for k, x in cur.items():
+            if k in IS_SET:  # 손익: thstrm=3개월분(사업보고서만 연간→4Q 차감)
+                if qn == 4:
+                    p = prev.get(k) if prev else None
+                    pcum = (p.get("add") or p.get("v")) if p else None
+                    q[k] = x["v"] - pcum if pcum is not None else None
+                else:
+                    q[k] = x["v"]
+            elif k in ("cfo", "cfi", "cff", "capex_ppe", "capex_intan"):  # 현금흐름: 누적 → 차감
+                if qn == 1:
+                    q[k] = x["v"]
+                else:
+                    p = prev.get(k) if prev else None
+                    q[k] = x["v"] - p["v"] if p else None
+            else:  # 재무상태: 시점값
+                q[k] = x["v"]
+        q = {k: round(v / 1e8, 1) for k, v in q.items() if v is not None}
+        if q:
+            quarter[f"{str(yr)[2:]}Q{qn}"] = q
+    return {"annual": annual, "quarter": quarter}
+
+
+def fetch_kr(code: str, corp: str, key: str) -> dict | None:
+    """연결(CFS)+별도(OFS) 각각 수집 — 없는 쪽은 생략(두산테스나처럼 별도만 내는 회사 대응)."""
+    out = {}
+    for fs, name in (("CFS", "cfs"), ("OFS", "ofs")):
+        d = fetch_kr_fs(corp, key, fs)
+        if d:
+            out[name] = d
+    return out or None
 
 
 def _yf_frame(df, mapping: dict, quarterly: bool = False) -> dict:
@@ -300,7 +387,11 @@ def main():
                 corp = cmap.get(code)
                 if not corp:
                     continue
-                data = fetch_kr(code, corp, key)
+                try:
+                    data = fetch_kr(code, corp, key)
+                except RuntimeError:  # 일일 호출 한도 도달 — 다음 실행이 index 가드로 이어받음
+                    print(f"  [KR fin] 호출 한도 도달({_CALLS['n']}) — 중단, 다음 실행이 이어서 수집")
+                    break
                 done += 1
                 if data:
                     data["market"] = "kr"
@@ -309,9 +400,9 @@ def main():
                     idx[k] = now
                     wrote += 1
                 if done % 50 == 0:
-                    print(f"  [KR fin] {done} (저장 {wrote})")
+                    print(f"  [KR fin] {done} (저장 {wrote}, 호출 {_CALLS['n']})")
                     INDEX.write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
-            print(f"  KR 재무 {wrote}종목 저장")
+            print(f"  KR 재무 {wrote}종목 저장 (DART 호출 {_CALLS['n']})")
 
     # ---------- US ----------
     if not args.kr_only and not only_kr:
