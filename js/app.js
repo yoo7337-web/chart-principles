@@ -1076,10 +1076,8 @@ function loadLookup(key) {
       renderLookupOverview(st);
       renderLookupCons(st);
       renderLookupMetrics(st);
-      renderLookupFin(st);
-      renderLookupFinQ(st);
-      mergeFinCharts();
-      renderLookupStability(st);
+      // 실적·재무 추이는 renderLookupFinancials(financials fetch) 완료 후 renderFinTrends가 통합 렌더
+      // (구 renderLookupFin/FinQ/Stability는 v132에서 통합 카드로 대체 — 연간/분기 정보 통일)
       renderLookupSurprise(st);
       renderLookupDividend(st);
       renderLookupPeers(st);
@@ -5124,7 +5122,154 @@ function renderLookupFinancials(st) {
     finFsSel = fin.cfs ? "cfs" : "ofs";
     finUnitSel = st.market === "kr" ? "eok" : "musd";
     finDraw(st);
-  }).catch(() => { host.style.display = "none"; });
+    renderFinTrends(st);  // 실적·재무 추이 통합 카드(같은 financials 데이터)
+  }).catch(() => { host.style.display = "none"; $("#lookup-finq").style.display = "none"; });
+}
+
+/* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
+let ftView = "perf", ftMode = "annual";
+const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"], ["cash", "현금흐름"]];
+
+function ftRows(st) {
+  // financials → 기간 오름차순 [{p, rev, op, np, opm, npm, revG, roe, cfo, cfi, cff, debt, cur}]
+  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
+  if (!fin) return [];
+  const src = fin.cfs || fin.ofs || fin;
+  const data = ftMode === "quarter" ? src.quarter : src.annual;
+  if (!data || !Object.keys(data).length) return [];
+  const ps = Object.keys(data).sort();
+  return ps.map((p, i) => {
+    const d = data[p], prev = i > 0 ? data[ps[i - 1]] : null;
+    const r = { p: ftMode === "annual" ? p : p, ...d };
+    r.opm = d.rev ? (d.op / d.rev) * 100 : null;
+    r.npm = d.rev ? (d.np / d.rev) * 100 : null;
+    r.revG = prev && prev.rev ? (d.rev / prev.rev - 1) * 100 : null;  // 연간=전년比, 분기=직전분기比(QoQ)
+    r.roe = d.equity && d.np != null ? (d.np * (ftMode === "quarter" ? 4 : 1)) / d.equity * 100 : null;  // 분기=연환산
+    r.debt = d.equity && d.liab != null ? (d.liab / d.equity) * 100 : null;
+    r.cur = d.cl && d.ca != null ? (d.ca / d.cl) * 100 : null;
+    return r;
+  });
+}
+
+function renderFinTrends(st) {
+  const host = $("#lookup-finq");
+  const rows = ftRows(st);
+  if (rows.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const unit = st.market === "kr" ? "억원" : "백만$";
+  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
+  const fsNote = st.market === "kr" ? (fin.cfs ? "연결" : "별도") + " 기준 · " : "";
+  const gLab = ftMode === "annual" ? "매출성장률(YoY)" : "매출성장률(QoQ)";
+  const roeLab = ftMode === "quarter" ? "ROE(연환산)" : "ROE";
+
+  host.innerHTML = `<h3 class="lk-h3">📊 실적·재무 추이
+      <span class="sub-note">(${fsNote}${st.market === "kr" ? "DART" : "yfinance"} · 단위 ${unit})</span>
+      <span style="flex:1"></span>
+      <span class="mk-toggle ft-view">${FT_VIEWS.map(([id, lab]) =>
+        `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span>
+      <span class="mk-toggle ft-mode">
+        <button data-m="annual" class="${ftMode === "annual" ? "active" : ""}">연간</button>
+        <button data-m="quarter" class="${ftMode === "quarter" ? "active" : ""}">분기</button>
+      </span></h3>
+    <div id="ft-chart"></div><div id="ft-table"></div>`;
+  host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
+  host.querySelectorAll(".ft-mode button").forEach((b) => b.onclick = () => { ftMode = b.dataset.m; renderFinTrends(st); });
+
+  const W = 940, H = 280, padL = 10, padR = 46, padT = 30, padB = 30;
+  const n = rows.length, gw = (W - padL - padR) / n;
+  const plotH = H - padT - padB;
+  const nf = (v) => v == null ? "-" : Math.round(v).toLocaleString();
+  const pf = (v, d = 1) => v == null ? "-" : (v >= 0 ? "+" : "") + v.toFixed(d) + "%";
+
+  // ---- 막대+라인 콤보 도우미 ----
+  const barGroup = (keys, colors, labels) => {
+    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
+    if (!vals.length) return "";
+    const maxV = Math.max(...vals, 0), minV = Math.min(...vals, 0);
+    const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * plotH;
+    const y0 = yS(0);
+    const bw = Math.min(16, gw / (keys.length + 1.2));
+    let svg = `<line x1="${padL}" y1="${y0}" x2="${W - padR}" y2="${y0}" stroke="#3a3a44"/>`;
+    rows.forEach((r, i) => {
+      const cx = padL + gw * i + gw / 2;
+      keys.forEach((k, j) => {
+        const v = r[k];
+        if (v == null) return;
+        const x = cx + (j - (keys.length - 1) / 2) * (bw + 2) - bw / 2;
+        const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
+        svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
+      });
+      svg += `<text x="${cx}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`;
+    });
+    const legend = keys.map((k, j) => `<span style="color:${colors[j]}">■</span> ${labels[j]}`).join("  ");
+    return { svg, legend, yS };
+  };
+  const lineOn = (keys, colors, labels, dash = []) => {
+    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
+    if (!vals.length) return { svg: "", legend: "" };
+    const maxV = Math.max(...vals), minV = Math.min(...vals, 0);
+    const pad2 = (maxV - minV) * 0.15 || 5;
+    const yS = (v) => padT + (maxV + pad2 - v) / (maxV - minV + pad2 * 2 || 1) * plotH;
+    let svg = "";
+    keys.forEach((k, j) => {
+      const pts = rows.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
+      if (pts.length < 2) return;
+      svg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
+        fill="none" stroke="${colors[j]}" stroke-width="2"${dash[j] ? ` stroke-dasharray="${dash[j]}"` : ""}/>`
+        + pts.map((p, i2) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${colors[j]}"/>
+          <text x="${p[0]}" y="${p[1] + (j % 2 ? 14 : -7)}" font-size="8.5" text-anchor="middle" fill="${colors[j]}">${p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1)}%</text>`).join("");
+    });
+    // 기간 라벨(막대 없을 때)
+    svg += rows.map((r, i) => `<text x="${padL + gw * i + gw / 2}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`).join("");
+    const legend = keys.map((k, j) => `<span style="color:${colors[j]}">●─</span> ${labels[j]}`).join("  ");
+    return { svg, legend };
+  };
+
+  let chartSvg = "", legend = "";
+  if (ftView === "perf") {
+    // 매출·영업이익·순이익 막대 + 이익률 라인(우축 스케일 별도)
+    const bg = barGroup(["rev", "op", "np"], ["#4391ff", "#22c07a", "#9d7bff"], ["매출", "영업이익", "순이익"]);
+    const mVals = rows.flatMap((r) => [r.opm, r.npm]).filter((v) => v != null);
+    let lineSvg = "";
+    if (mVals.length) {
+      const mMax = Math.max(...mVals, 1), mMin = Math.min(...mVals, 0);
+      const yM = (v) => padT + (mMax - v) / (mMax - mMin || 1) * plotH * 0.6;  // 위 60% 영역에 라인
+      [["opm", "#f0b34c"], ["npm", "#ff8c9a"]].forEach(([k, c], j) => {
+        const pts = rows.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yM(r[k]), r[k]] : null)).filter(Boolean);
+        if (pts.length < 2) return;
+        lineSvg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="${j ? "4 3" : ""}"/>`
+          + pts.map((p) => `<text x="${p[0]}" y="${p[1] - 5}" font-size="8" text-anchor="middle" fill="${c}">${p[2].toFixed(1)}%</text>`).join("");
+      });
+    }
+    chartSvg = (bg.svg || "") + lineSvg;
+    legend = (bg.legend || "") + `  <span style="color:#f0b34c">─</span> 영업이익률  <span style="color:#ff8c9a">┄</span> 순이익률`;
+  } else if (ftView === "growth") {
+    const r1 = lineOn(["revG", "opm", "npm"], ["#4391ff", "#f0b34c", "#ff8c9a"], [gLab, "영업이익률", "순이익률"]);
+    chartSvg = r1.svg; legend = r1.legend;
+  } else if (ftView === "stability") {
+    const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
+    chartSvg = r1.svg; legend = r1.legend;
+  } else {
+    const bg = barGroup(["cfo", "cfi", "cff"], ["#22c07a", "#5b8def", "#9aa4b2"], ["영업활동", "투자활동", "재무활동"]);
+    chartSvg = bg.svg || ""; legend = (bg.legend || "") + `  <span class="sub-note">(현금흐름 · ${unit})</span>`;
+  }
+  $("#ft-chart").innerHTML = chartSvg
+    ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}</svg><p class="legend">${legend}</p>`
+    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`;
+
+  // ---- 표(연간/분기 동일 스펙): 매출·영업이익·순이익·영업이익률·순이익률·매출성장률·ROE ----
+  const specs = [["rev", "매출액", nf], ["op", "영업이익", nf], ["np", "순이익", nf],
+    ["opm", "영업이익률", pf], ["npm", "순이익률", pf], ["revG", gLab, pf], ["roe", roeLab, pf]];
+  $("#ft-table").innerHTML = `<div class="fin-wrap" style="margin-top:8px"><table class="fin-table"><thead><tr>
+      <th class="fin-lab">지표</th>${rows.map((r) => `<th>${r.p}</th>`).join("")}</tr></thead><tbody>` +
+    specs.map(([k, lab, fmt]) => {
+      const cells = rows.map((r) => {
+        const v = fmt(r[k]);
+        return `<td>${(k === "opm" || k === "npm" || k === "revG" || k === "roe") && r[k] != null
+          ? `<span class="${r[k] >= 0 ? "pos" : "neg"}">${v}</span>` : v}</td>`;
+      }).join("");
+      return `<tr><td class="fin-lab">${lab}</td>${cells}</tr>`;
+    }).join("") + `</tbody></table></div>`;
 }
 
 function finPeriods(fin, mode) {
