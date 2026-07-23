@@ -1093,7 +1093,23 @@ function loadLookup(key) {
         <td>${s.n}</td><td>${(s.win * 100).toFixed(0)}%</td>
         <td class="${s.avg_fwd20 >= 0 ? "pos" : "neg"}">${pct(s.avg_fwd20)}</td>
       </tr>`).join("");
+    setTimeout(alignRail, 60);   // 레이아웃 안정 후 우측 레일을 차트 상단에 정렬
   });
+}
+
+// 우측 레일(기업개요~) 시작을 왼쪽 차트 박스 상단에 맞춤 — 헤더·컨트롤 높이만큼 아래로 내림
+function alignRail() {
+  const side = document.querySelector(".lk-side");
+  const chartWrap = document.getElementById("lookup-chart-wrap");
+  const grid = document.querySelector(".lk-grid");
+  if (!side || !chartWrap || !grid) return;
+  if (window.innerWidth <= 1100) { side.style.marginTop = ""; return; }   // 1열 스택 구간은 정렬 해제
+  const offset = chartWrap.getBoundingClientRect().top - grid.getBoundingClientRect().top;
+  side.style.marginTop = Math.max(0, Math.round(offset)) + "px";
+}
+if (!window._railResizeBound) {   // 리사이즈 시 재정렬(1회 바인딩)
+  window._railResizeBound = true;
+  window.addEventListener("resize", () => { if (document.querySelector("#tab-lookup.active")) alignRail(); });
 }
 
 let lookupTf = "d";   // 1m/일/주/월봉
