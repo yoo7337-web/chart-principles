@@ -59,6 +59,9 @@
           return;
         }
         hideGate();
+        // 로그인 사용자 이메일 노출 — 관리자 전용 UI(개발일지 등)가 구독
+        window.__userEmail = email;
+        window.dispatchEvent(new CustomEvent("authuser", { detail: email }));
         // 헤더에 로그아웃 버튼 (1회만)
         if (!document.getElementById("auth-out")) {
           const btn = document.createElement("button");

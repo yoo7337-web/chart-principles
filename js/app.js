@@ -1078,6 +1078,7 @@ function loadLookup(key) {
       renderLookupMetrics(st);
       renderLookupFin(st);
       renderLookupFinQ(st);
+      mergeFinCharts();
       renderLookupStability(st);
       renderLookupSurprise(st);
       renderLookupDividend(st);
@@ -1596,9 +1597,23 @@ function renderLookupMemo(st) {
 
 // 내 투자 → 종목 메모 탭 — 모든 메모 모아보기(메모 1건 = 1행)
 /* ---------- 개발일지 (개발 내역 타임라인 + 아이디어 관리, localStorage) ---------- */
+// 관리자 전용 메뉴 — yoo7337@gmail.com 로그인 시(또는 localhost 개발 환경)만 우측 버튼 노출
+const ADMIN_EMAIL = "yoo7337@gmail.com";
+function adminSetup() {
+  const btn = document.getElementById("admin-devlog");
+  if (!btn) return;
+  btn.onclick = () => activateTab("devlog");
+  const show = () => { btn.style.display = ""; };
+  if (["localhost", "127.0.0.1"].includes(location.hostname)) show();
+  else if ((window.__userEmail || "") === ADMIN_EMAIL) show();
+  window.addEventListener("authuser", (e) => { if (e.detail === ADMIN_EMAIL) show(); });
+}
+adminSetup();
+
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
-  ["v130", "2026-07-24", "트렌드 레이더 탭", "구글 급상승 검색어(KR/US)+Gemini 관련주 추정, 네이버 데이터랩 워치리스트(18개 키워드 스파크라인·급등 배지)+쇼핑 카테고리 트렌드. 소비 트렌드 → 관련주 선제 포착."],
+  ["v131", "2026-07-24", "트렌드 확장 + 실적차트 통합 + 관리자 메뉴", "워치리스트 52개 확장·급등 구간 필터(×1.5↑/×1.2/×1.0/미만)·글로벌(위키 조회수) 소스 토글·쇼핑 카테고리 인기검색어 TOP10. 분기/연간 실적 차트 토글 통합. 개발일지=우측 관리자 전용."],
+  ["v130", "2026-07-24", "트렌드 레이더 탭", "구글 급상승 검색어(KR/US)+Gemini 관련주 추정, 네이버 데이터랩 워치리스트(키워드 스파크라인·급등 배지)+쇼핑 카테고리 트렌드. 소비 트렌드 → 관련주 선제 포착."],
   ["v129", "2026-07-24", "재무제표 v2 + 자동화", "연결/별도 구분·KR 분기(차감 분기화)·단위 선택(억원/백만원/원). 리포트=매일·재무=분기 자동 갱신 체제. 자정 이후 차트 공백(어제 봉 사라짐) 수정."],
   ["v128", "2026-07-24", "리포트 한경 컨센서스 교체", "유안타 등 네이버 미제휴 증권사 커버 + 목표가·투자의견·애널리스트·PDF 직링크."],
   ["v127", "2026-07-24", "개발일지 탭", "개발 내역 타임라인 + 아이디어 관리(우선순위·상태·백업)."],
@@ -3747,6 +3762,56 @@ function trSpark(weekly, d30, w, h) {
     <circle cx="${xs(pts.length - 1)}" cy="${ys(pts[pts.length - 1])}" r="2.5" fill="#f5445a"/></svg>`;
 }
 
+let trSrc = "naver", trBucket = "all";
+// 급등 구간(모집단=워치리스트 전체, r7 기준)
+const TR_BUCKETS = [
+  ["all", "전체", () => true],
+  ["b15", "🔥 ×1.5 이상", (r) => r >= 1.5],
+  ["b12", "×1.2~1.5", (r) => r >= 1.2 && r < 1.5],
+  ["b10", "×1.0~1.2", (r) => r >= 1.0 && r < 1.2],
+  ["b00", "×1.0 미만", (r) => r < 1.0],
+];
+
+function drawTrWatchlist() {
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  const t = TRENDS;
+  const isWiki = trSrc === "wiki";
+  const wl = (isWiki ? t.watchlist_g : t.watchlist) || [];
+  $("#tr-wl-note").textContent = isWiki
+    ? "(영문 위키 문서 일간 조회수 · 글로벌 관심 프록시 · 급등=최근 7일 ÷ 이전 8주)"
+    : "(네이버 검색량 상대지수 1년 · 급등=최근 7일 ÷ 이전 8주)";
+  if (!wl.length) {
+    $("#tr-filter").innerHTML = "";
+    $("#tr-watchlist").innerHTML = isWiki
+      ? `<div class="card-flat"><p class="mini-note">글로벌(위키) 데이터 없음 — 다음 갱신을 기다려 주세요.</p></div>`
+      : `<div class="card-flat"><p class="mini-note">
+        네이버 데이터랩 미연결 — <b>developers.naver.com</b>의 내 애플리케이션에서
+        <b>'데이터랩(검색어트렌드)'와 '데이터랩(쇼핑인사이트)' API를 추가</b>하면 다음 갱신부터 표시됩니다.<br>
+        워치리스트 키워드 추가·수정은 <code>data\\trend_watchlist.json</code> 편집(Claude에게 "트렌드 키워드에 ○○ 추가해줘").</p></div>`;
+    return;
+  }
+  // 구간 필터 칩(전체 모집단 기준 건수 병기)
+  const r7 = (w) => w.surge?.r7 ?? -1;
+  $("#tr-filter").innerHTML = TR_BUCKETS.map(([id, lab, fn]) => {
+    const n = wl.filter((w) => fn(r7(w))).length;
+    return `<button class="tr-bucket ${trBucket === id ? "active" : ""}" data-b="${id}">${lab} <span class="sub-note">${n}</span></button>`;
+  }).join("");
+  $("#tr-filter").querySelectorAll(".tr-bucket").forEach((b) => b.onclick = () => { trBucket = b.dataset.b; drawTrWatchlist(); });
+  const fn = TR_BUCKETS.find(([id]) => id === trBucket)[2];
+  const shown = wl.filter((w) => fn(r7(w))).sort((a, b) => r7(b) - r7(a));  // 급등 높은 순
+  const badge = (r) => r == null ? "" : `<span class="tr-surge ${r >= 1.5 ? "hot" : r >= 1.1 ? "warm" : ""}">×${r.toFixed(1)}</span>`;
+  $("#tr-watchlist").innerHTML = shown.length ? `<div class="tr-wgrid">` + shown.map((w0) => `
+    <div class="card-flat tr-wcard">
+      <div class="tr-whead"><b>${esc(w0.kw)}</b>${badge(w0.surge?.r7)}
+        ${isWiki && w0.wiki ? `<a class="sub-note" href="https://en.wikipedia.org/wiki/${w0.wiki}" target="_blank" rel="noopener">${esc(w0.wiki.replace(/_/g, " "))}</a>` : ""}
+        <span class="sub-note" style="margin-left:auto">${esc(w0.memo)}</span></div>
+      ${trSpark(w0.w, w0.d30, 300, 54)}
+      <div class="tr-wstocks">${(w0.stocks || []).map((s) =>
+        `<button class="tr-stock" data-c="${s.code}">${esc(s.name)}</button>`).join("")}</div>
+    </div>`).join("") + `</div>` : `<p class="mini-note">이 구간에 해당하는 키워드가 없습니다.</p>`;
+  $("#tr-watchlist").querySelectorAll(".tr-stock").forEach((b) => b.onclick = () => trGoto(b.dataset.c));
+}
+
 function renderTrends() {
   trendsRendered = true;
   const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
@@ -3782,33 +3847,24 @@ function renderTrends() {
       drawGoogle();
     });
 
-    // ② 워치리스트
-    const wl = t.watchlist || [];
-    if (!t.naver_ok || !wl.length) {
-      $("#tr-watchlist").innerHTML = `<div class="card-flat"><p class="mini-note">
-        네이버 데이터랩 미연결 — <b>developers.naver.com</b>의 내 애플리케이션에서
-        <b>'데이터랩(검색어트렌드)'와 '데이터랩(쇼핑인사이트)' API를 추가</b>하면 다음 갱신부터 표시됩니다.<br>
-        워치리스트 키워드 추가·수정은 <code>data\\trend_watchlist.json</code> 편집(Claude에게 "트렌드 키워드에 ○○ 추가해줘").</p></div>`;
-    } else {
-      const badge = (r) => r == null ? "" : `<span class="tr-surge ${r >= 1.5 ? "hot" : r >= 1.1 ? "warm" : ""}">${r >= 1 ? "×" + r.toFixed(1) : "×" + r.toFixed(1)}</span>`;
-      $("#tr-watchlist").innerHTML = `<div class="tr-wgrid">` + wl.map((w0) => `
-        <div class="card-flat tr-wcard">
-          <div class="tr-whead"><b>${esc(w0.kw)}</b>${badge(w0.surge?.r7)}
-            <span class="sub-note" style="margin-left:auto">${esc(w0.memo)}</span></div>
-          ${trSpark(w0.w, w0.d30, 300, 54)}
-          <div class="tr-wstocks">${(w0.stocks || []).map((s) =>
-            `<button class="tr-stock" data-c="${s.code}">${esc(s.name)}</button>`).join("")}</div>
-        </div>`).join("") + `</div>`;
-      $("#tr-watchlist").querySelectorAll(".tr-stock").forEach((b) => b.onclick = () => trGoto(b.dataset.c));
-    }
+    // ② 워치리스트 — 소스 토글(네이버/글로벌 위키) + 급등 구간 필터 + r7 내림차순
+    drawTrWatchlist();
+    $("#tr-src").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      trSrc = b.dataset.s;
+      $("#tr-src").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      drawTrWatchlist();
+    });
 
     // ③ 쇼핑 카테고리
     const sh = t.shopping || [];
     $("#tr-shopping").innerHTML = sh.length ? sh.map((c) => {
       const w = Math.min(100, Math.max(4, (c.r4 - 0.5) * 100));
+      const kws = (c.top || []).map((k, i) =>
+        `<span class="tr-shkw${i < 3 ? " top3" : ""}">${i + 1} ${esc(k)}</span>`).join("");
       return `<div class="tr-shrow"><span class="tr-shname">${esc(c.cat)}</span>
         <div class="tr-shbar"><span style="width:${w}%" class="${c.r4 >= 1.15 ? "hot" : c.r4 >= 1 ? "" : "cold"}"></span></div>
-        <b class="${c.r4 >= 1.15 ? "pos" : c.r4 < 0.95 ? "neg" : ""}">×${c.r4?.toFixed(2)}</b></div>`;
+        <b class="${c.r4 >= 1.15 ? "pos" : c.r4 < 0.95 ? "neg" : ""}">×${c.r4?.toFixed(2)}</b></div>
+        ${kws ? `<div class="tr-shkws">${kws}</div>` : ""}`;
     }).join("") : `<p class="mini-note">네이버 데이터랩 연결 후 표시됩니다.</p>`;
   });
 }
@@ -4672,6 +4728,29 @@ function finFmt(v, unit) {
   if (unit === "억원") return Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억";
   return Math.abs(v) >= 1000 ? "$" + (v / 1000).toFixed(1) + "B" : "$" + Math.round(v) + "M";
 }
+// 분기·연간 실적 차트를 한 자리(토글)로 — 두 카드가 각자 렌더된 뒤 병합(기본=분기, 연간은 토글로)
+function mergeFinCharts() {
+  const q = $("#lookup-finq"), a = $("#lookup-fin");
+  const hasQ = q && q.style.display !== "none" && q.innerHTML;
+  const hasA = a && a.style.display !== "none" && a.innerHTML;
+  if (!hasQ || !hasA) return;  // 한쪽뿐이면 그대로 단독 표시
+  const mkToggle = (act) => {
+    const s = document.createElement("span");
+    s.className = "mk-toggle fc-toggle";
+    s.style.marginLeft = "auto";
+    s.innerHTML = `<button data-m="q" class="${act === "q" ? "active" : ""}">분기</button>
+      <button data-m="a" class="${act === "a" ? "active" : ""}">연간</button>`;
+    s.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      q.style.display = b.dataset.m === "q" ? "" : "none";
+      a.style.display = b.dataset.m === "a" ? "" : "none";
+    });
+    return s;
+  };
+  q.querySelector(".lk-h3")?.appendChild(mkToggle("q"));
+  a.querySelector(".lk-h3")?.appendChild(mkToggle("a"));
+  a.style.display = "none";  // 기본 = 분기
+}
+
 function renderLookupFin(st) {
   const host = $("#lookup-fin");
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
