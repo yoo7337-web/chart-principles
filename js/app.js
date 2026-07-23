@@ -4585,13 +4585,16 @@ function renderLookupStability(st) {
   const sq = co?.stability_q;
   if (!sq || sq.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
-  const W = 660, H = 150, padL = 30, padT = 14, padB = 30, padR = 8;
+  const W = 660, H = 300, padL = 34, padT = 24, padB = 34, padR = 10;
   const n = sq.length, gw = (W - padL - padR) / n;
   const series = [["debtRatio", "부채비율", "#e0912f"],
                   [sq.some((r) => r.currentRatio != null) ? "currentRatio" : "quickRatio",
                    sq.some((r) => r.currentRatio != null) ? "유동비율" : "당좌비율", "#3f6fb5"]];
   const allV = sq.flatMap((r) => series.map(([k]) => r[k]).filter((v) => v != null));
-  const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
+  // y축을 데이터 범위에 맞춤(0 강제 포함 제거) — 값이 100% 근처에 몰릴 때 변화가 보이도록 확대
+  const rawMax = Math.max(...allV, 1), rawMin = Math.min(...allV, 0);
+  const pad = (rawMax - rawMin) * 0.18 || rawMax * 0.1 || 10;
+  const maxV = rawMax + pad, minV = Math.max(0, rawMin - pad);
   const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * (H - padT - padB);
   let lines = "", labels = "", legend = "";
   series.forEach(([k, lab, c], j) => {
