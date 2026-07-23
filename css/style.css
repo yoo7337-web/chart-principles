@@ -932,9 +932,16 @@ dialog { background: var(--card); color: var(--ink); }
 #rank-wrap { margin-top: 22px; }
 .rank-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
 .rank-grid .mv-row:nth-last-child(2) { border-bottom: none; }   /* 각 열 마지막 행 라인 정리(짝수개 기준) */
-.lk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; margin-top: 14px; }
+.lk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; margin-top: 14px; }
+/* 우측 레일로 옮긴 개요·투자지표·컨센서스는 좁은 폭에 맞춰 세로 스택 */
+.lk-side .lk-mgrid, .lk-side .lk-mgrid.four, .lk-side .lk-mgrid.fin3 { grid-template-columns: 1fr; padding: 4px 14px; }
+.lk-side .lk-cap { padding: 0 14px 6px; }
+.lk-side .card-flat { padding-left: 14px; padding-right: 14px; }
+/* 주가 헤더 — 스크롤 시 상단 고정(회사 정보 항상 보이게) */
+.lk-main .lookup-head { position: sticky; top: 0; z-index: 6; background: var(--bg);
+  margin: 0 0 10px; padding: 8px 0 8px; border-bottom: 1px solid var(--line); }
 .lk-main { min-width: 0; }
-.lk-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 12px; }
+.lk-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; }  /* 레일이 길어져 sticky 해제(하단 도달 가능) */
 .lk-side .micro-wrap { grid-template-columns: 1fr; }         /* 좁은 레일에선 호가·체결 세로 스택 */
 .lk-side .tr-col { border-left: none; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
 .lk-side #lookup-micro h2 { font-size: .95rem; margin: 0 0 6px; }
