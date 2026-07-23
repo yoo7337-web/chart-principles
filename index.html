@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=108">
-<script src="firebase-config.js?v=108"></script>
-<script src="js/auth.js?v=108"></script>
+<link rel="stylesheet" href="css/style.css?v=109">
+<script src="firebase-config.js?v=109"></script>
+<script src="js/auth.js?v=109"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -333,8 +333,8 @@
     </div>
     <div id="home-cards" class="idx-cards"></div>
 
-    <div class="home-grid">
-      <div class="home-main">
+    <div class="home-grid2">
+      <div class="home-col">
         <h2 class="home-h">섹터 히트맵
           <button id="hm-back" class="hm-back" style="display:none">← 전체 보기</button>
           <span class="sub-note">타일=시가총액 · 클릭=종목 조회 · ⤢=섹터 확대</span></h2>
@@ -343,23 +343,23 @@
         </div>
         <div id="hm-tree" class="treemap"></div>
         <div class="criteria" id="hm-context"></div>
-
-        <div id="mv-wrap" style="display:none">
-          <h2 class="home-h">오늘의 종목 <span class="sub-note">(30분 갱신 · 토스 랭킹 미연동 시 표시)</span></h2>
-          <div class="chips" id="mv-chips"></div>
-          <div id="mv-list" class="mv-list card-flat"></div>
-        </div>
       </div>
-      <aside class="home-side">
+      <div class="home-col">
         <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
         <div id="home-news" class="news-list card-flat"></div>
+      </div>
+    </div>
 
-        <div id="rank-wrap" style="display:none">
-          <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
-          <div class="chips" id="rank-chips"></div>
-          <div id="rank-list" class="mv-list card-flat"></div>
-        </div>
-      </aside>
+    <div id="mv-wrap" style="display:none">
+      <h2 class="home-h">오늘의 종목 <span class="sub-note">(30분 갱신 · 토스 랭킹 미연동 시 표시)</span></h2>
+      <div class="chips" id="mv-chips"></div>
+      <div id="mv-list" class="mv-list card-flat"></div>
+    </div>
+
+    <div id="rank-wrap" style="display:none">
+      <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
+      <div class="chips" id="rank-chips"></div>
+      <div id="rank-list" class="rank-grid mv-list card-flat"></div>
     </div>
   </section>
 
@@ -651,6 +651,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=108"></script>
+<script src="js/app.js?v=109"></script>
 </body>
 </html>

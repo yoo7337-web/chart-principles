@@ -2801,7 +2801,7 @@ function renderHomeNews() {
   const tagged = all.filter((n) => n.mk === homeMk);
   const rows = tagged.length ? tagged : all.some((n) => n.mk) ? [] : all;
   host.innerHTML = rows.length
-    ? newsList(rows.slice(0, 5), false)
+    ? newsList(rows.slice(0, 10), false)   // 히트맵과 동일 높이 컬럼 — 10건으로 채움
     : `<p class="mini-note">${all.length ? "이 시장 뉴스가 아직 없습니다(다음 갱신 후 표시)" : "뉴스 데이터 없음"}</p>`;
 }
 

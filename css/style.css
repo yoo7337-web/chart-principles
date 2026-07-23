@@ -918,10 +918,13 @@ select option { background: var(--card); color: var(--ink); }
 dialog { background: var(--card); color: var(--ink); }
 
 /* ── 레이아웃 재배치(2026-07-23): 전역 1440px + 홈·종목조회 2단 ── */
-.home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
-.home-side { min-width: 0; }
-.home-side .home-h { margin-top: 0; }
-.home-main .home-h:first-child { margin-top: 0; }
+/* 홈: 히트맵 | 주요뉴스 동일폭 2열 → 그 아래 실시간 랭킹 풀폭 */
+.home-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.home-col { min-width: 0; }
+.home-col .home-h { margin-top: 0; }
+#rank-wrap { margin-top: 22px; }
+.rank-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
+.rank-grid .mv-row:nth-last-child(2) { border-bottom: none; }   /* 각 열 마지막 행 라인 정리(짝수개 기준) */
 .lk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; margin-top: 14px; }
 .lk-main { min-width: 0; }
 .lk-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 12px; }
@@ -930,6 +933,7 @@ dialog { background: var(--card); color: var(--ink); }
 .lk-side #lookup-micro h2 { font-size: .95rem; margin: 0 0 6px; }
 @media (min-width: 1280px) { .int-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1100px) {
-  .home-grid, .lk-grid { grid-template-columns: 1fr; }
+  .home-grid2, .lk-grid { grid-template-columns: 1fr; }
+  .rank-grid { grid-template-columns: 1fr; }
   .lk-side { position: static; }
 }
