@@ -1054,6 +1054,7 @@ function loadLookup(key) {
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
+    renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
     loadExtras().then(() => {
       if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
       renderLookupHead(st);
@@ -2001,6 +2002,36 @@ function scrOpenFromGroupUS(gk, sector) {
   buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
   renderScrChain(); renderScreener();
 }
+/* ---------- 호가·체결 스냅샷 (토스 orderbook/trades — 랭킹 상위 종목만, 배치 시점 명시) ---------- */
+function renderLookupMicro(st) {
+  const host = $("#lookup-micro");
+  if (!host) return;
+  const mi = TOSSM?.micro?.[`${st.market}_${st.ticker}`];
+  if (!mi || (!mi.asks?.length && !mi.trades?.length)) { host.style.display = "none"; host.innerHTML = ""; return; }
+  host.style.display = "";
+  const fmtP = (v) => fmtPrice(v, st.market);
+  let obHtml = "";
+  if (mi.asks?.length && mi.bids?.length) {
+    const maxV = Math.max(...mi.asks.map((x) => x[1]), ...mi.bids.map((x) => x[1])) || 1;
+    const row = (p, v, side) => `<div class="ob-row ${side}">
+      <span class="ob-bar" style="width:${Math.max(3, v / maxV * 100)}%"></span>
+      <span class="ob-p">${fmtP(p)}</span><span class="ob-v">${v.toLocaleString()}</span></div>`;
+    obHtml = `<div class="ob-col"><div class="ob-h">매도 호가</div>${[...mi.asks].reverse().map((x) => row(x[0], x[1], "ask")).join("")}</div>
+      <div class="ob-col"><div class="ob-h">매수 호가</div>${mi.bids.map((x) => row(x[0], x[1], "bid")).join("")}</div>`;
+  }
+  let trHtml = "";
+  if (mi.trades?.length) {
+    let prev = null;
+    trHtml = `<div class="tr-col"><div class="ob-h">최근 체결</div>` + mi.trades.map((t) => {
+      const cls = prev == null ? "" : t[1] > prev ? "kup" : t[1] < prev ? "kdn" : "";
+      prev = t[1];
+      return `<div class="tr-row"><span class="sub-note">${t[0]}</span><span class="${cls}">${fmtP(t[1])}</span><span class="ob-v">${t[2].toLocaleString()}</span></div>`;
+    }).join("") + `</div>`;
+  }
+  host.innerHTML = `<h2>호가·체결 스냅샷 <span class="sub-note">(토스증권 · ${TOSSM.generated} 수집${mi.at ? ` · 호가 ${mi.at} 기준` : ""} — 실시간 아님, 거래대금 상위 종목만)</span></h2>
+    <div class="micro-wrap card-flat">${obHtml}${trHtml}</div>`;
+}
+
 /* ---------- 📖 기업 이해 보고서 (감사관점×투자관점, 분기 갱신) ---------- */
 // 저장: data/reports/{mk}_{ticker}.json — {name, tier, date(기준일), next_due, version, md, changelog}
 // 심층(deep)은 Claude 세션에서 DART·웹 검증 후 작성, 골격(auto)은 추후 report_gen.py(분기 클라우드).
@@ -3126,19 +3157,28 @@ function drawCalMonth() {
 
   const head = "일월화수목금토".split("").map((w, i) =>
     `<div class="cal-hd${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</div>`).join("");
+  // 휴장일(토스 market-calendar, 향후 ~90일) — 현재 시장 탭 기준으로 셀에 배지
+  const hol = new Set(TOSSM?.calendar?.[calMk]?.holidays || []);
   const body = cells.map((dt) => {
     if (!dt) return `<div class="cal-cell empty"></div>`;
     const ds = localDay(dt), items = byDay[ds] || [], dow = dt.getDay();
+    const isHol = hol.has(ds);
     const cls = [ds === today ? "today" : "", ds === calSel ? "sel" : "", items.length ? "has" : "",
-      dow === 0 ? "sun" : dow === 6 ? "sat" : ""].filter(Boolean).join(" ");
+      isHol ? "hol" : "", dow === 0 ? "sun" : dow === 6 ? "sat" : ""].filter(Boolean).join(" ");
     const chips = items.slice(0, 2).map((r) =>
       `<span class="cal-ev">${(r.name || "").slice(0, 6)}</span>`).join("");
     const more = items.length > 2 ? `<span class="cal-ev more">+${items.length - 2}</span>` : "";
     return `<div class="cal-cell ${cls}" data-d="${ds}">
-      <span class="cal-cell-d">${dt.getDate()}</span>${items.length ? `<span class="cal-cnt">${items.length}</span>` : ""}
+      <span class="cal-cell-d">${dt.getDate()}</span>${isHol ? `<span class="cal-hol">휴장</span>` : ""}${items.length ? `<span class="cal-cnt">${items.length}</span>` : ""}
       <div class="cal-evs">${chips}${more}</div></div>`;
   }).join("");
   $("#cal-grid").innerHTML = `<div class="cal-hdrow">${head}</div><div class="cal-cells">${body}</div>`;
+  // 다음 휴장일 안내(달력 상단) — 현재 시장 기준
+  const nextHol = (TOSSM?.calendar?.[calMk]?.holidays || []).filter((d) => d >= today).slice(0, 3);
+  const holHost = document.getElementById("cal-holidays");
+  if (holHost) holHost.innerHTML = nextHol.length
+    ? `🛑 다음 휴장일(${calMk === "kr" ? "국내" : "미국"}): <b>${nextHol.join(" · ")}</b> <span class="sub-note">(토스 장운영 API · 90일 내)</span>`
+    : "";
   $("#cal-grid").querySelectorAll(".cal-cell[data-d]").forEach((c) =>
     c.onclick = () => { calSel = c.dataset.d; drawCalMonth(); });
   drawCalDay();
@@ -3303,7 +3343,7 @@ const INT_CHARTS = [
     t: "외국인·기관 20일 누적 순매수(억원)",
     n: "수급 주체 방향. <span class='sub-note'>네이버 수급 데이터 · 노트북 배치라 갱신 주기가 김</span>" },
   { curve: true, c: "#0f766e", base: 0, mk: "kr", t: "국고채 장단기 스프레드(10Y−2Y, %p)",
-    n: "<b>음수=장단기 역전</b>(경기 침체 선행 신호). <span class='sub-note'>토스 스냅샷을 매일 적재 — 소급 백필 불가</span>" },
+    n: "<b>음수=장단기 역전</b>(경기 침체 선행 신호). <span class='sub-note'>토스 국고채 캔들 API — 2020년~ 일봉 이력</span>" },
 ];
 
 function renderInternals() {
@@ -3477,7 +3517,7 @@ function drawInternals() {
 
   specs.forEach((s, i) => {
     const sel = `#intc-${i}`;
-    const sets = s.curve ? [intCurveSpread()] : (s.ks || [s.k]).map((k) => intSlice(h[k]));
+    const sets = s.curve ? [intSlice(intCurveSpread())] : (s.ks || [s.k]).map((k) => intSlice(h[k]));
     if (!sets.some((a) => a && a.length > 1)) {
       $(sel).outerHTML = `<p class="int-empty">${s.curve
         ? `적재 중 — 아직 ${sets[0]?.length || 0}일치 (매일 1점씩 쌓임)`

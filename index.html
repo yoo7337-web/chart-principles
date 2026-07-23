@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
-<link rel="stylesheet" href="css/style.css?v=100">
-<script src="firebase-config.js?v=100"></script>
-<script src="js/auth.js?v=100"></script>
+<link rel="stylesheet" href="css/style.css?v=101">
+<script src="firebase-config.js?v=101"></script>
+<script src="js/auth.js?v=101"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -168,6 +168,7 @@
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
+    <div id="lookup-micro" style="display:none"></div>
     <div id="lookup-info" class="rule-info" style="display:none"></div>
     <div id="lookup-story" class="commentary" style="display:none"></div>
     <!-- ② 기업개요 → ③ 투자지표(통합) → ④ 컨센서스 -->
@@ -432,6 +433,7 @@
       </div>
     </div>
     <h2>📢 실적발표·IR 일정 <span class="sub-note" id="cal-src"></span></h2>
+    <p id="cal-holidays" class="cal-holidays"></p>
     <div id="cal-grid" class="cal-grid card-flat"></div>
     <div id="cal-daylist" class="card-flat" style="margin-top:12px"></div>
     <h2 style="margin-top:24px">📅 경제지표 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
@@ -634,6 +636,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=100"></script>
+<script src="js/app.js?v=101"></script>
 </body>
 </html>

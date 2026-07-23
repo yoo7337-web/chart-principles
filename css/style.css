@@ -359,6 +359,12 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .cal-hdrow, .cal-cells { display: grid; grid-template-columns: repeat(7, 1fr); min-width: 560px; }
 .cal-hd { text-align: center; font-size: .74rem; font-weight: 700; color: var(--muted); padding: 4px 0 6px; }
 .cal-hd.sun { color: #d93036; } .cal-hd.sat { color: #1e63e0; }
+/* 휴장일 (토스 market-calendar) */
+.cal-holidays { font-size: .84rem; margin: 0 0 8px; color: var(--ink); }
+.cal-cell.hol { background: #fff5f5; }
+.cal-hol { position: absolute; top: 4px; right: 4px; font-size: .62rem; font-weight: 700;
+  color: #b91c1c; background: #fee2e2; border-radius: 4px; padding: 0 4px; }
+.cal-cell.hol .cal-cnt { right: 34px; }
 .cal-cell { position: relative; min-height: 72px; border: 1px solid #f0f2f6; border-radius: 8px;
   margin: 2px; padding: 4px 5px; cursor: pointer; overflow: hidden; background: #fff; }
 .cal-cell.empty { background: transparent; border: none; cursor: default; }
@@ -565,6 +571,23 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 }
 .lk-short-badge { display: inline-block; margin-left: 8px; font-size: .72rem; font-weight: 700;
   color: #b45309; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 999px; padding: 2px 9px; vertical-align: middle; }
+/* 호가·체결 스냅샷 (토스) */
+.micro-wrap { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; padding: 12px 14px; }
+.ob-col, .tr-col { min-width: 0; padding: 0 10px; }
+.ob-col + .ob-col, .tr-col { border-left: 1px solid var(--line); }
+.ob-h { font-size: .78rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.ob-row, .tr-row { position: relative; display: flex; justify-content: space-between; gap: 8px;
+  font-size: .8rem; padding: 2px 4px; }
+.ob-bar { position: absolute; top: 1px; bottom: 1px; right: 0; border-radius: 3px; z-index: 0; opacity: .18; }
+.ob-row.ask .ob-bar { background: #1e63e0; }
+.ob-row.bid .ob-bar { background: #d93036; }
+.ob-row.ask .ob-p { color: #1e63e0; }
+.ob-row.bid .ob-p { color: #d93036; }
+.ob-p, .ob-v { position: relative; z-index: 1; }
+.ob-p { font-weight: 600; }
+.ob-v { color: var(--muted); font-size: .74rem; }
+.tr-row { font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .micro-wrap { grid-template-columns: 1fr 1fr; } .tr-col { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; } }
 /* 📖 기업 이해 보고서 */
 .lk-report { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; flex-wrap: wrap; }
 .rep-btn { font-size: .88rem; font-weight: 700; padding: 8px 16px; border: 1px solid #7c3aed;
