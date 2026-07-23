@@ -370,6 +370,32 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .cal-nav button:hover { background: #23232a; }
 .cal-nav #cal-month { min-width: 76px; text-align: center; font-size: .95rem; }
 .cal-grid { padding: 8px; overflow-x: auto; }
+/* 경제일정 2단 분할: 좌=달력 / 우=선택 회사 실적·컨콜 상세 */
+.cal-split { display: grid; grid-template-columns: 1fr 400px; gap: 14px; align-items: start; }
+.cal-detail-col { position: sticky; top: 12px; }
+.cal-detail { min-height: 200px; font-size: .86rem; }
+.cal-detail .cd-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+.cal-detail .cd-head img { width: 34px; height: 34px; border-radius: 50%; background: #fff; object-fit: contain; }
+.cal-detail .cd-head b { font-size: 1.02rem; }
+.cal-detail .cd-when { color: var(--muted); font-size: .82rem; margin: 2px 0 10px; }
+.cal-detail .cd-badge { font-size: .72rem; border-radius: 10px; padding: 2px 8px; margin-left: 6px; vertical-align: 1px; }
+.cal-detail .cd-badge.upcoming { background: rgba(67,145,255,.15); color: #6ba7ff; }
+.cal-detail .cd-badge.done { background: rgba(34,192,122,.15); color: #4bd398; }
+.cal-detail h4 { margin: 14px 0 6px; font-size: .88rem; }
+.cal-detail table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.cal-detail th, .cal-detail td { padding: 3px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.cal-detail th:first-child, .cal-detail td:first-child { text-align: left; }
+.cal-detail th { color: var(--muted); font-weight: 500; }
+.cal-detail .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cal-detail .cd-links a { border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+  padding: 4px 10px; font-size: .78rem; text-decoration: none; color: var(--ink); }
+.cal-detail .cd-links a:hover { border-color: var(--accent); color: var(--accent); }
+.cal-detail .cd-disc a { display: block; padding: 3px 0; font-size: .8rem; color: var(--ink);
+  text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-detail .cd-disc a:hover { color: var(--accent); }
+.cal-detail .cd-goto { margin-left: auto; }
+.cal-row.sel { background: rgba(67,145,255,.08); border-radius: 6px; }
+@media (max-width: 1100px) { .cal-split { grid-template-columns: 1fr; } .cal-detail-col { position: static; } }
 .cal-hdrow, .cal-cells { display: grid; grid-template-columns: repeat(7, 1fr); min-width: 560px; }
 .cal-hd { text-align: center; font-size: .74rem; font-weight: 700; color: var(--muted); padding: 4px 0 6px; }
 .cal-hd.sun { color: #f5445a; } .cal-hd.sat { color: #4391ff; }

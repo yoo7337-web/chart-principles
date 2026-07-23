@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=121">
-<script src="firebase-config.js?v=121"></script>
-<script src="js/auth.js?v=121"></script>
+<link rel="stylesheet" href="css/style.css?v=122">
+<script src="firebase-config.js?v=122"></script>
+<script src="js/auth.js?v=122"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -464,8 +464,16 @@
     </div>
     <h2>📢 실적발표·IR 일정 <span class="sub-note" id="cal-src"></span></h2>
     <p id="cal-holidays" class="cal-holidays"></p>
-    <div id="cal-grid" class="cal-grid card-flat"></div>
-    <div id="cal-daylist" class="card-flat" style="margin-top:12px"></div>
+    <!-- 좌=달력+그날 일정 / 우=선택 회사 실적·컨콜 상세 -->
+    <div class="cal-split">
+      <div class="cal-left">
+        <div id="cal-grid" class="cal-grid card-flat"></div>
+        <div id="cal-daylist" class="card-flat" style="margin-top:12px"></div>
+      </div>
+      <aside class="cal-detail-col">
+        <div id="cal-detail" class="card-flat cal-detail"></div>
+      </aside>
+    </div>
     <h2 style="margin-top:24px">📅 경제지표 캘린더 <span class="sub-note">(TradingView 실시간 — FOMC·CPI·고용 등)</span></h2>
     <div class="card-flat" style="height:450px;padding:0;overflow:hidden">
       <div class="tradingview-widget-container" style="height:100%">
@@ -666,6 +674,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=121"></script>
+<script src="js/app.js?v=122"></script>
 </body>
 </html>

@@ -3247,6 +3247,7 @@ function renderCalendar() {
     btn.onclick = () => {
       calMk = btn.dataset.mk;
       $("#cal-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
+      calDetailSel = null;  // 시장 전환 시 상세 초기화(다른 시장 종목이 남지 않게)
       drawCalMonth();
     };
   });
@@ -3319,7 +3320,7 @@ function drawCalDay() {
   const yo = dt ? "일월화수목금토"[dt.getDay()] : "";
   const head = `<div class="cal-date">${calSel ? calSel.replace(/-/g, ".") + ` (${yo})` : ""}
     <span class="sub-note">${items.length}건</span></div>`;
-  if (!items.length) { host.innerHTML = head + `<p class="mini-note">이 날짜에 예정된 일정이 없습니다.</p>`; return; }
+  if (!items.length) { host.innerHTML = head + `<p class="mini-note">이 날짜에 예정된 일정이 없습니다.</p>`; calDetailPlaceholder(); return; }
   host.innerHTML = head + items.map((r) => `<div class="cal-row${r.t ? " clickable" : ""}" ${r.t ? `data-t="${r.t}"` : ""}>
       ${r.t ? `<img class="cal-logo" src="${logoUrl(calMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
         : (r.logo ? `<img class="cal-logo" src="${r.logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="cal-logo"></span>`)}
@@ -3328,13 +3329,125 @@ function drawCalDay() {
         ? `${r.event || ""}${r.time ? ` · ${r.time}` : ""}`
         : (r.eps_est != null ? `EPS 컨센서스 $${r.eps_est}` : "실적발표 예정")}</span>
     </div>`).join("");
-  host.querySelectorAll(".cal-row.clickable").forEach((el) => {
+  // 회사 클릭 → 우측 상세 패널(실적발표 내용 + 컨퍼런스콜) — 종목조회 이동은 상세 패널의 버튼으로
+  host.querySelectorAll(".cal-row").forEach((el, i) => {
+    el.classList.add("clickable");
     el.onclick = () => {
-      gotoTabFull("lookup");
-      if (!lookupRendered) initLookup();
-      loadLookup(`${calMk}_${el.dataset.t}`);
+      host.querySelectorAll(".cal-row").forEach((x) => x.classList.toggle("sel", x === el));
+      calShowDetail(items[i]);
     };
   });
+  calDetailPlaceholder();
+}
+
+/* ---------- 경제일정: 회사 상세(실적발표 내용 + 컨퍼런스콜) ---------- */
+let calDetailSel = null;
+
+function calDetailPlaceholder() {
+  if (calDetailSel) return;  // 선택된 게 있으면 유지
+  const host = $("#cal-detail");
+  if (host) host.innerHTML = `<p class="mini-note" style="margin:8px 0">👈 왼쪽 일정에서 회사를 클릭하면<br>
+    <b>실적발표 내용</b>과 <b>컨퍼런스콜·IR 정보</b>가 여기에 표시됩니다.</p>`;
+}
+
+function calShowDetail(r) {
+  calDetailSel = r;
+  const host = $("#cal-detail");
+  host.innerHTML = `<p class="mini-note">불러오는 중…</p>`;
+  loadExtras().then(() => renderCalDetail(r, calMk));
+}
+
+function renderCalDetail(r, mk) {
+  if (calDetailSel !== r) return;  // 그새 다른 회사를 클릭했으면 무시
+  const host = $("#cal-detail");
+  const key = r.t ? `${mk}_${r.t}` : null;
+  const co = key ? EXTRAS.company?.map?.[key] : null;
+  const fd = key ? EXTRAS.feed?.map?.[key] : null;
+  const today = localDay(new Date());
+  const upcoming = r.date >= today;
+  const dday = Math.round((new Date(r.date) - new Date(today)) / 864e5);
+  const yo = "일월화수목금토"[new Date(r.date + "T00:00:00").getDay()];
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+
+  let h = `<div class="cd-head">
+    ${r.t ? `<img src="${logoUrl(mk, r.t)}" alt="" onerror="this.style.display='none'">` : ""}
+    <div><b>${esc(r.name)}</b>${r.t ? ` <span class="sub-note">${r.t}</span>` : ""}
+      <span class="cd-badge ${upcoming ? "upcoming" : "done"}">${upcoming ? (dday === 0 ? "오늘 발표" : `D-${dday}`) : "발표 완료"}</span></div>
+    ${r.t ? `<button class="today-chart-btn cd-goto" id="cd-goto">종목조회 →</button>` : ""}
+  </div>
+  <div class="cd-when">📅 ${r.date.replace(/-/g, ".")} (${yo})${r.time ? ` ${r.time}` : ""}${mk === "kr" && r.event ? ` · ${esc(r.event)}` : ""}</div>`;
+
+  // ── 📊 실적발표 내용 ──
+  h += `<h4>📊 실적발표 내용</h4>`;
+  const finq = (co?.fin_q || []).filter((q) => q.rev != null);
+  if (finq.length) {
+    const unit = co.fin_unit || (mk === "kr" ? "억원" : "$M");
+    const n = (v) => v == null ? "-" : Math.round(v).toLocaleString();
+    // 전년 동기(YoY) — fin_q에 같은 분기 전년치가 있으면 계산
+    const byQ = {}; finq.forEach((q) => byQ[q.q] = q);
+    const yoy = (q, f) => {
+      const m2 = /^(\d{2})Q(\d)$/.exec(q.q); if (!m2) return null;
+      const prev = byQ[`${+m2[1] - 1}Q${m2[2]}`];
+      return prev && prev[f] ? (q[f] / prev[f] - 1) * 100 : null;
+    };
+    const rows = finq.slice(-4).map((q) => {
+      const g = yoy(q, "rev");
+      return `<tr><td>${q.q}${q.est ? "<span class='sub-note'>(E)</span>" : ""}</td>
+        <td>${n(q.rev)}</td><td>${n(q.op)}</td><td>${n(q.np)}</td>
+        <td>${g == null ? "-" : `<span class="${g >= 0 ? "pos" : "neg"}">${g >= 0 ? "+" : ""}${g.toFixed(1)}%</span>`}</td></tr>`;
+    }).join("");
+    h += `<table><tr><th>분기</th><th>매출</th><th>영업익</th><th>순이익</th><th>매출YoY</th></tr>${rows}</table>
+      <p class="sub-note" style="margin:3px 0 0">(단위 ${unit} · (E)=컨센서스 추정${upcoming ? " · 발표 전 — 직전 분기까지" : ""})</p>`;
+  } else {
+    h += `<p class="mini-note">${r.t ? "분기 실적 데이터 없음" : "우리 유니버스 밖 종목 — 수치 미보유"}</p>`;
+  }
+  // US: EPS 서프라이즈(발표 vs 예상)
+  const sup = co?.surprise?.eps || [];
+  if (sup.length) {
+    h += `<h4>🎯 EPS — 발표 vs 예상</h4><table><tr><th>분기</th><th>예상</th><th>발표</th><th>서프라이즈</th></tr>`
+      + sup.slice(-4).map((s) => `<tr><td>${s.q}</td><td>$${s.est}</td><td>$${s.actual}</td>
+        <td><span class="${s.pct >= 0 ? "pos" : "neg"}">${s.pct >= 0 ? "+" : ""}${s.pct}%</span></td></tr>`).join("") + `</table>`;
+    if (upcoming && r.eps_est != null) h += `<p class="sub-note" style="margin:3px 0 0">이번 분기 EPS 컨센서스: <b>$${r.eps_est}</b></p>`;
+  } else if (mk === "us" && r.eps_est != null) {
+    h += `<p class="sub-note">이번 분기 EPS 컨센서스: <b>$${r.eps_est}</b></p>`;
+  }
+  // 컨센서스 목표가
+  if (co?.cons?.target) {
+    h += `<p class="sub-note" style="margin:6px 0 0">🎯 목표주가 ${mk === "kr" ? Math.round(co.cons.target).toLocaleString() + "원" : "$" + Math.round(co.cons.target)}`
+      + (co.cons.opinion ? ` · 투자의견 ${co.cons.opinion}/5` : co.cons.opinion_key ? ` · ${co.cons.opinion_key}` : "")
+      + (co.cons.n ? ` (${co.cons.n}명)` : "") + `</p>`;
+  }
+
+  // ── 🎙 컨퍼런스콜·IR ──
+  h += `<h4>🎙 컨퍼런스콜·IR</h4>`;
+  if (mk === "kr") {
+    if (r.time) h += `<p style="margin:0 0 4px">일시: <b>${r.date.replace(/-/g, ".")} ${r.time}</b> <span class="sub-note">(KIND 기업설명회 공시 기준 · 참여방법은 공시 원문에 기재)</span></p>`;
+    const ir = (fd?.disc || []).filter((d) => /실적|설명회|IR|잠정|컨퍼런스/i.test(d.title)).slice(0, 3);
+    const rec = ir.length ? ir : (fd?.disc || []).slice(0, 2);
+    if (rec.length) h += `<div class="cd-disc">${rec.map((d) =>
+      `<a href="${d.link}" target="_blank" rel="noopener">📄 ${esc(d.title)} <span class="sub-note">${d.d}</span></a>`).join("")}</div>`;
+    h += `<div class="cd-links">
+      ${r.t ? `<a href="https://www.tossinvest.com/stocks/A${r.t}" target="_blank" rel="noopener">토스증권 (어닝콜·요약)</a>` : ""}
+      <a href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm=${encodeURIComponent(r.name)}" target="_blank" rel="noopener">DART 공시검색</a>
+      ${r.t ? `<a href="https://m.stock.naver.com/domestic/stock/${r.t}/total" target="_blank" rel="noopener">네이버 증권</a>` : ""}
+    </div>`;
+  } else {
+    h += `<div class="cd-links">
+      <a href="https://www.tossinvest.com/stocks/${r.t}" target="_blank" rel="noopener">토스증권 (어닝콜·요약)</a>
+      ${co?.website ? `<a href="${co.website}" target="_blank" rel="noopener">회사 IR·홈페이지</a>` : ""}
+      <a href="https://finance.yahoo.com/quote/${r.t}/analysis" target="_blank" rel="noopener">Yahoo 실적 분석</a>
+      <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${r.t}&type=8-K&dateb=&owner=include&count=10" target="_blank" rel="noopener">SEC 8-K 공시</a>
+    </div>`;
+  }
+  h += `<p class="sub-note" style="margin-top:8px">토스증권 링크의 어닝콜 AI 요약은 토스 로그인 후 열람 가능</p>`;
+
+  host.innerHTML = h;
+  const go = document.getElementById("cd-goto");
+  if (go) go.onclick = () => {
+    gotoTabFull("lookup");
+    if (!lookupRendered) initLookup();
+    loadLookup(`${mk}_${r.t}`);
+  };
 }
 
 /* ---------- 마켓: 뉴스·속보 ---------- */
