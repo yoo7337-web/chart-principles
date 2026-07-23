@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=106">
-<script src="firebase-config.js?v=106"></script>
-<script src="js/auth.js?v=106"></script>
+<link rel="stylesheet" href="css/style.css?v=107">
+<script src="firebase-config.js?v=107"></script>
+<script src="js/auth.js?v=107"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -345,9 +345,11 @@
         <div id="hm-tree" class="treemap"></div>
         <div class="criteria" id="hm-context"></div>
 
-        <h2 class="home-h">오늘의 종목</h2>
-        <div class="chips" id="mv-chips"></div>
-        <div id="mv-list" class="mv-list card-flat"></div>
+        <div id="mv-wrap" style="display:none">
+          <h2 class="home-h">오늘의 종목 <span class="sub-note">(30분 갱신 · 토스 랭킹 미연동 시 표시)</span></h2>
+          <div class="chips" id="mv-chips"></div>
+          <div id="mv-list" class="mv-list card-flat"></div>
+        </div>
       </div>
       <aside class="home-side">
         <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
@@ -650,6 +652,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=106"></script>
+<script src="js/app.js?v=107"></script>
 </body>
 </html>

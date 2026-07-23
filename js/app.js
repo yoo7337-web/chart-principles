@@ -2687,10 +2687,18 @@ function openStockDialog(mk, t, name, last, chg, unit) {
 }
 
 // 오늘의 종목: 거래대금/거래량/급등/급락 칩 + 순위 리스트
+// 현재 시장에 토스 랭킹이 있는지 — 있으면 '오늘의 종목'은 중복이라 숨김(랭킹이 없을 때만 폴백 표시)
+function rankingsAvailable() {
+  const rk = TOSSM?.rankings;
+  return !!rk && RANK_CATS.some(([k]) => rk[`${homeMk}_${k}`]?.rows?.length);
+}
+
 const MV_CATS = [["value", "거래대금"], ["volume", "거래량"], ["gainers", "급등"], ["losers", "급락"]];
 function renderMovers() {
+  const wrap = $("#mv-wrap");
+  if (wrap) wrap.style.display = rankingsAvailable() ? "none" : "";   // 랭킹 있으면 중복 → 숨김
   const chips = $("#mv-chips"), list = $("#mv-list");
-  if (!chips || !MARKET.movers) return;
+  if (!chips || !MARKET.movers || rankingsAvailable()) return;
   chips.innerHTML = MV_CATS.map(([k, lab]) =>
     `<button class="chip${k === moverCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
   chips.querySelectorAll(".chip").forEach((b) => {
@@ -2745,7 +2753,7 @@ function renderRankings() {
   const stale = ageH != null && ageH >= 12;
   $("#rank-note").innerHTML =
     `(토스증권 ${g.duration === "realtime" ? "체결 기준" : "1일"} · ${relTime(TOSSM.generated)} 수집)` +
-    (stale ? ` <span class="rank-stale">⚠ ${Math.floor(ageH)}시간 전 스냅샷 — 위 '오늘의 종목'이 최신</span>` : "");
+    (stale ? ` <span class="rank-stale">⚠ ${Math.floor(ageH)}시간 전 스냅샷 (장중엔 지연)</span>` : "");
 
   $("#rank-chips").innerHTML = cats.map(([k, lab]) =>
     `<button class="chip${k === rankCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
@@ -2758,7 +2766,7 @@ function renderRankings() {
     const sub = rankCat === "volume"
       ? `거래량 ${(r.volume || 0).toLocaleString()}주`
       : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
-    // 변동액 = 현재가 - 전일종가(현재가/(1+등락률)). 가격·변동액은 검정, %만 국내 관례 색상(상승 빨강/하락 파랑)
+    // 변동액 = 현재가 - 전일종가(현재가/(1+등락률)). 가격=검정, 변동액(액수+%) 전체를 국내 관례 색상(상승 빨강/하락 파랑)
     const c = r.chg;
     const flat = c == null || isNaN(c) || c === 0;
     const cls = flat ? "" : up ? "kup" : "kdn";
@@ -2770,7 +2778,7 @@ function renderRankings() {
       <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span>${r.halted ? ` <span class="rank-halt">거래정지</span>` : ""}<br>
         <span class="mv-sub">${sub}</span></span>
       <span class="mv-price"><span class="mv-p">${fmtPrice(r.last, homeMk)}</span>
-        <span class="mv-d">${diffTxt}${flat ? "" : "("}<span class="${cls}">${pct(r.chg, 1)}</span>${flat ? "" : ")"}</span></span>
+        <span class="mv-d ${cls}">${diffTxt}${flat ? "" : "("}${pct(r.chg, 1)}${flat ? "" : ")"}</span></span>
     </div>`;
   }).join("") || `<p class="mini-note">데이터 없음</p>`;
 

@@ -226,7 +226,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 가격=검정 1줄 + 변동(액·%) 2줄째, 그 줄에서도 %만 색상(원화 변동액은 검정) */
 .mv-price .mv-p { display: block; color: var(--ink); }
 .mv-price .mv-d { display: block; font-size: .76rem; font-weight: 600; color: var(--ink); }
-.mv-price .mv-d .kup { color: #f5445a; } .mv-price .mv-d .kdn { color: #4391ff; }
+/* 변동액(액수+%) 전체 색상 — .mv-d에 직접 부여된 클래스가 이겨야 하므로 specificity 맞춤 */
+.mv-price .mv-d.kup { color: #f5445a; } .mv-price .mv-d.kdn { color: #4391ff; }
 
 /* 투자 대가 */
 .guru-block summary { flex-wrap: wrap; }
