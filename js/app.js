@@ -1051,6 +1051,7 @@ function loadLookup(key) {
       }
     });
     // 심화 데이터(개요·컨센서스·연간실적·공시·뉴스) — lazy 로드 후 렌더
+    appendLiveBar(st);   // 헤더의 '차트와 시세 차이' 경고 계산 전에 잠정 당일봉부터 반영
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
@@ -1129,8 +1130,51 @@ function loadMinuteBars(st) {
 }
 const OSC_KO = { rsi: "RSI(14)", macd: "MACD", stoch: "스토캐스틱", obv: "OBV", disp: "이격도" };
 
+// 시장 현지 시각(요일·날짜·시분) — 미국장은 뉴욕 기준이어야 당일봉 날짜가 맞음(DST 자동)
+function marketClock(mk) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: mk === "us" ? "America/New_York" : "Asia/Seoul", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", weekday: "short",
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((x) => x.type === t)?.value || "";
+  return { day: `${g("year")}-${g("month")}-${g("day")}`, hm: `${g("hour")}:${g("minute")}`, dow: g("weekday") };
+}
+
+// 잠정 당일봉 합성 — 차트(stocks/*.json, 다음날 07:40 확정)가 어제 종가에 머무는 문제 해소.
+// 30분 시세(quotes)로 시가=전일종가·종가=현재가 봉을 붙임(고저는 미확정 → max/min(o,c)로 근사, 잠정 명시).
+// 주말·휴장일(토스 달력)·장 시작 전·이미 오늘 봉 존재 시엔 붙이지 않음.
+function appendLiveBar(st) {
+  if (st._live) return;
+  const q = MARKET?.quotes?.[`${st.market}_${st.ticker}`];
+  const s = st.series;
+  if (!q || !s?.length || !(q[0] > 0)) return;
+  const clk = marketClock(st.market);
+  if (clk.dow === "Sat" || clk.dow === "Sun") return;
+  if ((TOSSM?.calendar?.[st.market]?.holidays || []).includes(clk.day)) return;
+  const openHm = st.market === "us" ? "09:30" : "09:00";
+  const closeHm = st.market === "us" ? "16:00" : "15:30";
+  const last = s[s.length - 1];
+  if (last.t === clk.day) {
+    // 오늘 봉이 이미 있음(따라잡기 배치의 장중 스냅샷 등) — 장중이면 종가·고저만 최신 시세로 갱신.
+    // 장 마감 후엔 갱신 금지: 애프터마켓 시세(미국)가 확정 종가를 덮으면 안 됨.
+    if (clk.hm >= openHm && clk.hm <= closeHm && q[0] !== last.c) {
+      last.c = q[0]; last.h = Math.max(last.h, q[0]); last.l = Math.min(last.l, q[0]);
+      last.live = true; st._live = true;
+    }
+    return;
+  }
+  if (last.t > clk.day) return;
+  if (clk.hm < openHm) return;
+  const c = q[0], r = q[1];
+  const o = r != null && 1 + r !== 0 ? +(c / (1 + r)).toFixed(4) : c;
+  st.series = s.concat([{ t: clk.day, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 0, live: true }]);
+  st._live = true;
+}
+
 function drawLookupChart() {
   const st = LOOKUP_ST;
+  appendLiveBar(st);                                    // 잠정 당일봉(있으면) 먼저 — 지표도 포함해 계산
   if (!st._ta) { taEnrich(st.series); st._ta = true; }  // 지표는 클라이언트 계산(OHLCV 슬림 JSON)
   const tf = lookupTf;
   const isMin = tf === "1m" && st._min?.length;   // 당일 분봉 모드(원칙 신호는 일봉 기준이라 미표시)
@@ -1141,6 +1185,7 @@ function drawLookupChart() {
     + (isMin
       ? `${INTRADAY?.date || ""} 당일 1분봉 · ${INTRADAY?.generated || ""} 수집 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`
       : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 5년 (좌우로 드래그·스크롤)`
+        + (st._live ? ` · <b>오늘 봉=30분 지연 잠정치</b><span class="sub-note">(고저 미확정 · 확정봉은 다음날 07:40)</span>` : "")
         + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
@@ -3857,8 +3902,13 @@ function freshQuote(st) {
     // 헤더 시세(30분 갱신)와 차트 마지막 봉(stocks/*.json, 노트북 배치)이 어긋나면 반드시 표시.
     // 2026-07-23 실사고: 헤더 260,500원인데 차트 끝은 243,000원(7/20)이었음 — 같은 화면 다른 숫자.
     const gap = barLast != null && barLast > 0 ? Math.abs(q[0] / barLast - 1) : 0;
-    const warn = gap > 0.005
-      ? ` <span class="lk-stale">⚠ 차트는 ${st.asof} 종가까지 — 시세와 ${pct(q[0] / barLast - 1, 1)} 차이</span>` : "";
+    // 같은 날짜인데 장 마감 후 차이 = 시간외 거래(특히 미국 애프터마켓) — 지연이 아니라 정상
+    const clk = marketClock(st.market);
+    const afterHours = s[s.length - 1]?.t === clk.day && clk.hm > (st.market === "us" ? "16:00" : "15:30");
+    const warn = gap <= 0.005 ? ""
+      : afterHours
+        ? ` <span class="sub-note">(시세엔 시간외 거래 반영 · 차트는 정규장 종가)</span>`
+        : ` <span class="lk-stale">⚠ 차트는 ${st.asof} 종가까지 — 시세와 ${pct(q[0] / barLast - 1, 1)} 차이</span>`;
     return { cur: q[0], chg: q[1], src: `${relTime(MARKET.generated)} 시세 (히트맵과 동일 · 30분 갱신)${warn}` };
   }
   const prev = s[s.length - 2]?.c;
