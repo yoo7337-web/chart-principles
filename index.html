@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=125">
-<script src="firebase-config.js?v=125"></script>
-<script src="js/auth.js?v=125"></script>
+<link rel="stylesheet" href="css/style.css?v=127">
+<script src="firebase-config.js?v=127"></script>
+<script src="js/auth.js?v=127"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -38,6 +38,7 @@
   <button class="tab" data-tab="holdings">포트폴리오</button>
   <button class="tab" data-tab="journal">매매일지</button>
   <button class="tab" data-tab="memo">종목 메모</button>
+  <button class="tab" data-tab="devlog">🛠 개발일지</button>
 </nav>
 <nav class="tabs" data-group-tabs="market">
   <button class="tab active" data-tab="heatmap">홈</button>
@@ -189,6 +190,7 @@
       <div id="lookup-peers" class="card-flat" style="display:none"></div>
     </div>
     <div id="lookup-dividend" class="card-flat" style="display:none"></div>
+    <div id="lookup-financials" class="card-flat" style="display:none;margin-top:16px"></div>
     <div id="lookup-reports" class="card-flat" style="display:none;margin-top:16px"></div>
     <div class="lookup-two" id="lookup-feed" style="display:none;margin-top:16px">
       <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 6개월)</span></h3>
@@ -682,6 +684,41 @@
     </div>
     <div id="memo-list"></div>
   </section>
+
+  <section id="tab-devlog" class="panel">
+    <div class="criteria">🛠️ <b>개발일지</b> — 이 사이트의 개발 내역과 앞으로의 아이디어를 관리합니다.
+      아이디어는 <b>이 브라우저에만</b> 저장(서버 전송 없음) · ⬇내보내기로 백업하세요.</div>
+    <div class="dev-split">
+      <div class="dev-ideas card-flat">
+        <h3 class="lk-h3">💡 개발 아이디어 <span class="sub-note" id="dev-count"></span>
+          <span style="flex:1"></span>
+          <button class="today-chart-btn" id="dev-export">⬇ 내보내기</button>
+          <button class="today-chart-btn" id="dev-import">⬆ 가져오기</button>
+          <input type="file" id="dev-import-file" accept=".json" style="display:none">
+        </h3>
+        <div class="dev-input">
+          <input type="text" id="dev-new" placeholder="새 아이디어를 입력하고 Enter (예: 배당 캘린더 추가)" autocomplete="off">
+          <select id="dev-new-pri">
+            <option value="2">우선순위 중</option>
+            <option value="3">🔴 높음</option>
+            <option value="1">🔵 낮음</option>
+          </select>
+          <button class="today-chart-btn" id="dev-add">＋ 추가</button>
+        </div>
+        <div class="dev-filters" id="dev-filters">
+          <button data-f="all" class="active">전체</button>
+          <button data-f="idea">💡 아이디어</button>
+          <button data-f="doing">🔨 진행중</button>
+          <button data-f="done">✅ 완료</button>
+        </div>
+        <div id="dev-list"></div>
+      </div>
+      <div class="dev-history card-flat">
+        <h3 class="lk-h3">📜 개발 내역 <span class="sub-note">(버전별 릴리스)</span></h3>
+        <div id="dev-history-list"></div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <button id="nav-back" class="nav-back" style="display:none">← 뒤로</button>
@@ -700,6 +737,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=125"></script>
+<script src="js/app.js?v=127"></script>
 </body>
 </html>

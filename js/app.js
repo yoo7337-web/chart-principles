@@ -107,7 +107,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
-  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모",
+  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
 let navSuppress = false;
@@ -162,6 +162,7 @@ function activateTab(tabId) {
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
+  if (tabId === "devlog") renderDevlog();
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "econcal" && !ecRendered) renderEconCal();
@@ -1080,6 +1081,7 @@ function loadLookup(key) {
       renderLookupSurprise(st);
       renderLookupDividend(st);
       renderLookupPeers(st);
+      renderLookupFinancials(st);
       renderLookupReports(st);
       renderLookupFeed(st);
     });
@@ -1575,6 +1577,129 @@ function renderLookupMemo(st) {
 }
 
 // 내 투자 → 종목 메모 탭 — 모든 메모 모아보기(메모 1건 = 1행)
+/* ---------- 개발일지 (개발 내역 타임라인 + 아이디어 관리, localStorage) ---------- */
+// 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
+const DEV_HISTORY = [
+  ["v126", "2026-07-24", "상세 재무제표 + 엑셀 추출", "DART 10년 연간(손익·재무상태·현금흐름·CAPEX) + yfinance(EBITDA·FCF·분기), 종목조회 3표 + .xlsx 다운로드. 재무안정성 차트 확대."],
+  ["v124", "2026-07-24", "증권사 리포트 카드", "KR=네이버 리서치 최신 5건(미리보기+PDF 링크), US=애널리스트 등급변경 6건."],
+  ["v123", "2026-07-24", "실적발표/경제지표 분리", "경제일정→실적발표 개명, 경제지표 별도 탭(TradingView 캘린더 월간 달력·국가/중요도 필터)."],
+  ["v122", "2026-07-23", "경제일정 실적 상세 패널", "달력 회사 클릭→우측 분할(분기실적·EPS 서프라이즈·컨퍼런스콜·IR·토스 딥링크)."],
+  ["v112", "2026-07-23", "홈 재구성·딜 코너·다크 마감", "히트맵|뉴스/딜 2분할, TV 티커 다크, 세계지도 칩 가독성."],
+  ["v106", "2026-07-23", "레이아웃 재배치", "전역 1440px, 홈·종목조회 2단 그리드, 시장진단 3열."],
+  ["v105", "2026-07-23", "토스증권 다크 테마 전환", "전 14탭 토스 실측 토큰(bg #17171c·상승 빨강/하락 파랑) 일괄 적용."],
+  ["v101", "2026-07-23", "토스 미활용 API 5종", "휴장일·종목 분봉·국고채 금리이력·호가·체결 도입."],
+  ["v97", "2026-07-23", "시장 진단 지표 14종", "52주 신고/신저·McClellan·평균상관·실현변동성·집중도 등 + 5년 시계열."],
+  ["v100", "2026-07-23", "기업 이해 보고서 30종", "감사×투자 14장 보고서, 시총 상위 30 게시(DART 실검증)."],
+  ["v85", "2026-07-22", "메뉴 개편 4그룹 14탭", "투자 퍼널(시장보기→종목찾기→원칙검증→내투자) + 소탭 통합."],
+  ["v83", "2026-07-22", "당일 분봉 차트", "yfinance 1분봉(KR 200+US 99), 종목조회 타임프레임 버튼."],
+  ["v68", "2026-07-20", "주식찾기(스크리너)", "국가·업종·시총·밸류체인·세부지표·테마 필터 종목 발굴."],
+  ["v64", "2026-07-19", "차트 그리기 + 종목 메모", "추세선·박스권 그리기(색·선모양 편집), 종목별 메모."],
+  ["v57", "2026-07-19", "매크로 탭 신설", "중앙은행 금리 지도 + 세계 증시 지도 + 5년 팝업 차트."],
+  ["v52", "2026-07-18", "종목조회 토스식 심화", "분기실적·투자지표·컨센서스·재무안정성·동종비교 16섹션."],
+  ["기반", "2026-07-11", "원칙 검증 파이프라인", "한·미 279종목 10년 일봉으로 차트 격언 이벤트스터디 검증→생존 원칙 선별. 오늘의 신호·마켓·뉴스 자동화."],
+];
+
+const DEVLOG_KEY = "cp_devlog_v1";
+let devFilter = "all", devlogBound = false;
+function devLoad() { try { return JSON.parse(localStorage.getItem(DEVLOG_KEY)) || []; } catch (e) { return []; } }
+function devSave(a) { localStorage.setItem(DEVLOG_KEY, JSON.stringify(a)); }
+const DEV_PRI = { 3: ["🔴", "높음"], 2: ["🟡", "중간"], 1: ["🔵", "낮음"] };
+const DEV_ST = { idea: ["💡", "아이디어"], doing: ["🔨", "진행중"], done: ["✅", "완료"] };
+
+function devAdd(text, pri) {
+  if (!text.trim()) return;
+  const a = devLoad();
+  a.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    text: text.trim(), pri: +pri || 2, status: "idea", created: new Date().toISOString().slice(0, 10) });
+  devSave(a);
+  renderDevlog();
+}
+
+function renderDevlog() {
+  // 개발 내역(정적)
+  const hist = document.getElementById("dev-history-list");
+  if (hist) hist.innerHTML = DEV_HISTORY.map(([v, d, title, desc]) =>
+    `<div class="dev-hist-row"><div class="dev-hv"><span class="dev-ver">${v}</span><span class="sub-note">${d}</span></div>
+      <div><b>${title}</b><div class="sub-note">${desc}</div></div></div>`).join("");
+
+  // 아이디어 목록
+  const host = document.getElementById("dev-list");
+  let items = devLoad();
+  const counts = { all: items.length, idea: 0, doing: 0, done: 0 };
+  items.forEach((it) => counts[it.status] = (counts[it.status] || 0) + 1);
+  const cnt = document.getElementById("dev-count");
+  if (cnt) cnt.textContent = `(${counts.idea}💡 ${counts.doing}🔨 ${counts.done}✅)`;
+  document.querySelectorAll("#dev-filters button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.f === devFilter));
+  let shown = devFilter === "all" ? items : items.filter((it) => it.status === devFilter);
+  // 진행중 → 아이디어 → 완료, 각 그룹 내 우선순위 높은 순 → 최신순
+  const order = { doing: 0, idea: 1, done: 2 };
+  shown = shown.slice().sort((a, b) =>
+    order[a.status] - order[b.status] || b.pri - a.pri || (b.created > a.created ? 1 : -1));
+  host.innerHTML = shown.length ? shown.map((it) => {
+    const [pe] = DEV_PRI[it.pri] || DEV_PRI[2];
+    return `<div class="dev-item ${it.status === "done" ? "done" : ""}" data-id="${it.id}">
+      <button class="dev-check" title="상태 변경">${DEV_ST[it.status][0]}</button>
+      <div class="dev-body">
+        <span class="dev-text" contenteditable="true" spellcheck="false">${it.text.replace(/</g, "&lt;")}</span>
+        <div class="dev-meta"><span class="dev-pri" title="우선순위">${pe}</span>
+          <span class="sub-note">${it.created}</span></div>
+      </div>
+      <button class="dev-del" title="삭제">✕</button></div>`;
+  }).join("") : `<p class="mini-note">${devFilter === "all" ? "아직 아이디어가 없습니다. 위에 입력해 추가하세요." : "이 상태의 항목이 없습니다."}</p>`;
+
+  // 상태 순환(💡→🔨→✅→💡), 우선순위 순환, 삭제, 인라인 편집
+  host.querySelectorAll(".dev-item").forEach((el) => {
+    const id = el.dataset.id;
+    el.querySelector(".dev-check").onclick = () => {
+      const a = devLoad(), it = a.find((x) => x.id === id);
+      if (it) { it.status = { idea: "doing", doing: "done", done: "idea" }[it.status]; devSave(a); renderDevlog(); }
+    };
+    el.querySelector(".dev-pri").onclick = () => {
+      const a = devLoad(), it = a.find((x) => x.id === id);
+      if (it) { it.pri = it.pri === 3 ? 1 : it.pri + 1; devSave(a); renderDevlog(); }
+    };
+    el.querySelector(".dev-del").onclick = () => {
+      const a = devLoad().filter((x) => x.id !== id); devSave(a); renderDevlog();
+    };
+    const txt = el.querySelector(".dev-text");
+    txt.onblur = () => {
+      const a = devLoad(), it = a.find((x) => x.id === id);
+      if (it && txt.textContent.trim() && txt.textContent.trim() !== it.text) { it.text = txt.textContent.trim(); devSave(a); }
+    };
+    txt.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); txt.blur(); } };
+  });
+
+  if (devlogBound) return;
+  devlogBound = true;
+  const add = () => { const i = document.getElementById("dev-new"); devAdd(i.value, document.getElementById("dev-new-pri").value); i.value = ""; i.focus(); };
+  document.getElementById("dev-add").onclick = add;
+  document.getElementById("dev-new").onkeydown = (e) => { if (e.key === "Enter") add(); };
+  document.querySelectorAll("#dev-filters button").forEach((b) =>
+    b.onclick = () => { devFilter = b.dataset.f; renderDevlog(); });
+  document.getElementById("dev-export").onclick = () => {
+    const blob = new Blob([JSON.stringify(devLoad(), null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "개발일지_아이디어.json"; a.click();
+  };
+  document.getElementById("dev-import").onclick = () => document.getElementById("dev-import-file").click();
+  document.getElementById("dev-import-file").onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const imp = JSON.parse(rd.result);
+        if (!Array.isArray(imp)) throw 0;
+        const cur = devLoad(), ids = new Set(cur.map((x) => x.id));
+        imp.forEach((x) => { if (x && x.id && !ids.has(x.id)) cur.push(x); });
+        devSave(cur); renderDevlog();
+        alert(`가져오기 완료 (${imp.length}건 중 신규 병합)`);
+      } catch (x) { alert("가져오기 실패 — 올바른 백업 파일이 아닙니다."); }
+    };
+    rd.readAsText(f);
+  };
+}
+
 function renderMemo() {
   memoRendered = true;
   const host = document.getElementById("memo-list");
@@ -4733,6 +4858,176 @@ function renderLookupPeers(st) {
 }
 
 // 공시(6개월)·뉴스(1주일) 피드
+/* ---------- 상세 재무제표 (financials/{key}.json — DART/yfinance) + 엑셀 추출 ---------- */
+const FIN_CACHE = {};
+let finXlsxLoading = null;
+
+// 표 행 정의 — [키, 라벨, 타입]. type: num=금액 / pct=비율(파생) / yoy=전년비(파생) / head=소제목
+const FIN_ROWS_IS = [
+  ["_h", "손익계산서", "head"],
+  ["rev", "매출액", "num"], ["_yoy:rev", "전년比", "yoy"],
+  ["gp", "매출총이익", "num"], ["_r:gp/rev", "매출총이익률", "pct"],
+  ["op", "영업이익", "num"], ["_r:op/rev", "영업이익률", "pct"], ["_yoy:op", "전년比", "yoy"],
+  ["ebitda", "EBITDA", "num"], ["_r:ebitda/rev", "EBITDA 마진", "pct"],
+  ["pretax", "법인세차감전이익", "num"],
+  ["np", "당기순이익", "num"], ["_r:np/rev", "순이익률", "pct"], ["_yoy:np", "전년比", "yoy"],
+];
+const FIN_ROWS_BS = [
+  ["_h", "재무상태표", "head"],
+  ["asset", "총자산", "num"], ["ca", "유동자산", "num"], ["nca", "비유동자산", "num"],
+  ["liab", "총부채", "num"], ["cl", "유동부채", "num"], ["ncl", "비유동부채", "num"],
+  ["equity", "자본총계", "num"], ["cash", "현금및현금성자산", "num"],
+];
+const FIN_ROWS_CF = [
+  ["_h", "현금흐름표", "head"],
+  ["cfo", "영업활동 현금흐름", "num"], ["cfi", "투자활동 현금흐름", "num"], ["cff", "재무활동 현금흐름", "num"],
+  ["capex_ppe", "설비투자(유형자산취득)", "num"], ["capex_intan", "무형자산취득", "num"],
+  ["_fcf", "잉여현금흐름(FCF)", "num"],
+];
+
+function finVal(row, key, prevRow) {
+  // 파생값 계산: _yoy:x, _r:a/b, _fcf, _h는 별도 처리
+  if (key === "_fcf") {
+    if (row.fcf != null) return row.fcf;
+    if (row.cfo != null) {
+      const capex = (row.capex_ppe || 0) + (row.capex_intan || 0);
+      return row.cfo - Math.abs(capex);  // KR capex=양수(취득), US capex_ppe=음수 → abs로 통일
+    }
+    return null;
+  }
+  if (key.startsWith("_r:")) {
+    const [a, b] = key.slice(3).split("/");
+    return row[a] != null && row[b] ? (row[a] / row[b]) * 100 : null;
+  }
+  if (key.startsWith("_yoy:")) {
+    const k = key.slice(5);
+    return prevRow && prevRow[k] && row[k] != null ? (row[k] / prevRow[k] - 1) * 100 : null;
+  }
+  return row[key];
+}
+
+function renderLookupFinancials(st) {
+  const host = $("#lookup-financials");
+  const key = `${st.market}_${st.ticker}`;
+  host.style.display = "";
+  host.innerHTML = `<h3 class="lk-h3">📊 상세 재무제표 <span class="sub-note">불러오는 중…</span></h3>`;
+  fetch(`data/financials/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((fin) => {
+    if (!fin || !fin.annual || !Object.keys(fin.annual).length) { host.style.display = "none"; return; }
+    FIN_CACHE[key] = fin;
+    finDraw(st, "annual");
+  }).catch(() => { host.style.display = "none"; });
+}
+
+function finDraw(st, mode) {
+  const host = $("#lookup-financials");
+  const key = `${st.market}_${st.ticker}`;
+  const fin = FIN_CACHE[key];
+  if (!fin) return;
+  const unit = st.market === "kr" ? "억원" : "백만$";
+  const src = st.market === "kr" ? "DART 재무제표" : "yfinance";
+  // 컬럼(기간): 실적 오름차순 + 추정(E)
+  let periods, data;
+  if (mode === "quarter" && fin.quarter && Object.keys(fin.quarter).length) {
+    periods = Object.keys(fin.quarter).sort();
+    data = fin.quarter;
+  } else {
+    mode = "annual";
+    const est = fin.est || {};
+    const actualYrs = Object.keys(fin.annual).sort();
+    const estYrs = Object.keys(est).filter((y) => !fin.annual[y]).sort();
+    periods = [...actualYrs, ...estYrs];
+    data = { ...fin.annual };
+    estYrs.forEach((y) => (data[y] = { ...est[y], _est: true }));
+  }
+  const hasQuarter = fin.quarter && Object.keys(fin.quarter).length;
+  // 표 생성
+  const rowsDef = [...FIN_ROWS_IS, ...FIN_ROWS_BS, ...FIN_ROWS_CF];
+  const nf = (v, isPct) => v == null ? "-" : isPct
+    ? `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(1)}%</span>`
+    : Math.round(v).toLocaleString();
+  let body = "";
+  rowsDef.forEach(([k, lab, type]) => {
+    if (type === "head") { body += `<tr class="fin-head"><td colspan="${periods.length + 1}">${lab}</td></tr>`; return; }
+    // EBITDA는 US만(KR은 미제공) — 값이 전부 없으면 행 생략
+    const cells = periods.map((p, i) => {
+      const row = data[p] || {};
+      const prev = i > 0 ? data[periods[i - 1]] : null;
+      const v = finVal(row, k, prev);
+      if ((type === "pct" || type === "yoy") && row._est) return `<td>-</td>`;  // 추정연도는 비율 생략
+      return `<td>${nf(v, type === "pct" || type === "yoy")}</td>`;
+    });
+    if (cells.every((c) => c === "<td>-</td>")) return;  // 전부 빈 행 생략(예: KR EBITDA)
+    body += `<tr class="${type === "yoy" || type === "pct" ? "fin-sub" : ""}"><td class="fin-lab">${lab}</td>${cells.join("")}</tr>`;
+  });
+  const cols = periods.map((p) => {
+    const isEst = data[p]?._est;
+    const label = mode === "annual" ? p + (isEst ? "(E)" : "") : p;
+    return `<th class="${isEst ? "fin-est" : ""}">${label}</th>`;
+  }).join("");
+  host.innerHTML = `<h3 class="lk-h3">📊 상세 재무제표
+      <span class="sub-note">(단위 ${unit} · ${src}${st.market === "kr" ? " · 추정은 네이버 컨센서스" : ""})</span>
+      <span style="flex:1"></span>
+      <span class="mk-toggle fin-mode">
+        <button data-m="annual" class="${mode === "annual" ? "active" : ""}">연간</button>
+        ${hasQuarter ? `<button data-m="quarter" class="${mode === "quarter" ? "active" : ""}">분기</button>` : ""}
+      </span>
+      <button class="today-chart-btn" id="fin-xlsx">⬇ 엑셀</button></h3>
+    <div class="fin-wrap"><table class="fin-table">
+      <thead><tr><th class="fin-lab">지표</th>${cols}</tr></thead><tbody>${body}</tbody></table></div>`;
+  host.querySelectorAll(".fin-mode button").forEach((b) => b.onclick = () => finDraw(st, b.dataset.m));
+  $("#fin-xlsx").onclick = () => finExportXlsx(st, mode);
+}
+
+function finExportXlsx(st, mode) {
+  const btn = $("#fin-xlsx");
+  btn.textContent = "생성 중…";
+  finLoadXlsx().then(() => {
+    const key = `${st.market}_${st.ticker}`, fin = FIN_CACHE[key];
+    const unit = st.market === "kr" ? "억원" : "백만$";
+    let periods, data;
+    if (mode === "quarter" && fin.quarter) { periods = Object.keys(fin.quarter).sort(); data = fin.quarter; }
+    else {
+      const est = fin.est || {}, act = Object.keys(fin.annual).sort();
+      const ey = Object.keys(est).filter((y) => !fin.annual[y]).sort();
+      periods = [...act, ...ey]; data = { ...fin.annual }; ey.forEach((y) => data[y] = { ...est[y], _est: true });
+    }
+    const wb = XLSX.utils.book_new();
+    const sheet = (rowsDef, name) => {
+      const aoa = [["지표", ...periods.map((p) => p + (data[p]?._est ? "(E)" : ""))]];
+      rowsDef.forEach(([k, lab, type]) => {
+        if (type === "head") { aoa.push([lab]); return; }
+        const cells = periods.map((p, i) => {
+          const row = data[p] || {}, prev = i > 0 ? data[periods[i - 1]] : null;
+          if ((type === "pct" || type === "yoy") && row._est) return null;
+          const v = finVal(row, k, prev);
+          return v == null ? null : (type === "pct" || type === "yoy" ? +v.toFixed(2) : Math.round(v));
+        });
+        if (cells.every((c) => c == null)) return;
+        aoa.push([lab, ...cells]);
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name);
+    };
+    sheet(FIN_ROWS_IS, "손익계산서");
+    sheet(FIN_ROWS_BS, "재무상태표");
+    sheet(FIN_ROWS_CF, "현금흐름표");
+    const nm = st.market === "kr" ? st.name : st.ticker;
+    XLSX.writeFile(wb, `${nm}_재무제표_${mode === "annual" ? "연간" : "분기"}_${unit}.xlsx`);
+    btn.textContent = "⬇ 엑셀";
+  }).catch(() => { btn.textContent = "⬇ 엑셀"; alert("엑셀 라이브러리 로드 실패 — 네트워크를 확인해 주세요."); });
+}
+
+function finLoadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  if (finXlsxLoading) return finXlsxLoading;
+  finXlsxLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return finXlsxLoading;
+}
+
 function renderLookupReports(st) {
   const host = $("#lookup-reports");
   const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
