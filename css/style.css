@@ -151,6 +151,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 마켓 홈 — 상단 토글 + 지수 카드 (토스 스타일 라이트) */
 .home-topbar { display: flex; justify-content: space-between; align-items: center;
   flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+/* 주식찾기 — 상단 1차 시장 선택(한국/미국) */
+.scr-country-top { display: flex; align-items: center; gap: 14px; margin: 4px 0 18px; flex-wrap: wrap; }
+.scr-country-lbl { font-size: .92rem; font-weight: 700; color: var(--muted); }
+.mk-toggle.scr-country-big { padding: 5px; }
+.mk-toggle.scr-country-big button { font-size: 1rem; font-weight: 700; padding: 10px 26px; }
 .mk-toggle { display: inline-flex; background: #2a2a31; border-radius: 999px; padding: 3px; }
 .mk-toggle button { border: none; background: transparent; cursor: pointer;
   font-size: .84rem; font-weight: 600; color: var(--muted); padding: 6px 14px; border-radius: 999px; }

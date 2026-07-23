@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=107">
-<script src="firebase-config.js?v=107"></script>
-<script src="js/auth.js?v=107"></script>
+<link rel="stylesheet" href="css/style.css?v=108">
+<script src="firebase-config.js?v=108"></script>
+<script src="js/auth.js?v=108"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -226,6 +226,13 @@
 
   <section id="tab-screener" class="panel">
     <div class="criteria" id="scr-context"></div>
+    <div class="scr-country-top">
+      <span class="scr-country-lbl">먼저 시장을 선택하세요</span>
+      <span class="mk-toggle scr-country-big" id="scr-country">
+        <button data-c="kr" class="active">🇰🇷 한국</button>
+        <button data-c="us">🇺🇸 미국</button>
+      </span>
+    </div>
     <div class="scr-layout">
     <div class="scr-main">
     <div class="scr-bar">
@@ -244,14 +251,6 @@
     </div>
     <aside class="scr-side">
     <div class="card-flat scr-filters">
-      <div class="scr-frow">
-        <span class="scr-label">국가</span>
-        <span class="mk-toggle" id="scr-country">
-          <button data-c="" class="active">전체</button>
-          <button data-c="kr">🇰🇷 한국</button>
-          <button data-c="us">🇺🇸 미국</button>
-        </span>
-      </div>
       <div class="scr-frow scr-frow-top" id="scr-sector-row">
         <span class="scr-label">미국 업종</span>
         <div style="flex:1">
@@ -652,6 +651,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=107"></script>
+<script src="js/app.js?v=108"></script>
 </body>
 </html>

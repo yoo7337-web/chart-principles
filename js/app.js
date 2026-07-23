@@ -1608,7 +1608,7 @@ function renderMemo() {
 /* ---------- 주식찾기 (스크리너) — 국가/산업/시가총액 ---------- */
 // 데이터 소스: MARKET.heatmap = [{m,t,name,sector,mcap,chg}] (국내+미국 유니버스)
 const SCR_FX = 1350;  // '전체' 국가 비교 시 미국 시총 원화 환산(1$≈1,350원) — 대략치
-const scrState = { country: "", sectors: null, min: null, max: null, sort: "mcap" };  // sectors=null → 전체 선택
+const scrState = { country: "kr", sectors: null, min: null, max: null, sort: "mcap" };  // 국가 필수(전체 제거) — 기본 한국. sectors=null → 업종 전체
 const scrMetricSel = {};        // metricId → Set(bucketIdx) — 세부 지표 필터 선택
 let scrVals = new Map();         // "m_t" → 지표값 캐시(company.json 로드 후 구축)
 let scrValsReady = false;
@@ -1772,7 +1772,7 @@ function scrSectorsFor(country) {
 function initScreener() {
   if (!MARKET || !MARKET.heatmap) return;  // 데이터 로딩 전 — 다음 진입 시 재시도
   screenerRendered = true;
-  $("#scr-context").innerHTML = `<b>주식찾기</b> — 국내·미국 유니버스에서 <b>국가·산업·시가총액 + 세부 지표</b>(기업가치·성장성·수익성·재무건전성·배당)로 종목을 걸러냅니다. 지표 여러 개 = AND, 한 지표의 구간 여러 개 = OR.`;
+  $("#scr-context").innerHTML = `<b>주식찾기</b> — 시장(한국/미국)을 고른 뒤 <b>산업·시가총액 + 세부 지표</b>(기업가치·성장성·수익성·재무건전성·배당)로 종목을 걸러냅니다. 지표 여러 개 = AND, 한 지표의 구간 여러 개 = OR.`;
   // 국가 토글
   document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
     document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
@@ -1810,8 +1810,7 @@ function initScreener() {
 }
 
 function setScrUnitLabel() {
-  $("#scr-mcap-unit").textContent = scrState.country === "us" ? "$B(십억달러)"
-    : scrState.country === "kr" ? "조원" : "조원 · 미국주 1$≈1,350원 환산";
+  $("#scr-mcap-unit").textContent = scrState.country === "us" ? "$B(십억달러)" : "조원";
 }
 
 // 산업 대분류(아이콘 그룹) — 세부 업종(네이버/GICS)을 큰 산업으로 묶어 직관적 선택
