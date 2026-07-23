@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=105">
-<script src="firebase-config.js?v=105"></script>
-<script src="js/auth.js?v=105"></script>
+<link rel="stylesheet" href="css/style.css?v=106">
+<script src="firebase-config.js?v=106"></script>
+<script src="js/auth.js?v=106"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -128,7 +128,6 @@
     <div id="lookup-industry" class="lk-industry" style="display:none"></div>
     <div id="lookup-report" class="lk-report" style="display:none"></div>
     <div id="lookup-links" class="ext-links" style="display:none"></div>
-    <div id="lookup-memo" class="card-flat" style="display:none"></div>
     <!-- ① 차트 + 원칙 신호 (핵심 — 최상단) -->
     <div class="controls" id="lookup-filter" style="display:none">
       <label><input type="radio" name="sigfilter" value="core" checked> ⭐ 채택 원칙만</label>
@@ -170,9 +169,11 @@
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
-    <div id="lookup-micro" style="display:none"></div>
     <div id="lookup-info" class="rule-info" style="display:none"></div>
     <div id="lookup-story" class="commentary" style="display:none"></div>
+    <!-- 아래부터 2단: 좌=본문(개요~원칙성적) / 우=레일(호가·프로파일·메모) -->
+    <div class="lk-grid">
+    <div class="lk-main">
     <!-- ② 기업개요 → ③ 투자지표(통합) → ④ 컨센서스 -->
     <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
     <div id="lookup-metrics" class="card-flat" style="display:none"></div>
@@ -185,7 +186,6 @@
     <div id="lookup-dividend" class="card-flat" style="display:none"></div>
     <!-- ⑥ 비교·프로파일·피드 -->
     <div id="lookup-peers" class="card-flat" style="display:none"></div>
-    <div id="lookup-profile" class="card-flat" style="display:none"></div>
     <div class="lookup-two" id="lookup-feed" style="display:none;margin-top:16px">
       <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 6개월)</span></h3>
         <div id="lookup-disc" class="lk-feed-list"></div></div>
@@ -194,6 +194,13 @@
     </div>
     <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙별 10년 성적</h2>
     <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none"><table id="lookup-stats"></table></div>
+    </div><!-- /lk-main -->
+    <aside class="lk-side">
+      <div id="lookup-micro" style="display:none"></div>
+      <div id="lookup-profile" class="card-flat" style="display:none"></div>
+      <div id="lookup-memo" class="card-flat" style="display:none"></div>
+    </aside>
+    </div><!-- /lk-grid -->
   </section>
 
   <section id="tab-value" class="panel">
@@ -327,26 +334,31 @@
     </div>
     <div id="home-cards" class="idx-cards"></div>
 
-    <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
-    <div id="home-news" class="news-list card-flat"></div>
+    <div class="home-grid">
+      <div class="home-main">
+        <h2 class="home-h">섹터 히트맵
+          <button id="hm-back" class="hm-back" style="display:none">← 전체 보기</button>
+          <span class="sub-note">타일=시가총액 · 클릭=종목 조회 · ⤢=섹터 확대</span></h2>
+        <div class="controls hm-bar">
+          <span id="hm-legend" class="hm-legend-grad"></span>
+        </div>
+        <div id="hm-tree" class="treemap"></div>
+        <div class="criteria" id="hm-context"></div>
 
-    <h2 class="home-h">섹터 히트맵
-      <button id="hm-back" class="hm-back" style="display:none">← 전체 보기</button>
-      <span class="sub-note">타일=시가총액 · 클릭=종목 조회 · ⤢=섹터 확대</span></h2>
-    <div class="controls hm-bar">
-      <span id="hm-legend" class="hm-legend-grad"></span>
-    </div>
-    <div id="hm-tree" class="treemap"></div>
-    <div class="criteria" id="hm-context"></div>
+        <h2 class="home-h">오늘의 종목</h2>
+        <div class="chips" id="mv-chips"></div>
+        <div id="mv-list" class="mv-list card-flat"></div>
+      </div>
+      <aside class="home-side">
+        <h2 class="home-h">주요 뉴스 <a href="#" id="home-news-more" class="home-more">더보기 →</a></h2>
+        <div id="home-news" class="news-list card-flat"></div>
 
-    <h2 class="home-h">오늘의 종목</h2>
-    <div class="chips" id="mv-chips"></div>
-    <div id="mv-list" class="mv-list card-flat"></div>
-
-    <div id="rank-wrap" style="display:none">
-      <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
-      <div class="chips" id="rank-chips"></div>
-      <div id="rank-list" class="mv-list card-flat"></div>
+        <div id="rank-wrap" style="display:none">
+          <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
+          <div class="chips" id="rank-chips"></div>
+          <div id="rank-list" class="mv-list card-flat"></div>
+        </div>
+      </aside>
     </div>
   </section>
 
@@ -638,6 +650,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=105"></script>
+<script src="js/app.js?v=106"></script>
 </body>
 </html>
