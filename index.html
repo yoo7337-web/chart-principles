@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=117">
-<script src="firebase-config.js?v=117"></script>
-<script src="js/auth.js?v=117"></script>
+<link rel="stylesheet" href="css/style.css?v=118">
+<script src="firebase-config.js?v=118"></script>
+<script src="js/auth.js?v=118"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -173,7 +173,6 @@
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
     <div id="lookup-info" class="rule-info" style="display:none"></div>
-    <div id="lookup-story" class="commentary" style="display:none"></div>
     <!-- ⑤ 실적: 분기 → 연간 → 서프라이즈 → 안정성 → 배당 -->
     <div id="lookup-finq" class="card-flat" style="display:none"></div>
     <div id="lookup-fin" class="card-flat" style="display:none"></div>
@@ -188,6 +187,8 @@
       <div class="card-flat"><h3 class="lk-h3">📰 뉴스 <span class="sub-note">(최근 1주일)</span></h3>
         <div id="lookup-news" class="lk-feed-list"></div></div>
     </div>
+    <!-- 이 종목의 원칙 이야기 + 원칙별 10년 성적 (최하단) -->
+    <div id="lookup-story" class="commentary" style="display:none"></div>
     <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙별 10년 성적</h2>
     <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none"><table id="lookup-stats"></table></div>
     </div><!-- /lk-main -->
@@ -657,6 +658,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=117"></script>
+<script src="js/app.js?v=118"></script>
 </body>
 </html>
