@@ -942,6 +942,7 @@ dialog { background: var(--card); color: var(--ink); }
   margin: 0 0 10px; padding: 8px 0 8px; border-bottom: 1px solid var(--line); }
 .lk-main { min-width: 0; }
 .lk-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; }  /* 레일이 길어져 sticky 해제(하단 도달 가능) */
+.lk-side > :first-child { margin-top: 0; }   /* 첫 카드 상단 마진 제거 → 차트 박스 상단과 정확히 정렬 */
 .lk-side .micro-wrap { grid-template-columns: 1fr; }         /* 좁은 레일에선 호가·체결 세로 스택 */
 .lk-side .tr-col { border-left: none; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
 .lk-side #lookup-micro h2 { font-size: .95rem; margin: 0 0 6px; }
