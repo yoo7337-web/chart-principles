@@ -401,6 +401,13 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .cal-hd.sun { color: #f5445a; } .cal-hd.sat { color: #4391ff; }
 /* 휴장일 (토스 market-calendar) */
 .cal-holidays { font-size: .84rem; margin: 0 0 8px; color: var(--ink); }
+/* 경제지표 캘린더 */
+.cal-ev.imp { border-color: rgba(245,68,90,.5); color: #ff8c9a; }
+.ec-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.ec-table th, .ec-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.ec-table th:nth-child(3), .ec-table td:nth-child(3) { text-align: left; width: 100%; white-space: normal; }
+.ec-table th { color: var(--muted); font-weight: 500; }
+.ec-table tr.imp td { background: rgba(245,68,90,.05); }
 .cal-cell.hol { background: rgba(245,68,90,.12); }
 .cal-hol { position: absolute; top: 4px; right: 4px; font-size: .62rem; font-weight: 700;
   color: #ff8593; background: rgba(245,68,90,.18); border-radius: 4px; padding: 0 4px; }

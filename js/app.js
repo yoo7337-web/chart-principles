@@ -82,11 +82,11 @@ const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatma
    기존 섹션(id=tab-X)·렌더·딥링크는 그대로 두고 표시만 부모탭으로 묶는다. */
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   internals: [["internals", "시장 진단"], ["rotation", "섹터 로테이션"]],
-  news:      [["news", "뉴스·딜"], ["calendar", "경제일정"]],
+  news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
 };
-const PILL_PARENT = { rotation: "internals", calendar: "news", chart: "rank", portfolio: "holdings" };
+const PILL_PARENT = { rotation: "internals", calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
 function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
@@ -106,7 +106,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
-  calendar: "경제일정", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -164,6 +164,7 @@ function activateTab(tabId) {
   if (tabId === "memo") renderMemo();
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
+  if (tabId === "econcal" && !ecRendered) renderEconCal();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -3448,6 +3449,132 @@ function renderCalDetail(r, mk) {
     if (!lookupRendered) initLookup();
     loadLookup(`${mk}_${r.t}`);
   };
+}
+
+/* ---------- 경제지표 캘린더 (econcal — calendar.json econ, TradingView 수집) ---------- */
+let ecRendered = false, ecMonth = null, ecSel = null, ecCountry = "", ecImpOnly = false;
+const EC_FLAG = { US: "🇺🇸", KR: "🇰🇷", CN: "🇨🇳", JP: "🇯🇵", EU: "🇪🇺" };
+// 자주 나오는 지표명 한글화(구문 치환, 긴 것 우선) — 못 찾으면 영문 그대로
+const EC_KO = [
+  ["Fed Interest Rate Decision", "연준(Fed) 기준금리 결정"], ["ECB Interest Rate Decision", "ECB 기준금리 결정"],
+  ["BoJ Interest Rate Decision", "일본은행 기준금리 결정"], ["Interest Rate Decision", "기준금리 결정"],
+  ["FOMC Economic Projections", "FOMC 경제전망"], ["FOMC Minutes", "FOMC 의사록"], ["Fed Press Conference", "연준 기자회견"],
+  ["ECB Press Conference", "ECB 기자회견"], ["Deposit Facility Rate", "예금금리(ECB)"],
+  ["Loan Prime Rate", "대출우대금리(LPR)"], ["Non Farm Payrolls", "비농업 고용"],
+  ["Initial Jobless Claims", "신규 실업수당 청구"], ["Continuing Jobless Claims", "연속 실업수당 청구"],
+  ["Unemployment Rate", "실업률"], ["Core Inflation Rate", "근원 소비자물가"], ["Inflation Rate", "소비자물가"],
+  ["Core PCE Price Index", "근원 PCE 물가"], ["PCE Price Index", "PCE 물가"],
+  ["Michigan Consumer Sentiment", "미시간 소비자심리"], ["Consumer Confidence", "소비자신뢰"],
+  ["Business Confidence", "기업신뢰"], ["GDP Growth Rate", "GDP 성장률"], ["GDP Price Index", "GDP 물가지수"],
+  ["Retail Sales", "소매판매"], ["Industrial Production", "산업생산"], ["Balance of Trade", "무역수지"],
+  ["Manufacturing PMI", "제조업 PMI"], ["Services PMI", "서비스업 PMI"], ["Composite PMI", "종합 PMI"],
+  ["Manufacturing Production", "제조업 생산"], ["Durable Goods Orders", "내구재 주문"],
+  ["Factory Orders", "공장 주문"], ["Housing Starts", "주택착공"], ["Building Permits", "건축허가"],
+  ["Existing Home Sales", "기존주택 판매"], ["New Home Sales", "신규주택 판매"], ["Pending Home Sales", "잠정주택 판매"],
+  ["Producer Price Index", "생산자물가"], ["PPI", "생산자물가"], ["Core CPI", "근원 CPI"],
+  ["Tokyo CPI", "도쿄 CPI"], ["Tokyo Core CPI", "도쿄 근원 CPI"], ["KTB Auction", "국고채 입찰"],
+  ["Bond Auction", "국채 입찰"], ["Bill Auction", "단기국채 입찰"], ["Note Auction", "국채 입찰"],
+  ["Exports", "수출"], ["Imports", "수입"], ["Current Account", "경상수지"],
+  ["Foreign Exchange Reserves", "외환보유액"], ["Personal Income", "개인소득"], ["Personal Spending", "개인지출"],
+  ["Crude Oil Stocks Change", "원유 재고"], ["Capacity Utilization", "설비가동률"],
+  ["Speech", "연설"], ["Testimony", "의회 증언"],
+];
+function ecKo(t) {
+  let s = t;
+  for (const [en, ko] of EC_KO) if (s.includes(en)) s = s.replace(en, ko);
+  return s;
+}
+
+function ecByDay() {
+  const byDay = {};
+  (CAL?.econ || []).forEach((e) => {
+    if (ecCountry && e.c !== ecCountry) return;
+    if (ecImpOnly && e.imp < 1) return;
+    (byDay[e.d] = byDay[e.d] || []).push(e);
+  });
+  return byDay;
+}
+
+function renderEconCal() {
+  ecRendered = true;
+  if (!CAL?.econ?.length) {
+    $("#ec-context").textContent = "경제지표 데이터 없음 — 다음 클라우드 갱신을 기다려 주세요.";
+    return;
+  }
+  $("#ec-context").innerHTML =
+    `<b>경제지표 캘린더</b> — 미국·한국·중국·일본·유럽의 주요 지표 발표 일정(중요도 중·상만).
+     시각은 한국시간(KST) · ${CAL.econ_updated ? relTime(CAL.econ_updated) + " 갱신(하루 1회)" : ""} ·
+     발표치는 갱신 시점 기준 — 장중 실시간은 아래 TradingView 참고`;
+  const now = new Date();
+  ecMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  ecSel = localDay(now);
+  $("#ec-country").querySelectorAll("button").forEach((btn) => {
+    btn.onclick = () => {
+      ecCountry = btn.dataset.c;
+      $("#ec-country").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
+      drawEcMonth();
+    };
+  });
+  $("#ec-imp").onchange = (e) => { ecImpOnly = e.target.checked; drawEcMonth(); };
+  $("#ec-prev").onclick = () => { ecMonth = new Date(ecMonth.getFullYear(), ecMonth.getMonth() - 1, 1); drawEcMonth(); };
+  $("#ec-next").onclick = () => { ecMonth = new Date(ecMonth.getFullYear(), ecMonth.getMonth() + 1, 1); drawEcMonth(); };
+  $("#ec-today-btn").onclick = () => {
+    const t = new Date();
+    ecMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    ecSel = localDay(t);
+    drawEcMonth();
+  };
+  drawEcMonth();
+}
+
+function drawEcMonth() {
+  $("#ec-src").textContent = `(TradingView 캘린더 · ${CAL.econ_updated ? relTime(CAL.econ_updated) + " 갱신" : "미수집"})`;
+  const byDay = ecByDay();
+  const y = ecMonth.getFullYear(), m = ecMonth.getMonth();
+  $("#ec-month").textContent = `${y}. ${String(m + 1).padStart(2, "0")}`;
+  const today = localDay(new Date());
+  const first = new Date(y, m, 1), startDow = first.getDay();
+  const dim = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(new Date(y, m, d));
+  while (cells.length % 7) cells.push(null);
+  const head = "일월화수목금토".split("").map((w, i) =>
+    `<div class="cal-hd${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</div>`).join("");
+  const body = cells.map((dt) => {
+    if (!dt) return `<div class="cal-cell empty"></div>`;
+    const ds = localDay(dt), dow = dt.getDay();
+    const items = (byDay[ds] || []).slice().sort((a, b) => b.imp - a.imp || a.tm.localeCompare(b.tm));
+    const cls = [ds === today ? "today" : "", ds === ecSel ? "sel" : "", items.length ? "has" : "",
+      dow === 0 ? "sun" : dow === 6 ? "sat" : ""].filter(Boolean).join(" ");
+    const chips = items.slice(0, 2).map((e) =>
+      `<span class="cal-ev${e.imp >= 1 ? " imp" : ""}">${EC_FLAG[e.c] || ""}${ecKo(e.t).slice(0, 8)}</span>`).join("");
+    const more = items.length > 2 ? `<span class="cal-ev more">+${items.length - 2}</span>` : "";
+    return `<div class="cal-cell ${cls}" data-d="${ds}">
+      <span class="cal-cell-d">${dt.getDate()}</span>${items.length ? `<span class="cal-cnt">${items.length}</span>` : ""}
+      <div class="cal-evs">${chips}${more}</div></div>`;
+  }).join("");
+  $("#ec-grid").innerHTML = `<div class="cal-hdrow">${head}</div><div class="cal-cells">${body}</div>`;
+  $("#ec-grid").querySelectorAll(".cal-cell[data-d]").forEach((c) =>
+    c.onclick = () => { ecSel = c.dataset.d; drawEcMonth(); });
+  drawEcDay();
+}
+
+function drawEcDay() {
+  const host = $("#ec-daylist");
+  const items = (ecByDay()[ecSel] || []).slice().sort((a, b) => a.tm.localeCompare(b.tm) || b.imp - a.imp);
+  const dt = ecSel ? new Date(ecSel + "T00:00:00") : null;
+  const yo = dt ? "일월화수목금토"[dt.getDay()] : "";
+  const head = `<div class="cal-date">${ecSel ? ecSel.replace(/-/g, ".") + ` (${yo})` : ""}
+    <span class="sub-note">${items.length}건 · 한국시간</span></div>`;
+  if (!items.length) { host.innerHTML = head + `<p class="mini-note">이 날짜에 예정된 지표가 없습니다.</p>`; return; }
+  const n = (v, u) => v == null ? "-" : `${v}${u && u !== "%" ? " " + u : (u || "")}`;
+  host.innerHTML = head + `<table class="ec-table"><tr>
+      <th>시각</th><th></th><th>지표</th><th>발표</th><th>예상</th><th>이전</th></tr>` +
+    items.map((e) => `<tr class="${e.imp >= 1 ? "imp" : ""}">
+      <td>${e.tm}</td><td>${EC_FLAG[e.c] || e.c}</td>
+      <td>${e.imp >= 1 ? "⭐ " : ""}${ecKo(e.t)}${e.per ? ` <span class="sub-note">(${e.per})</span>` : ""}</td>
+      <td><b>${n(e.a, e.u)}</b></td><td>${n(e.f, e.u)}</td><td>${n(e.p, e.u)}</td></tr>`).join("") + `</table>`;
 }
 
 /* ---------- 마켓: 뉴스·속보 ---------- */
