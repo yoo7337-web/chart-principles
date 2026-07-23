@@ -656,8 +656,24 @@ def _cik_map() -> dict:
         return {}
 
 
+def kr_reports(code: str) -> list:
+    """네이버 증권사 리서치 리포트 최근 5건(무키). 원문 PDF는 상세 페이지의 다운로드 버튼으로 연결."""
+    out = []
+    try:
+        arr = _getj(f"https://m.stock.naver.com/api/research/stock/{code}?pageSize=6&page=1")
+        for r in (arr or [])[:5]:
+            out.append({
+                "d": r.get("writeDate", ""), "broker": (r.get("brokerName") or "")[:20],
+                "title": re.sub(r"<[^>]+>", "", r.get("title") or "")[:70],
+                "preview": re.sub(r"<[^>]+>", "", r.get("previewContent") or "")[:110],
+                "link": f"https://finance.naver.com/research/company_read.naver?nid={r.get('researchId')}&itemCode={code}"})
+    except Exception:
+        pass
+    return out
+
+
 def kr_feed(code: str) -> dict:
-    out = {"news": [], "disc": []}
+    out = {"news": [], "disc": [], "reports": kr_reports(code)}
     cut_news = datetime.now(KST) - timedelta(days=7)
     cut_disc = datetime.now(KST) - timedelta(days=183)
     try:
@@ -694,12 +710,41 @@ def kr_feed(code: str) -> dict:
     return out
 
 
+def us_reports(t) -> list:
+    """미국은 리서치 원문이 유료 → yfinance 애널리스트 등급변경(증권사·등급·목표가 변화) 최근 6건을 리포트 대용."""
+    out = []
+    try:
+        u = t.upgrades_downgrades
+        if u is None or not len(u):
+            return out
+        u = u.sort_index(ascending=False).head(6)
+        for idx, row in u.iterrows():
+            try:
+                d = idx.strftime("%Y-%m-%d")
+            except Exception:
+                d = str(idx)[:10]
+            firm = str(row.get("Firm") or "")[:24]
+            to_g, from_g = str(row.get("ToGrade") or ""), str(row.get("FromGrade") or "")
+            pt, ppt = row.get("currentPriceTarget"), row.get("priorPriceTarget")
+            action = str(row.get("Action") or "")
+            grade = to_g if not from_g or from_g == to_g else f"{from_g} → {to_g}"
+            tgt = ""
+            if pt and not (isinstance(pt, float) and pt != pt) and pt > 0:
+                tgt = f"목표가 ${pt:.0f}" + (f" (이전 ${ppt:.0f})" if ppt and ppt > 0 and ppt != pt else "")
+            act_ko = {"up": "상향", "down": "하향", "init": "신규", "main": "유지", "reit": "유지"}.get(action, action)
+            out.append({"d": d, "broker": firm, "grade": grade, "action": act_ko, "target": tgt})
+    except Exception:
+        pass
+    return out
+
+
 def us_feed(tk: str, cik: str | None) -> dict:
     import yfinance as yf
-    out = {"news": [], "disc": []}
+    tobj = yf.Ticker(tk)
+    out = {"news": [], "disc": [], "reports": us_reports(tobj)}
     cut = datetime.now(timezone.utc) - timedelta(days=7)
     try:
-        for n in (yf.Ticker(tk).news or [])[:12]:
+        for n in (tobj.news or [])[:12]:
             c = n.get("content") or n
             ts_raw = c.get("pubDate") or n.get("providerPublishTime")
             try:
@@ -746,7 +791,7 @@ def build_feed(quick: bool = False) -> dict:
     tickers = US_TICKERS[:5] if quick else US_TICKERS
     fmap = {}
     for code, d in _kr_parallel(codes, kr_feed, "KR feed").items():
-        if d["news"] or d["disc"]:
+        if d["news"] or d["disc"] or d.get("reports"):
             fmap[f"kr_{code}"] = d
 
     # DART 공시로 교체(원문 딥링크 rcptNo) — 반드시 순차·저속. 실패 시 네이버 공시(목록 링크) 유지.
