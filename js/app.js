@@ -1627,10 +1627,19 @@ function adminSetup() {
   const btn = document.getElementById("admin-devlog");
   if (!btn) return;
   btn.onclick = () => activateTab("devlog");
-  const show = () => { btn.style.display = ""; };
+  const place = () => {   // 로그아웃 버튼 바로 아래·같은 우측 정렬
+    const out = document.getElementById("auth-out");
+    if (out) {
+      const r = out.getBoundingClientRect();
+      btn.style.top = (r.bottom + 6) + "px";
+      btn.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+    }
+  };
+  const show = () => { btn.style.display = ""; setTimeout(place, 50); };
   if (["localhost", "127.0.0.1"].includes(location.hostname)) show();
   else if ((window.__userEmail || "") === ADMIN_EMAIL) show();
   window.addEventListener("authuser", (e) => { if (e.detail === ADMIN_EMAIL) show(); });
+  window.addEventListener("resize", place);
 }
 adminSetup();
 
@@ -2843,6 +2852,7 @@ function renderHome() {
       $("#hm-back").style.display = "none";
       $("#home-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
       renderIdxCards(); drawTreemap(); renderMovers(); renderRankings(); renderHomeNews(); renderHomeSchedule();
+      setTimeout(syncHomeHeights, 60);
     };
   });
   $("#hm-back").onclick = () => {
@@ -2987,18 +2997,21 @@ function renderHomeSchedule() {
   const md = (ds) => ds.slice(5).replace("-", "/");
   const yo = (ds) => "일월화수목금토"[new Date(ds + "T00:00:00").getDay()];
 
-  // 실적발표 — 홈 시장 토글 연동
-  const er = (CAL?.earnings?.[homeMk] || []).filter((e) => inWeek(e.date))
+  // 실적발표 — 한국+미국 모두(시장 토글과 무관, 국기로 구분)
+  const er = ["kr", "us"].flatMap((mk) => (CAL?.earnings?.[mk] || []).map((e) => ({ ...e, mk })))
+    .filter((e) => inWeek(e.date))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
-  eHost.innerHTML = er.length ? er.slice(0, 40).map((e) => `
-    <div class="sch-row${e.t ? " clickable" : ""}${e.date === today ? " today" : ""}" ${e.t ? `data-t="${e.t}"` : ""}>
+  const flagE = { kr: "🇰🇷", us: "🇺🇸" };
+  eHost.innerHTML = er.length ? er.slice(0, 60).map((e) => `
+    <div class="sch-row${e.t ? " clickable" : ""}${e.date === today ? " today" : ""}" ${e.t ? `data-t="${e.mk}_${e.t}"` : ""}>
       <span class="sch-date">${md(e.date)}<span class="sub-note">(${yo(e.date)})</span></span>
-      ${e.t ? `<img class="sch-logo" src="${logoUrl(homeMk, e.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sch-logo"></span>`}
+      <span class="sch-flag">${flagE[e.mk]}</span>
+      ${e.t ? `<img class="sch-logo" src="${logoUrl(e.mk, e.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sch-logo"></span>`}
       <span class="sch-name"><b>${esc(e.name)}</b></span>
-      <span class="sch-info sub-note">${homeMk === "kr" ? esc((e.event || "").slice(0, 18)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
+      <span class="sch-info sub-note">${e.mk === "kr" ? esc((e.event || "").slice(0, 16)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
     </div>`).join("") : `<p class="mini-note">이번 주 예정된 실적발표가 없습니다.</p>`;
   eHost.querySelectorAll(".sch-row.clickable").forEach((el) => el.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(`${homeMk}_${el.dataset.t}`);
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.t);
   });
 
   // 경제지표 — 이번 주 중요도 중·상(글로벌 매크로라 시장 토글과 무관, 모든 국가)

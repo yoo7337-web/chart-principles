@@ -1079,8 +1079,12 @@ dialog { background: var(--card); color: var(--ink); }
 /* ── 레이아웃 재배치(2026-07-23): 전역 1440px + 홈·종목조회 2단 ── */
 /* 홈: 히트맵(왼) | 우측 상하 2분할(시장뉴스/딜) — 우측 전체 높이 = 히트맵 높이 → 그 아래 랭킹 풀폭 */
 .home-grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; }
-.home-col { min-width: 0; }
+.home-col { min-width: 0; margin-top: 0; }
 .home-col .home-h { margin-top: 0; }
+/* 하단 그리드(랭킹|일정) 좌우 상단선 정렬 — 두 컬럼 첫 요소 margin-top 제거 */
+#home-grid-bottom { margin-top: 22px; }
+#home-grid-bottom > .home-col, #home-grid-bottom > .home-right { margin-top: 0; }
+#home-grid-bottom .home-right .home-rblock:first-child .home-h { margin-top: 0; }
 .home-right { min-width: 0; display: grid; grid-template-rows: 1fr 1fr; gap: 18px; min-height: 0; }
 .home-rblock { min-height: 0; display: flex; flex-direction: column; }
 .home-rblock .home-h { margin-top: 0; flex: none; }
