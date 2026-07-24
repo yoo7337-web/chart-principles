@@ -2647,8 +2647,11 @@ function renderScreener() {
     tb.innerHTML = `<tbody><tr><td style="padding:26px;text-align:center;color:var(--muted)">조건에 맞는 종목이 없습니다.</td></tr></tbody>`;
     return;
   }
+  // 항상 표시하는 고정 재무 열(사용자 요청) + 테마·적용 지표(중복 제외)
+  const FIXED_COLS = ["per", "pbr", "rev_yoy", "opm", "debt", "payout"];
   const themeCols = useTheme ? SCR_THEMES.find((x) => x.id === scrThemeActive).conds.map((c) => c.m) : [];
-  const cols = [...new Set([...themeCols, ...active])].slice(0, 4);  // 테마·적용 지표값을 컬럼으로 표시(최대 4)
+  const dynCols = [...new Set([...themeCols, ...active])].filter((id) => !FIXED_COLS.includes(id)).slice(0, 3);
+  const cols = [...FIXED_COLS, ...dynCols];
   const colHead = cols.map((id) => `<th class="scr-r">${scrColLabel(id)}</th>`).join("");
   const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
   const body = rows.map((t) => {
