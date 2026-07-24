@@ -3951,6 +3951,7 @@ function trSpark(weekly, d30, w, h) {
 }
 
 let trSrc = "naver", trBucket = "all";
+let trSetWlTs = () => {};   // 워치리스트 갱신시각 표기(소스 토글 시 네이버↔위키 전환)
 // 급등 구간(모집단=워치리스트 전체, r7 기준)
 const TR_BUCKETS = [
   ["all", "전체", () => true],
@@ -4009,6 +4010,16 @@ function renderTrends() {
       $("#tr-context").textContent = "trends.json 없음 — python analysis\\trend_radar.py 실행 필요";
       return;
     }
+    // 섹션별 갱신 시점(소스별 실제 수집 시각) — 없으면 파일 생성시각 폴백
+    const tsOf = (k) => t.ts?.[k] || t.generated;
+    const tsTxt = (k) => { const v = tsOf(k); return v ? `${relTime(v)} 갱신 · ${v}` : ""; };
+    const setTs = (id, k) => { const el = document.getElementById(id); if (el) el.textContent = tsTxt(k); };
+    setTs("tr-ts-google", "google");
+    setTs("tr-ts-shop", "shopping");
+    setTs("tr-ts-amz", "amazon");
+    trSetWlTs = () => setTs("tr-ts-wl", trSrc === "wiki" ? "wiki" : "watchlist");
+    trSetWlTs();
+
     $("#tr-context").innerHTML = `<b>트렌드 레이더</b> — 검색 데이터로 소비 트렌드를 선제 포착해 관련주와 연결합니다.
       ${t.generated} 갱신(하루 1회) · 네이버 지수는 <b>상대값</b>(기간 내 최대=100, 절대 검색량 아님) ·
       구글 급상승은 순위성 데이터 · 관련주 연결은 참고용(투자 판단 아님) · 틱톡·인스타는 공식 API 부재로 미지원`;
@@ -4041,6 +4052,7 @@ function renderTrends() {
       trSrc = b.dataset.s;
       $("#tr-src").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
       drawTrWatchlist();
+      trSetWlTs();   // 네이버↔위키 전환 시 갱신시각도 해당 소스로
     });
 
     // ④ 아마존 베스트셀러

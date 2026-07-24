@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=139">
-<script src="firebase-config.js?v=139"></script>
-<script src="js/auth.js?v=139"></script>
+<link rel="stylesheet" href="css/style.css?v=140">
+<script src="firebase-config.js?v=140"></script>
+<script src="js/auth.js?v=140"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -123,21 +123,25 @@
   <section id="tab-trends" class="panel">
     <div class="criteria" id="tr-context"></div>
     <h2>🔥 오늘의 급상승 검색어 <span class="sub-note">(구글 트렌드 일간 · 관련주는 AI 추정 참고용)</span>
+      <span class="tr-ts" id="tr-ts-google"></span>
       <span class="mk-toggle" style="margin-left:12px" id="tr-geo">
         <button data-g="kr" class="active">🇰🇷 한국</button>
         <button data-g="us">🇺🇸 미국</button>
       </span></h2>
     <div id="tr-google" class="card-flat"></div>
     <h2 style="margin-top:24px">📌 내 워치리스트 <span class="sub-note" id="tr-wl-note">(1년 추이 · 급등=최근 7일 ÷ 이전 8주)</span>
+      <span class="tr-ts" id="tr-ts-wl"></span>
       <span class="mk-toggle" style="margin-left:12px" id="tr-src">
         <button data-s="naver" class="active">🇰🇷 네이버 검색</button>
         <button data-s="wiki">🌐 글로벌(위키 조회수)</button>
       </span></h2>
     <div class="controls" id="tr-filter" style="margin:8px 0"></div>
     <div id="tr-watchlist"></div>
-    <h2 style="margin-top:24px">🛒 쇼핑 카테고리 검색 트렌드 <span class="sub-note">(네이버 쇼핑인사이트 · 최근 4주 ÷ 이전 평균)</span></h2>
+    <h2 style="margin-top:24px">🛒 쇼핑 카테고리 검색 트렌드 <span class="sub-note">(네이버 쇼핑인사이트 · 최근 4주 ÷ 이전 평균)</span>
+      <span class="tr-ts" id="tr-ts-shop"></span></h2>
     <div id="tr-shopping" class="card-flat"></div>
-    <h2 style="margin-top:24px">📦 아마존 미국 베스트셀러 <span class="sub-note">(카테고리별 실시간 판매 순위 · 소비 트렌드 참고 · 쿠팡은 봇 차단으로 미지원)</span></h2>
+    <h2 style="margin-top:24px">📦 아마존 미국 베스트셀러 <span class="sub-note">(카테고리별 실시간 판매 순위 · 소비 트렌드 참고 · 쿠팡은 봇 차단으로 미지원)</span>
+      <span class="tr-ts" id="tr-ts-amz"></span></h2>
     <div id="tr-amazon"></div>
   </section>
 
@@ -797,6 +801,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=139"></script>
+<script src="js/app.js?v=140"></script>
 </body>
 </html>
