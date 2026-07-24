@@ -2985,7 +2985,7 @@ function renderMovers() {
 // 투자자 매매동향 그래프 (investor.json — KR 개인/외국인/기관 순매수, 일간/주간/월간)
 let invMkt = "kospi", invPeriod = "day";
 function invAggregate(daily, period) {
-  if (period === "day") return daily.slice(-24);
+  if (period === "day") return daily.slice(-7);   // 일간 = 최근 7거래일
   const bucket = {};
   daily.forEach((r) => {
     const dt = new Date(r.d + "T00:00:00");
@@ -3008,31 +3008,34 @@ function renderInvestor() {
   wrap.querySelectorAll("#inv-period button").forEach((b) => { b.classList.toggle("active", b.dataset.p === invPeriod); b.onclick = () => { invPeriod = b.dataset.p; renderInvestor(); }; });
 
   const rows = invAggregate(daily, invPeriod);
-  const W = 1180, H = 300, padL = 8, padR = 8, padT = 20, padB = 34;
+  const W = 720, H = 340, padL = 8, padR = 8, padT = 30, padB = 34;
   const n = rows.length, gw = (W - padL - padR) / n, plotH = H - padT - padB;
   const keys = [["indi", "개인", "#9aa4b2"], ["foreign", "외국인", "#4391ff"], ["inst", "기관", "#f0b34c"]];
+  const fmtEok = (v) => v == null ? "" : Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조"
+    : Math.round(v).toLocaleString();  // 억원 단위(1조 이상만 '조' 표기)
   const vals = rows.flatMap((r) => keys.map(([k]) => r[k])).filter((v) => v != null);
   const maxV = Math.max(...vals, 0), minV = Math.min(...vals, 0);
   const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * plotH;
   const y0 = yS(0);
-  const bw = Math.min(15, gw / 4);
-  const fmtEok = (v) => v == null ? "" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+  const bw = Math.min(16, gw / 3.6);
   let bars = "", labels = "";
   rows.forEach((r, i) => {
     const cx = padL + gw * i + gw / 2;
     keys.forEach(([k, , c], j) => {
       const v = r[k]; if (v == null) return;
-      const x = cx + (j - 1) * (bw + 2) - bw / 2;
-      const yv = yS(v);
-      bars += `<rect x="${x}" y="${Math.min(yv, y0)}" width="${bw}" height="${Math.max(1, Math.abs(yv - y0))}" fill="${c}" rx="1.5"/>`;
+      const x = cx + (j - 1) * (bw + 1.5) - bw / 2;
+      const yv = yS(v), up = v >= 0;
+      bars += `<rect x="${x}" y="${Math.min(yv, y0)}" width="${bw}" height="${Math.max(1, Math.abs(yv - y0))}" fill="${c}" rx="1.5"/>`
+        // 금액 라벨(막대 끝) — 순매수=위, 순매도=아래
+        + `<text x="${x + bw / 2}" y="${up ? yv - 3 : yv + 9}" font-size="7.5" text-anchor="middle" fill="${c}">${fmtEok(v)}</text>`;
     });
-    const lab = invPeriod === "month" ? r.d.slice(2) : invPeriod === "week" ? r.d.slice(5) : r.d.slice(5);
-    labels += `<text x="${cx}" y="${H - 10}" font-size="9" text-anchor="middle" fill="#8b8b93">${lab}</text>`;
+    const lab = invPeriod === "month" ? r.d.slice(2) : r.d.slice(5);
+    labels += `<text x="${cx}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${lab}</text>`;
   });
   const zero = `<line x1="${padL}" y1="${y0}" x2="${W - padR}" y2="${y0}" stroke="#3a3a44"/>`;
   const legend = keys.map(([, lab, c]) => `<span style="color:${c}">■</span> ${lab}`).join("  ");
-  $("#inv-chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="fin-svg" style="min-height:260px">${zero}${bars}${labels}</svg>
-    <p class="legend">${legend} <span class="sub-note">· 순매수(+)/순매도(−) · 단위 억원 · 출처 네이버</span></p>`;
+  $("#inv-chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${zero}${bars}${labels}</svg>
+    <p class="legend">${legend} <span class="sub-note">· 순매수(+)/순매도(−) · 단위 억원 · 네이버</span></p>`;
 }
 
 // 금주(월~일) 실적발표·경제지표 — 홈 하단 우측. calendar.json(CAL) 재사용.
@@ -4028,6 +4031,16 @@ function renderTrends() {
       $("#tr-src").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
       drawTrWatchlist();
     });
+
+    // ④ 아마존 베스트셀러
+    const az = t.amazon || [];
+    $("#tr-amazon").innerHTML = az.length ? `<div class="tr-azgrid">` + az.map((c) => `
+      <div class="card-flat tr-azcard">
+        <div class="tr-azhead"><b>${esc(c.cat)}</b></div>
+        ${(c.items || []).slice(0, 8).map((it) =>
+          `<a class="tr-azrow" href="${it.link}" target="_blank" rel="noopener">
+            <span class="tr-azrank">${it.rank}</span><span class="tr-aztitle">${esc(it.title)}</span></a>`).join("")}
+      </div>`).join("") + `</div>` : `<div class="card-flat"><p class="mini-note">아마존 데이터 없음 — 다음 갱신을 기다려 주세요.</p></div>`;
 
     // ③ 쇼핑 카테고리
     const sh = t.shopping || [];

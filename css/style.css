@@ -852,6 +852,14 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .tr-shkws { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 8px 122px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .tr-shkw { font-size: .72rem; color: var(--muted); background: rgba(255,255,255,.04); border-radius: 8px; padding: 1px 7px; }
 .tr-shkw.top3 { color: #ff8c9a; background: rgba(245,68,90,.1); font-weight: 600; }
+/* 아마존 베스트셀러 */
+.tr-azgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.tr-azcard { padding: 10px 14px; }
+.tr-azhead { font-size: .9rem; margin-bottom: 6px; }
+.tr-azrow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; text-decoration: none; color: var(--ink); font-size: .8rem; }
+.tr-azrow:hover .tr-aztitle { color: var(--accent); }
+.tr-azrank { flex: 0 0 18px; color: var(--accent); font-weight: 700; text-align: center; }
+.tr-aztitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 800px) { .tr-shkws { padding-left: 0; } }
 
 /* 개발일지 — 관리자 전용 작은 아이콘(헤더 우측, 로그아웃 아래) */

@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=136">
-<script src="firebase-config.js?v=136"></script>
-<script src="js/auth.js?v=136"></script>
+<link rel="stylesheet" href="css/style.css?v=137">
+<script src="firebase-config.js?v=137"></script>
+<script src="js/auth.js?v=137"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -137,6 +137,8 @@
     <div id="tr-watchlist"></div>
     <h2 style="margin-top:24px">🛒 쇼핑 카테고리 검색 트렌드 <span class="sub-note">(네이버 쇼핑인사이트 · 최근 4주 ÷ 이전 평균)</span></h2>
     <div id="tr-shopping" class="card-flat"></div>
+    <h2 style="margin-top:24px">📦 아마존 미국 베스트셀러 <span class="sub-note">(카테고리별 실시간 판매 순위 · 소비 트렌드 참고 · 쿠팡은 봇 차단으로 미지원)</span></h2>
+    <div id="tr-amazon"></div>
   </section>
 
   <section id="tab-lookup" class="panel">
@@ -390,12 +392,29 @@
       <div id="mv-list" class="mv-list card-flat"></div>
     </div>
 
-    <!-- 하단 2단: 왼쪽=실시간 랭킹(히트맵 크기) / 오른쪽=금주 실적발표·경제지표 -->
+    <!-- 실시간 랭킹: 전체폭(2열 종목 그리드) -->
+    <div id="rank-wrap" style="display:none;margin-top:22px">
+      <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
+      <div class="chips" id="rank-chips"></div>
+      <div id="rank-list" class="rank-grid mv-list card-flat"></div>
+    </div>
+
+    <!-- 하단 2단: 왼쪽=투자자 매매동향 / 오른쪽=금주 실적발표·경제지표(높이 연장) -->
     <div class="home-grid2" id="home-grid-bottom">
-      <div class="home-col" id="rank-wrap" style="display:none">
-        <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
-        <div class="chips" id="rank-chips"></div>
-        <div id="rank-list" class="rank-grid mv-list card-flat"></div>
+      <div class="home-col" id="inv-wrap" style="display:none">
+        <h2 class="home-h">👥 투자자 매매동향 <span class="sub-note">(순매수 억원 · 국내 전용)</span>
+          <span style="flex:1"></span>
+          <span class="mk-toggle" id="inv-mkt">
+            <button data-m="kospi" class="active">코스피</button>
+            <button data-m="kosdaq">코스닥</button>
+          </span>
+          <span class="mk-toggle" id="inv-period">
+            <button data-p="day" class="active">일간</button>
+            <button data-p="week">주간</button>
+            <button data-p="month">월간</button>
+          </span>
+        </h2>
+        <div id="inv-chart" class="card-flat"></div>
       </div>
       <div class="home-right">
         <div class="home-rblock">
@@ -412,22 +431,6 @@
           <div id="home-econ" class="news-list card-flat"></div>
         </div>
       </div>
-    </div>
-
-    <div id="inv-wrap" style="display:none;margin-top:22px">
-      <h2 class="home-h">👥 투자자 매매동향 <span class="sub-note">(개인·외국인·기관 순매수 · 국내 전용)</span>
-        <span style="flex:1"></span>
-        <span class="mk-toggle" id="inv-mkt">
-          <button data-m="kospi" class="active">코스피</button>
-          <button data-m="kosdaq">코스닥</button>
-        </span>
-        <span class="mk-toggle" id="inv-period">
-          <button data-p="day" class="active">일간</button>
-          <button data-p="week">주간</button>
-          <button data-p="month">월간</button>
-        </span>
-      </h2>
-      <div id="inv-chart" class="card-flat"></div>
     </div>
   </section>
 
@@ -787,6 +790,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=136"></script>
+<script src="js/app.js?v=137"></script>
 </body>
 </html>
