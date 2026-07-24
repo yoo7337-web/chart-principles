@@ -19,7 +19,7 @@ START = "2016-01-01"
 MIN_ROWS = 750  # 원칙 연구 게이트(≥3년) — load_research()에서 적용
 MIN_ROWS_COLLECT = 20  # 수집 바닥값 — 신규상장·소형주도 수집(주식찾기·마켓현황·종목조회용). c5는 ≥6행 필요
 
-# 미국 대형주 100 (S&P500 시총 상위 + 나스닥 대표주, 2026 기준 고정 리스트)
+# 미국 대형·인기주 (S&P500 시총 상위 + 나스닥 대표 + 인기 성장/테마주, 2026 기준)
 US_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "BRK-B", "LLY",
     "JPM", "V", "XOM", "UNH", "MA", "COST", "HD", "PG", "WMT", "NFLX",
@@ -31,7 +31,13 @@ US_TICKERS = [
     "MS", "COP", "VRTX", "MDT", "REGN", "PLD", "SBUX", "CB", "ETN", "ADP",
     "MMC", "CI", "LRCX", "BA", "MU", "PANW", "ADI", "GILD", "DE", "BMY",
     "SO", "KLAC", "MDLZ", "SCHW", "ANET", "DUK", "TMUS", "INTC", "SHOP", "PYPL",
+    # 확장(2026-07): 인기 성장·테마·중형주
+    "PLTR", "COIN", "MSTR", "SMCI", "MRVL", "SNOW", "CRWD", "DDOG", "NET", "ABNB",
+    "RBLX", "HOOD", "SOFI", "DASH", "RIVN", "LCID", "AFRM", "ROKU", "PINS", "SNAP",
+    "PLUG", "F", "GM", "NKE", "CMG", "MAR", "DAL", "CCL", "ARM", "DELL",
+    "WDC", "ON", "ENPH", "FSLR", "CVNA", "DKNG", "ZS", "TTD",
 ]
+US_TICKERS = list(dict.fromkeys(US_TICKERS))  # 중복 제거(순서 보존)
 
 
 def norm_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -84,7 +90,7 @@ def _scrape_sise(sosok: int, want: int) -> list:
     return out[:want]
 
 
-def kr_universe(kospi_n: int = 500, kosdaq_n: int = 300) -> dict:
+def kr_universe(kospi_n: int = 700, kosdaq_n: int = 500) -> dict:
     """코스피 상위 kospi_n + 코스닥 상위 kosdaq_n 종목 → {code: name}.
     kr_names.json(전체) + kr_universe.json(market·mcap_rank 티어) 저장.
     (KRX 목록 API가 로그인 요구로 차단되어 네이버 시총 페이지 스크래핑으로 우회)"""
@@ -260,7 +266,7 @@ def collect_cloud() -> None:
     start_kr = (_date.today() - timedelta(days=760)).strftime("%Y%m%d")  # ~2년(지표 여유)
     start_us = (_date.today() - timedelta(days=760)).strftime("%Y-%m-%d")
     today = _date.today().strftime("%Y%m%d")
-    names = kr_universe(kospi_n=500, kosdaq_n=300)  # 1단계 800 전체(주식찾기·마켓현황용)
+    names = kr_universe(kospi_n=700, kosdaq_n=500)  # 확장 유니버스 1,200(주식찾기·마켓현황용)
 
     # US
     todo = [t for t in US_TICKERS if not cache_fresh(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")]
