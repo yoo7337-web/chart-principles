@@ -6373,16 +6373,134 @@ function hldSubmit() {
   hldRefresh();
 }
 
+/* ---------- 보유 포트폴리오 분석(상단): 수익추이·산업비중·구성 요약 ---------- */
+const HLD_SERIES = {};   // 종목 시계열 캐시(수익추이용)
+const HLD_COLORS = ["#4391ff", "#f5445a", "#22c07a", "#f0b34c", "#9d7bff", "#38bdf8", "#fb923c", "#a3e635"];
+
+function renderHldAnalytics(all) {
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  const gVal = all.reduce((a, h) => a + (h.val || 0), 0) || 1;
+
+  // ── ① 종목별 수익률 추이(평균단가 대비, 3개월) — 평가금 상위 8, 시계열 lazy fetch ──
+  const top8 = all.slice().sort((a, b) => (b.val || 0) - (a.val || 0)).slice(0, 8);
+  const chartHost = $("#hld-perf-chart");
+  chartHost.innerHTML = `<p class="mini-note">시계열 불러오는 중…</p>`;
+  Promise.all(top8.map((h) => {
+    const key = `${h.mk}_${h.ticker}`;
+    if (HLD_SERIES[key] !== undefined) return Promise.resolve();
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+      .then((st) => { HLD_SERIES[key] = st?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
+  })).then(() => {
+    const W = 680, H = 260, padL = 8, padR = 120, padT = 14, padB = 24;
+    const lines = [];
+    top8.forEach((h, i) => {
+      const s = HLD_SERIES[`${h.mk}_${h.ticker}`];
+      if (!s || s.length < 10 || !h.avg) return;
+      const tail = s.slice(-63);   // ~3개월
+      // 해외: series는 원통화(USD)·avg는 원화 환산 → 마지막 종가와 현재가(원)의 비율로 환산(환율 고정 근사)
+      const fx = h.mk === "us" && h.price && tail[tail.length - 1].c ? h.price / tail[tail.length - 1].c : 1;
+      const pts = tail.map((b) => (b.c * fx / h.avg - 1) * 100);
+      lines.push({ name: h.name, color: HLD_COLORS[i % 8], pts, last: pts[pts.length - 1], t0: tail[0].t, t1: tail[tail.length - 1].t });
+    });
+    if (!lines.length) { chartHost.innerHTML = `<p class="mini-note">시계열 데이터가 없는 종목입니다(유니버스 밖 ETF 등).</p>`; return; }
+    const allV = lines.flatMap((l) => l.pts);
+    const maxV = Math.max(...allV, 5), minV = Math.min(...allV, -5);
+    const n = Math.max(...lines.map((l) => l.pts.length));
+    const xS = (i, len) => padL + (i / (len - 1)) * (W - padL - padR);
+    const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * (H - padT - padB);
+    const y0 = yS(0);
+    let svg = `<line x1="${padL}" y1="${y0}" x2="${W - padR}" y2="${y0}" stroke="#3a3a44" stroke-dasharray="3 3"/>`;
+    // 끝 라벨 겹침 방지: last 기준 정렬 후 최소 간격 배치
+    const sorted = lines.slice().sort((a, b) => b.last - a.last);
+    let prevY = -99;
+    sorted.forEach((l) => {
+      l.labY = Math.max(yS(l.last), prevY + 13);
+      prevY = l.labY;
+    });
+    lines.forEach((l) => {
+      svg += `<polyline points="${l.pts.map((v, i) => xS(i, l.pts.length).toFixed(1) + "," + yS(v).toFixed(1)).join(" ")}"
+        fill="none" stroke="${l.color}" stroke-width="1.8"/>`;
+    });
+    sorted.forEach((l) => {
+      svg += `<text x="${W - padR + 6}" y="${l.labY + 3}" font-size="9.5" fill="${l.color}">${esc(l.name.slice(0, 8))} ${l.last >= 0 ? "+" : ""}${l.last.toFixed(1)}%</text>`;
+    });
+    svg += `<text x="${padL}" y="${H - 8}" font-size="9" fill="#8b8b93">${lines[0].t0.slice(5)}</text>
+      <text x="${W - padR}" y="${H - 8}" font-size="9" text-anchor="end" fill="#8b8b93">${lines[0].t1.slice(5)}</text>`;
+    chartHost.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${svg}</svg>
+      <p class="sub-note" style="margin:4px 0 0">0% 기준선 = 내 평균단가 · 해외는 현재 환율 고정 환산 근사${all.length > 8 ? ` · 평가금 상위 8종목만 표시(전체 ${all.length})` : ""}</p>`;
+  });
+
+  // ── ② 산업별 보유 비중(도넛 + 리스트) ──
+  const secOf = (h) => {
+    const t = (MARKET?.heatmap || []).find((x) => x.m === h.mk && x.t === h.ticker);
+    return t?.sector || (h.lev ? "레버리지·ETF" : "기타");
+  };
+  const bySec = {};
+  all.forEach((h) => { const s = secOf(h); bySec[s] = (bySec[s] || 0) + (h.val || 0); });
+  const secs = Object.entries(bySec).sort((a, b) => b[1] - a[1]);
+  const R = 56, C = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = secs.map(([s, v], i) => {
+    const frac = v / gVal, dash = frac * C;
+    const el = `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${HLD_COLORS[i % 8]}" stroke-width="26"
+      stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-acc * C + C / 4}"/>`;
+    acc += frac;
+    return el;
+  }).join("");
+  $("#hld-sector").innerHTML = `<div class="hld-donut-wrap">
+    <svg viewBox="0 0 160 160" class="hld-donut">${segs}
+      <text x="80" y="76" text-anchor="middle" font-size="12" fill="#8b8b93">산업</text>
+      <text x="80" y="92" text-anchor="middle" font-size="12" fill="#e7e7ec">${secs.length}개</text></svg>
+    <div class="hld-seclist">${secs.map(([s, v], i) => `<div class="hld-secrow">
+      <span class="hld-dot" style="background:${HLD_COLORS[i % 8]}"></span>
+      <span class="hld-secname">${esc(s)}</span>
+      <span class="hld-secpct">${(v / gVal * 100).toFixed(1)}%</span>
+      <span class="sub-note">${won(v)}</span></div>`).join("")}</div></div>`;
+
+  // ── ③ 국가·시장 / 시총 체급 / 수익 기여 ──
+  const bar = (label, frac, color) => `<div class="hld-brow"><span class="hld-blab">${label}</span>
+    <div class="hld-bbar"><span style="width:${(frac * 100).toFixed(1)}%;background:${color}"></span></div>
+    <b>${(frac * 100).toFixed(1)}%</b></div>`;
+  const krVal = all.filter((h) => h.mk === "kr").reduce((a, h) => a + (h.val || 0), 0);
+  $("#hld-country").innerHTML = bar("🇰🇷 국내", krVal / gVal, "#4391ff") + bar("🇺🇸 해외", (gVal - krVal) / gVal, "#f5445a");
+
+  const tierOf = (h) => {
+    const t = (MARKET?.heatmap || []).find((x) => x.m === h.mk && x.t === h.ticker);
+    if (!t?.mcap) return "기타·ETF";
+    if (h.mk === "kr") return t.mcap >= 2e12 ? "대형(2조↑)" : t.mcap >= 3e11 ? "중형" : "소형";
+    return t.mcap >= 1e10 ? "대형($10B↑)" : t.mcap >= 2e9 ? "중형" : "소형";
+  };
+  const byTier = {};
+  all.forEach((h) => { const t = tierOf(h); byTier[t] = (byTier[t] || 0) + (h.val || 0); });
+  $("#hld-tier").innerHTML = Object.entries(byTier).sort((a, b) => b[1] - a[1])
+    .map(([t, v], i) => bar(t, v / gVal, HLD_COLORS[i % 8])).join("");
+
+  const byPl = all.slice().sort((a, b) => (b.pl || 0) - (a.pl || 0));
+  const chip = (h) => `<span class="hld-chip ${h.pl >= 0 ? "pos" : "neg"}" data-tk="${h.mk}_${h.ticker}">${esc(h.name)} ${won(h.pl, true)}</span>`;
+  $("#hld-contrib").innerHTML = `<div class="sub-note" style="margin-bottom:4px">효자 TOP3</div>
+    <div class="hld-chips">${byPl.slice(0, 3).map(chip).join("")}</div>
+    <div class="sub-note" style="margin:8px 0 4px">아픈 손가락 TOP3</div>
+    <div class="hld-chips">${byPl.slice(-3).reverse().map(chip).join("")}</div>`;
+  $("#hld-contrib").querySelectorAll(".hld-chip").forEach((c) => c.onclick = () => {
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(c.dataset.tk);
+  });
+}
+
 function hldRender() {
   const host = $("#hld-list"), sumEl = $("#hld-summary");
   const all = pfHoldingsLive();   // 현재가·평가금·수익률은 최신 시세로 재계산
   if (!all.length) {
     sumEl.style.display = "none";
+    $("#hld-analytics").style.display = "none";
+    $("#hld-table-h").style.display = "none";
     host.innerHTML = `<div class="card-flat" style="text-align:center;padding:40px 16px;color:var(--muted)">
       보유종목이 없습니다 — <b>＋ 종목 추가</b>로 입력하거나 <b>📂 파일 가져오기</b>로 토스 동기화 파일을 불러오세요.<br>
       <span class="sub-note">입력한 종목은 <b>포트폴리오 점검</b> 탭에서 산업·시장 흐름까지 진단됩니다.</span></div>`;
     return;
   }
+  $("#hld-analytics").style.display = "";
+  $("#hld-table-h").style.display = "";
+  renderHldAnalytics(all);   // 상단 분석(수익추이·산업비중·구성) — 비동기(시계열 lazy)
   const secs = [["kr", "🇰🇷 국내주식"], ["us", "🇺🇸 해외주식"]];
   let gVal = 0, gCost = 0, gDay = 0, gDayHas = false;
   const secHtml = secs.map(([mk, label]) => {

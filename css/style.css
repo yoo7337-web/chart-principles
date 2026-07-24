@@ -518,6 +518,27 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 @media (max-width: 1000px) { .scr-toprow { grid-template-columns: 1fr; } }
 /* 트렌드 섹션별 갱신 시각(작게) */
 .tr-ts { font-size: .72rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
+
+/* 보유현황 분석 영역 */
+.hld-agrid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; align-items: stretch; }
+.hld-agrid3 { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 14px; margin-top: 14px; align-items: stretch; }
+@media (max-width: 1000px) { .hld-agrid, .hld-agrid3 { grid-template-columns: 1fr; } }
+.hld-donut-wrap { display: flex; gap: 16px; align-items: center; }
+.hld-donut { width: 160px; height: 160px; flex: 0 0 auto; }
+.hld-seclist { flex: 1; min-width: 0; }
+.hld-secrow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: .84rem; }
+.hld-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; align-self: center; }
+.hld-secname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hld-secpct { font-weight: 700; }
+.hld-brow { display: flex; gap: 10px; align-items: center; padding: 5px 0; font-size: .84rem; }
+.hld-blab { flex: 0 0 92px; }
+.hld-bbar { flex: 1; height: 10px; background: rgba(255,255,255,.05); border-radius: 5px; overflow: hidden; }
+.hld-bbar span { display: block; height: 100%; border-radius: 5px; }
+.hld-brow b { flex: 0 0 52px; text-align: right; }
+.hld-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hld-chip { border: 1px solid var(--line); border-radius: 9px; padding: 3px 10px; font-size: .8rem; cursor: pointer; background: var(--card); }
+.hld-chip.pos { color: #ff8c9a; } .hld-chip.neg { color: #6ba7ff; }
+.hld-chip:hover { border-color: var(--accent); }
 .scr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
 .scr-side { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px; padding-right: 2px; font-size: .84rem; }

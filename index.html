@@ -642,7 +642,26 @@
       <button class="today-chart-btn" id="hld-clear" style="color:#b91c1c">전체 삭제</button>
     </div>
     <div class="idx-cards" id="hld-summary" style="display:none;margin-top:14px"></div>
-    <div id="hld-list" style="margin-top:14px"></div>
+    <!-- 분석 영역(상단): 종목별 수익 추이 + 산업 비중 + 구성 요약 — 상세 테이블은 하단 -->
+    <div id="hld-analytics" style="display:none;margin-top:14px">
+      <div class="hld-agrid">
+        <div class="card-flat">
+          <h3 class="lk-h3">📈 종목별 수익률 추이 <span class="sub-note">(평균단가 대비 · 최근 3개월 · 평가금 상위 8)</span></h3>
+          <div id="hld-perf-chart"></div>
+        </div>
+        <div class="card-flat">
+          <h3 class="lk-h3">🏭 산업별 보유 비중 <span class="sub-note">(평가금 가중)</span></h3>
+          <div id="hld-sector"></div>
+        </div>
+      </div>
+      <div class="hld-agrid3">
+        <div class="card-flat"><h3 class="lk-h3">🌍 국가·시장</h3><div id="hld-country"></div></div>
+        <div class="card-flat"><h3 class="lk-h3">🏋️ 시총 체급</h3><div id="hld-tier"></div></div>
+        <div class="card-flat"><h3 class="lk-h3">🎯 수익 기여</h3><div id="hld-contrib"></div></div>
+      </div>
+    </div>
+    <h2 id="hld-table-h" style="display:none;margin-top:20px">보유 상세 <span class="sub-note">(클릭=종목 조회)</span></h2>
+    <div id="hld-list" style="margin-top:8px"></div>
 
     <dialog id="hld-modal">
       <form class="jr-form" id="hld-form">
