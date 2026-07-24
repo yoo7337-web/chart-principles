@@ -67,11 +67,12 @@ jobs:
           python analysis/deal_news.py || echo "deal_news 실패(무시)"
           python analysis/calendar_events.py || echo "calendar 실패(무시)"
           python analysis/stock_extras.py || echo "stock_extras 실패(무시)"
+          python analysis/investor.py || echo "investor 실패(무시)"
           python analysis/sector_news.py || echo "sector_news 실패(무시)"
 
       - name: Copy cloud-owned outputs back to site data
         run: |
-          for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings calendar company feed sector_news; do
+          for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings calendar company feed sector_news investor; do
             [ -f "engine/app/data/$f.json" ] && cp -f "engine/app/data/$f.json" "data/$f.json" || true
           done
 
@@ -79,7 +80,7 @@ jobs:
         run: |
           git config user.name "chart-cloud-bot"
           git config user.email "actions@github.com"
-          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json data/calendar.json data/company.json data/feed.json data/sector_news.json || true
+          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json data/calendar.json data/company.json data/feed.json data/sector_news.json data/investor.json || true
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"
           else
