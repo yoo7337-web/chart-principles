@@ -503,6 +503,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* ── 주식찾기 2단: 결과(넓게) + 필터(콤팩트 330px) ──
    2026-07-23 재설계: 결과 영역이 좁고 필터가 번잡하다는 피드백 → 필터 400→330px·폰트 한 단계 축소·
    설명문 최소화·밸류체인은 사이드에선 2열 그리드(화살표 숨김). 기능·id는 전부 그대로. */
+/* 시장 선택 아래: 산업·밸류체인·테마 전체폭 3열(좁으면 접힘) */
+.scr-toprow { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 16px; margin-bottom: 14px; align-items: start; }
+.scr-toprow .scr-chain, .scr-toprow .scr-themes-wrap { margin: 0; }
+.scr-toprow .scr-frow-top { display: block; }
+@media (max-width: 1000px) { .scr-toprow { grid-template-columns: 1fr; } }
 .scr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
 .scr-side { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px; padding-right: 2px; font-size: .84rem; }
@@ -893,6 +898,18 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .dev-hv { flex: 0 0 78px; }
 .dev-ver { display: inline-block; font-size: .74rem; font-weight: 700; color: var(--accent);
   background: rgba(67,145,255,.12); border-radius: 6px; padding: 1px 7px; }
+
+/* 종목조회 상단 고정 바(스크롤해도 유지) — 좌=현재 종목 / 우=검색 */
+.lk-sticky { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 2px; margin-bottom: 10px; }
+.lk-sticky-info { display: flex; align-items: center; gap: 6px; font-size: 1rem; min-width: 0; overflow: hidden; }
+.lk-sticky-info b { font-size: 1.05rem; white-space: nowrap; }
+.lk-sticky-logo { width: 24px; height: 24px; border-radius: 50%; background: #fff; object-fit: contain; flex: 0 0 auto; }
+.lk-sticky-price { font-weight: 700; margin-left: 4px; white-space: nowrap; }
+.lk-sticky-price.kup { color: var(--kup); } .lk-sticky-price.kdn { color: var(--kdn); }
+.lk-sticky-search { display: flex; align-items: center; gap: 4px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 9px; padding: 4px 10px; }
+.lk-sticky-search input { border: none; background: none; color: var(--ink); font-size: .86rem; outline: none; width: 190px; }
 
 /* 보조지표 설명 ⓘ 툴팁 */
 .osc-i { display: inline-block; margin-left: 3px; color: var(--muted); cursor: help; font-size: .8rem; vertical-align: 1px; }

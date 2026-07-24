@@ -1051,6 +1051,13 @@ function loadLookup(key) {
     $("#lookup-rule-wrap").style.display = "inline";
     $("#lookup-filter").style.display = "flex";
     $("#lookup-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
+    // 고정 바 좌측: 현재 종목 요약(명·현재가·등락) — 스크롤해도 상단 유지
+    const q = freshQuote(st);
+    const price = q?.cur, chg = q?.chg;
+    const col = chg == null ? "" : chg >= 0 ? "kup" : "kdn";
+    $("#lk-sticky-info").innerHTML = `<img class="lk-sticky-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
+      <b>${st.market === "kr" ? st.name : st.ticker}</b><span class="sub-note"> ${st.ticker}</span>
+      ${price != null ? `<span class="lk-sticky-price ${col}">${fmtPrice(price, st.market)}${chg != null ? ` ${chg >= 0 ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>` : ""}`;
     renderLookupLinks(st);                     // 외부 심층 정보 링크
     renderLookupProfile(st);                   // 종목 프로파일(자체 계산)+참고 내재가치
     renderLookupStory(st);                     // 원칙 내러티브
@@ -1646,6 +1653,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v138", "2026-07-24", "종목조회 고정헤더+검색 · 아마존 · 주식찾기 재배치", "종목조회 상단 sticky 헤더(종목명·현재가+검색, 스크롤 고정) / 트렌드에 아마존 미국 베스트셀러(쿠팡은 봇차단 불가) / 투자자 매매동향 왼쪽 분할·금액표시·일간7일 / 주식찾기 산업·밸류체인·테마를 시장선택 아래 전체폭, 우측은 시총+지표만."],
   ["v136", "2026-07-24", "투자자 동향·외국인 랭킹·시장분석 개편", "홈에 투자자 매매동향 그래프(개인/외국인/기관 일간·주간·월간, 네이버 KR) / 실시간 랭킹에 외국인 순매수·순매도 추가 / 금주 실적발표 KR·US 토글 / 홈 좌우 분할 상하단 정렬 / 앱명 '시장분석'으로 변경."],
   ["v134", "2026-07-24", "홈 개편·Snapshot 카드·다수 개선", "홈: 실시간랭킹=movers(30분,지연해소)+금주 실적/경제지표 우측 / Snapshot(구 실적추이): 연결·별도 토글·재무안정성 확대·현금흐름 FCF·뷰별 표 / 등락색(상승빨강·하락파랑) / 보조지표 ⓘ툴팁 / 공시1년·뉴스3개월 / 오늘의신호 종가=차트 일치 / 개발일지 관리자 아이콘."],
   ["v131", "2026-07-24", "트렌드 확장 + 실적차트 통합 + 관리자 메뉴", "워치리스트 52개 확장·급등 구간 필터(×1.5↑/×1.2/×1.0/미만)·글로벌(위키 조회수) 소스 토글·쇼핑 카테고리 인기검색어 TOP10. 분기/연간 실적 차트 토글 통합. 개발일지=우측 관리자 전용."],
