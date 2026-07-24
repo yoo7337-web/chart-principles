@@ -2871,6 +2871,7 @@ function renderHome() {
   renderHomeNews();
   renderHomeDeals();
   renderHomeSchedule();
+  renderInvestor();
   $("#home-sch-more").onclick = (e) => { e.preventDefault(); activateTab("calendar"); };
   $("#home-econ-more").onclick = (e) => { e.preventDefault(); activateTab("econcal"); };
   setTimeout(syncHomeHeights, 60);   // 레이아웃 안정 후 재동기화(초기 렌더 타이밍 보정)
@@ -2980,6 +2981,59 @@ function renderMovers() {
   });
 }
 
+// 투자자 매매동향 그래프 (investor.json — KR 개인/외국인/기관 순매수, 일간/주간/월간)
+let invMkt = "kospi", invPeriod = "day";
+function invAggregate(daily, period) {
+  if (period === "day") return daily.slice(-24);
+  const bucket = {};
+  daily.forEach((r) => {
+    const dt = new Date(r.d + "T00:00:00");
+    let key;
+    if (period === "week") { const dow = (dt.getDay() + 6) % 7; const mon = new Date(dt); mon.setDate(dt.getDate() - dow); key = localDay(mon); }
+    else key = r.d.slice(0, 7);  // 월간
+    const b = bucket[key] || (bucket[key] = { d: key, indi: 0, foreign: 0, inst: 0 });
+    b.indi += r.indi || 0; b.foreign += r.foreign || 0; b.inst += r.inst || 0;
+  });
+  const arr = Object.values(bucket).sort((a, b) => a.d.localeCompare(b.d));
+  return arr.slice(period === "week" ? -16 : -12);
+}
+function renderInvestor() {
+  const wrap = $("#inv-wrap");
+  if (!wrap) return;
+  const daily = INVESTOR?.trend?.[invMkt];
+  if (!daily?.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  wrap.querySelectorAll("#inv-mkt button").forEach((b) => { b.classList.toggle("active", b.dataset.m === invMkt); b.onclick = () => { invMkt = b.dataset.m; renderInvestor(); }; });
+  wrap.querySelectorAll("#inv-period button").forEach((b) => { b.classList.toggle("active", b.dataset.p === invPeriod); b.onclick = () => { invPeriod = b.dataset.p; renderInvestor(); }; });
+
+  const rows = invAggregate(daily, invPeriod);
+  const W = 1180, H = 300, padL = 8, padR = 8, padT = 20, padB = 34;
+  const n = rows.length, gw = (W - padL - padR) / n, plotH = H - padT - padB;
+  const keys = [["indi", "개인", "#9aa4b2"], ["foreign", "외국인", "#4391ff"], ["inst", "기관", "#f0b34c"]];
+  const vals = rows.flatMap((r) => keys.map(([k]) => r[k])).filter((v) => v != null);
+  const maxV = Math.max(...vals, 0), minV = Math.min(...vals, 0);
+  const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * plotH;
+  const y0 = yS(0);
+  const bw = Math.min(15, gw / 4);
+  const fmtEok = (v) => v == null ? "" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+  let bars = "", labels = "";
+  rows.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2;
+    keys.forEach(([k, , c], j) => {
+      const v = r[k]; if (v == null) return;
+      const x = cx + (j - 1) * (bw + 2) - bw / 2;
+      const yv = yS(v);
+      bars += `<rect x="${x}" y="${Math.min(yv, y0)}" width="${bw}" height="${Math.max(1, Math.abs(yv - y0))}" fill="${c}" rx="1.5"/>`;
+    });
+    const lab = invPeriod === "month" ? r.d.slice(2) : invPeriod === "week" ? r.d.slice(5) : r.d.slice(5);
+    labels += `<text x="${cx}" y="${H - 10}" font-size="9" text-anchor="middle" fill="#8b8b93">${lab}</text>`;
+  });
+  const zero = `<line x1="${padL}" y1="${y0}" x2="${W - padR}" y2="${y0}" stroke="#3a3a44"/>`;
+  const legend = keys.map(([, lab, c]) => `<span style="color:${c}">■</span> ${lab}`).join("  ");
+  $("#inv-chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="fin-svg" style="min-height:260px">${zero}${bars}${labels}</svg>
+    <p class="legend">${legend} <span class="sub-note">· 순매수(+)/순매도(−) · 단위 억원 · 출처 네이버</span></p>`;
+}
+
 // 금주(월~일) 실적발표·경제지표 — 홈 하단 우측. calendar.json(CAL) 재사용.
 function _weekRange() {
   const now = new Date();
@@ -2988,6 +3042,7 @@ function _weekRange() {
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 0);
   return [mon, sun];
 }
+let schEarnMk = "kr";
 function renderHomeSchedule() {
   const eHost = $("#home-earnings"), cHost = $("#home-econ");
   if (!eHost || !cHost) return;
@@ -2998,21 +3053,23 @@ function renderHomeSchedule() {
   const md = (ds) => ds.slice(5).replace("-", "/");
   const yo = (ds) => "일월화수목금토"[new Date(ds + "T00:00:00").getDay()];
 
-  // 실적발표 — 한국+미국 모두(시장 토글과 무관, 국기로 구분)
-  const er = ["kr", "us"].flatMap((mk) => (CAL?.earnings?.[mk] || []).map((e) => ({ ...e, mk })))
+  // 실적발표 — 상단 한국/미국 토글로 구분
+  const er = (CAL?.earnings?.[schEarnMk] || []).map((e) => ({ ...e, mk: schEarnMk }))
     .filter((e) => inWeek(e.date))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
-  const flagE = { kr: "🇰🇷", us: "🇺🇸" };
   eHost.innerHTML = er.length ? er.slice(0, 60).map((e) => `
     <div class="sch-row${e.t ? " clickable" : ""}${e.date === today ? " today" : ""}" ${e.t ? `data-t="${e.mk}_${e.t}"` : ""}>
       <span class="sch-date">${md(e.date)}<span class="sub-note">(${yo(e.date)})</span></span>
-      <span class="sch-flag">${flagE[e.mk]}</span>
       ${e.t ? `<img class="sch-logo" src="${logoUrl(e.mk, e.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sch-logo"></span>`}
       <span class="sch-name"><b>${esc(e.name)}</b></span>
       <span class="sch-info sub-note">${e.mk === "kr" ? esc((e.event || "").slice(0, 16)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
-    </div>`).join("") : `<p class="mini-note">이번 주 예정된 실적발표가 없습니다.</p>`;
+    </div>`).join("") : `<p class="mini-note">이번 주 예정된 ${schEarnMk === "kr" ? "국내" : "미국"} 실적발표가 없습니다.</p>`;
   eHost.querySelectorAll(".sch-row.clickable").forEach((el) => el.onclick = () => {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.t);
+  });
+  $("#sch-earn-mk").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.m === schEarnMk);
+    b.onclick = () => { schEarnMk = b.dataset.m; renderHomeSchedule(); };
   });
 
   // 경제지표 — 이번 주 중요도 중·상(글로벌 매크로라 시장 토글과 무관, 모든 국가)

@@ -1089,6 +1089,9 @@ dialog { background: var(--card); color: var(--ink); }
 .home-rblock { min-height: 0; display: flex; flex-direction: column; }
 .home-rblock .home-h { margin-top: 0; flex: none; }
 .home-rblock .news-list { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.sch-mk button, .ft-fs button { font-size: .74rem; padding: 2px 8px; }
+#inv-chart { padding: 10px 14px; }
+#inv-chart svg { width: 100%; height: auto; }
 /* 금주 일정 행(실적발표·경제지표) */
 .sch-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .82rem; }
 .sch-row:last-child { border-bottom: none; }
