@@ -886,6 +886,14 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .dev-ver { display: inline-block; font-size: .74rem; font-weight: 700; color: var(--accent);
   background: rgba(67,145,255,.12); border-radius: 6px; padding: 1px 7px; }
 
+/* 보조지표 설명 ⓘ 툴팁 */
+.osc-i { display: inline-block; margin-left: 3px; color: var(--muted); cursor: help; font-size: .8rem; vertical-align: 1px; }
+.osc-i:hover { color: var(--accent); }
+#osc-tip { position: fixed; display: none; z-index: 9999; max-width: 300px; background: #26262e;
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; font-size: .8rem; line-height: 1.55;
+  color: var(--ink); box-shadow: 0 8px 24px rgba(0,0,0,.4); pointer-events: none; }
+#osc-tip b { color: var(--accent); }
+
 /* 상세 재무제표 표 */
 .fin-mode { margin-left: auto; }
 .fin-mode button { font-size: .8rem; }

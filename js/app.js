@@ -991,8 +991,34 @@ function toggleTodayChart(btn, sig) {
 }
 
 /* ---------- 종목 조회 ---------- */
+// 보조지표 설명(의미 + 숫자 읽는 법)
+const OSC_TIP = {
+  rsi: "<b>RSI (상대강도지수)</b><br>최근 14일 상승폭/하락폭의 비율을 0~100으로 나타낸 값.<br>· <b>70 이상</b> = 과매수(단기 과열, 조정 주의)<br>· <b>30 이하</b> = 과매도(단기 낙폭 과다, 반등 가능)<br>· 50 = 중립",
+  macd: "<b>MACD (이동평균 수렴·확산)</b><br>단기(12)−장기(26) 지수이동평균의 차이. 시그널선(9일)과 함께 봅니다.<br>· MACD가 시그널선을 <b>상향 돌파</b> = 매수 신호<br>· <b>0선 위</b> = 상승 추세, 0선 아래 = 하락 추세<br>· 막대(히스토그램)가 커질수록 추세 강함",
+  stoch: "<b>스토캐스틱</b><br>최근 N일 고저 범위에서 오늘 종가의 위치(%K, 0~100)와 그 평균선(%D).<br>· <b>80 이상</b> = 과매수, <b>20 이하</b> = 과매도<br>· %K가 %D를 상향 돌파 = 매수 신호",
+  obv: "<b>OBV (온밸런스볼륨)</b><br>상승일 거래량은 더하고 하락일은 빼서 누적한 '매집/분산' 지표.<br>· 절대 숫자보다 <b>방향(추세)</b>이 중요<br>· 가격은 횡보인데 OBV가 우상향 = 매집(선행 상승 신호)<br>· 가격 신고가인데 OBV 미확인 = 세력 이탈 경계",
+  disp: "<b>이격도</b><br>현재가가 이동평균선에서 얼마나 떨어졌는지(%).<br>· <b>100</b> = 이평선과 일치<br>· <b>110</b> = 이평 대비 10% 위(단기 과열)<br>· <b>90</b> = 10% 아래(단기 과냉, 되돌림 가능)",
+};
+function bindOscTips() {
+  let tip = document.getElementById("osc-tip");
+  if (!tip) { tip = document.createElement("div"); tip.id = "osc-tip"; document.body.appendChild(tip); }
+  document.querySelectorAll("#lookup-osc .osc-i").forEach((ic) => {
+    if (ic.dataset.bound) return; ic.dataset.bound = "1";
+    const show = (e) => {
+      tip.innerHTML = OSC_TIP[ic.dataset.tip] || "";
+      tip.style.display = "block";
+      const r = ic.getBoundingClientRect();
+      tip.style.left = Math.min(r.left, window.innerWidth - 320) + "px";
+      tip.style.top = (r.bottom + 8) + "px";
+    };
+    ic.addEventListener("mouseenter", show);
+    ic.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  });
+}
+
 function initLookup() {
   lookupRendered = true;
+  bindOscTips();
   fetch("data/stocks/index.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((j) => {
     if (!j) { $("#lookup-info").style.display = "block"; $("#lookup-info").textContent = "stocks/index.json 없음 — python analysis\\stock_pages.py 실행 필요"; return; }
     LOOKUP_INDEX = j.stocks;
@@ -1610,6 +1636,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v134", "2026-07-24", "홈 개편·Snapshot 카드·다수 개선", "홈: 실시간랭킹=movers(30분,지연해소)+금주 실적/경제지표 우측 / Snapshot(구 실적추이): 연결·별도 토글·재무안정성 확대·현금흐름 FCF·뷰별 표 / 등락색(상승빨강·하락파랑) / 보조지표 ⓘ툴팁 / 공시1년·뉴스3개월 / 오늘의신호 종가=차트 일치 / 개발일지 관리자 아이콘."],
   ["v131", "2026-07-24", "트렌드 확장 + 실적차트 통합 + 관리자 메뉴", "워치리스트 52개 확장·급등 구간 필터(×1.5↑/×1.2/×1.0/미만)·글로벌(위키 조회수) 소스 토글·쇼핑 카테고리 인기검색어 TOP10. 분기/연간 실적 차트 토글 통합. 개발일지=우측 관리자 전용."],
   ["v130", "2026-07-24", "트렌드 레이더 탭", "구글 급상승 검색어(KR/US)+Gemini 관련주 추정, 네이버 데이터랩 워치리스트(키워드 스파크라인·급등 배지)+쇼핑 카테고리 트렌드. 소비 트렌드 → 관련주 선제 포착."],
   ["v129", "2026-07-24", "재무제표 v2 + 자동화", "연결/별도 구분·KR 분기(차감 분기화)·단위 선택(억원/백만원/원). 리포트=매일·재무=분기 자동 갱신 체제. 자정 이후 차트 공백(어제 봉 사라짐) 수정."],
@@ -5192,14 +5219,15 @@ function renderLookupFinancials(st) {
 }
 
 /* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
-let ftView = "perf", ftMode = "annual";
+let ftView = "perf", ftMode = "annual", ftFs = "cfs";
 const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"], ["cash", "현금흐름"]];
 
 function ftRows(st) {
-  // financials → 기간 오름차순 [{p, rev, op, np, opm, npm, revG, roe, cfo, cfi, cff, debt, cur}]
+  // financials → 기간 오름차순 [{p, rev, op, np, opm, npm, revG, roe, cfo, cfi, cff, debt, cur, fcf}]
   const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
   if (!fin) return [];
-  const src = fin.cfs || fin.ofs || fin;
+  // 연결(cfs)/별도(ofs) — 선택 우선, 없으면 있는 쪽. US는 단일이라 fin 루트 폴백.
+  const src = fin[ftFs] || fin.cfs || fin.ofs || fin;
   const data = ftMode === "quarter" ? src.quarter : src.annual;
   if (!data || !Object.keys(data).length) return [];
   const ps = Object.keys(data).sort();
@@ -5212,26 +5240,38 @@ function ftRows(st) {
     r.roe = d.equity && d.np != null ? (d.np * (ftMode === "quarter" ? 4 : 1)) / d.equity * 100 : null;  // 분기=연환산
     r.debt = d.equity && d.liab != null ? (d.liab / d.equity) * 100 : null;
     r.cur = d.cl && d.ca != null ? (d.ca / d.cl) * 100 : null;
+    // FCF = 영업활동현금흐름 − CAPEX(유형+무형). US는 fcf 직접 제공, 없으면 계산.
+    r.fcf = d.fcf != null ? d.fcf
+      : d.cfo != null ? d.cfo - Math.abs((d.capex_ppe || 0) + (d.capex_intan || 0)) : null;
     return r;
   });
 }
 
 function renderFinTrends(st) {
   const host = $("#lookup-finq");
+  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
+  // 연결/별도 둘 다 데이터 있는지(KR) — 기본은 연결, 선택한 fs에 데이터 없으면 있는 쪽으로
+  const hasCfs = fin?.cfs && Object.keys((ftMode === "quarter" ? fin.cfs.quarter : fin.cfs.annual) || {}).length;
+  const hasOfs = fin?.ofs && Object.keys((ftMode === "quarter" ? fin.ofs.quarter : fin.ofs.annual) || {}).length;
+  if (!fin?.[ftFs] || !(ftFs === "cfs" ? hasCfs : hasOfs)) ftFs = hasCfs ? "cfs" : "ofs";
   const rows = ftRows(st);
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
   const unit = st.market === "kr" ? "억원" : "백만$";
-  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
-  const fsNote = st.market === "kr" ? (fin.cfs ? "연결" : "별도") + " 기준 · " : "";
+  const bothFs = st.market === "kr" && hasCfs && hasOfs;
+  const fsNote = st.market === "kr" ? (ftFs === "cfs" ? "연결" : "별도") + " 기준 · " : "";
   const gLab = ftMode === "annual" ? "매출성장률(YoY)" : "매출성장률(QoQ)";
   const roeLab = ftMode === "quarter" ? "ROE(연환산)" : "ROE";
 
-  host.innerHTML = `<h3 class="lk-h3">📊 실적·재무 추이
+  host.innerHTML = `<h3 class="lk-h3">📊 Snapshot
       <span class="sub-note">(${fsNote}${st.market === "kr" ? "DART" : "yfinance"} · 단위 ${unit})</span>
       <span style="flex:1"></span>
       <span class="mk-toggle ft-view">${FT_VIEWS.map(([id, lab]) =>
         `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span>
+      ${bothFs ? `<span class="mk-toggle ft-fs">
+        <button data-f="cfs" class="${ftFs === "cfs" ? "active" : ""}">연결</button>
+        <button data-f="ofs" class="${ftFs === "ofs" ? "active" : ""}">별도</button>
+      </span>` : ""}
       <span class="mk-toggle ft-mode">
         <button data-m="annual" class="${ftMode === "annual" ? "active" : ""}">연간</button>
         <button data-m="quarter" class="${ftMode === "quarter" ? "active" : ""}">분기</button>
@@ -5239,8 +5279,11 @@ function renderFinTrends(st) {
     <div id="ft-chart"></div><div id="ft-table"></div>`;
   host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
   host.querySelectorAll(".ft-mode button").forEach((b) => b.onclick = () => { ftMode = b.dataset.m; renderFinTrends(st); });
+  host.querySelectorAll(".ft-fs button").forEach((b) => b.onclick = () => { ftFs = b.dataset.f; renderFinTrends(st); });
 
-  const W = 940, H = 280, padL = 10, padR = 46, padT = 30, padB = 30;
+  // 재무안정성은 라인 2개뿐이라 더 크게(사용자 요청) — 뷰별 높이
+  const H = ftView === "stability" ? 360 : 300;
+  const W = 940, padL = 10, padR = 46, padT = 30, padB = 30;
   const n = rows.length, gw = (W - padL - padR) / n;
   const plotH = H - padT - padB;
   const nf = (v) => v == null ? "-" : Math.round(v).toLocaleString();
@@ -5315,23 +5358,40 @@ function renderFinTrends(st) {
     const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
     chartSvg = r1.svg; legend = r1.legend;
   } else {
-    const bg = barGroup(["cfo", "cfi", "cff"], ["#22c07a", "#5b8def", "#9aa4b2"], ["영업활동", "투자활동", "재무활동"]);
-    chartSvg = bg.svg || ""; legend = (bg.legend || "") + `  <span class="sub-note">(현금흐름 · ${unit})</span>`;
+    // 영업·투자·재무 그룹막대 + FCF(잉여현금흐름) 라인 오버레이(같은 스케일)
+    const bg = barGroup(["cfo", "cfi", "cff", "fcf"], ["#22c07a", "#5b8def", "#9aa4b2", "#f0b34c"],
+      ["영업활동", "투자활동", "재무활동", "FCF"]);
+    let fcfLine = "";
+    if (bg.yS) {
+      const pts = rows.map((r, i) => (r.fcf != null ? [padL + gw * i + gw / 2, bg.yS(r.fcf)] : null)).filter(Boolean);
+      if (pts.length > 1) fcfLine = `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
+        fill="none" stroke="#f0b34c" stroke-width="2.2"/>` + pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="#f0b34c"/>`).join("");
+    }
+    chartSvg = (bg.svg || "") + fcfLine;
+    legend = `<span style="color:#22c07a">■</span> 영업활동  <span style="color:#5b8def">■</span> 투자활동  <span style="color:#9aa4b2">■</span> 재무활동  <span style="color:#f0b34c">●─</span> FCF(잉여현금흐름)  <span class="sub-note">(${unit})</span>`;
   }
   $("#ft-chart").innerHTML = chartSvg
     ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}</svg><p class="legend">${legend}</p>`
     : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`;
 
-  // ---- 표(연간/분기 동일 스펙): 매출·영업이익·순이익·영업이익률·순이익률·매출성장률·ROE ----
-  const specs = [["rev", "매출액", nf], ["op", "영업이익", nf], ["np", "순이익", nf],
-    ["opm", "영업이익률", pf], ["npm", "순이익률", pf], ["revG", gLab, pf], ["roe", roeLab, pf]];
+  // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----
+  const PCT = new Set(["opm", "npm", "revG", "roe", "debt", "cur"]);
+  const SPECS = {
+    perf: [["rev", "매출액"], ["op", "영업이익"], ["np", "순이익"], ["opm", "영업이익률"], ["npm", "순이익률"], ["revG", gLab], ["roe", roeLab]],
+    growth: [["revG", gLab], ["op", "영업이익"], ["opm", "영업이익률"], ["np", "순이익"], ["npm", "순이익률"], ["roe", roeLab]],
+    stability: [["asset", "총자산"], ["liab", "총부채"], ["equity", "자본총계"], ["debt", "부채비율"], ["cur", "유동비율"], ["cash", "현금성자산"]],
+    cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
+  };
+  const specs = SPECS[ftView] || SPECS.perf;
   $("#ft-table").innerHTML = `<div class="fin-wrap" style="margin-top:8px"><table class="fin-table"><thead><tr>
       <th class="fin-lab">지표</th>${rows.map((r) => `<th>${r.p}</th>`).join("")}</tr></thead><tbody>` +
-    specs.map(([k, lab, fmt]) => {
+    specs.map(([k, lab]) => {
+      const isPct = PCT.has(k);
       const cells = rows.map((r) => {
-        const v = fmt(r[k]);
-        return `<td>${(k === "opm" || k === "npm" || k === "revG" || k === "roe") && r[k] != null
-          ? `<span class="${r[k] >= 0 ? "pos" : "neg"}">${v}</span>` : v}</td>`;
+        const v = r[k];
+        const txt = isPct ? pf(v) : nf(v);
+        return `<td>${v != null && (isPct || k === "cfi" || k === "cff" || k === "fcf")
+          ? `<span class="${v >= 0 ? "pos" : "neg"}">${txt}</span>` : txt}</td>`;
       }).join("");
       return `<tr><td class="fin-lab">${lab}</td>${cells}</tr>`;
     }).join("") + `</tbody></table></div>`;

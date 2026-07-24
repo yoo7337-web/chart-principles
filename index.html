@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=133">
-<script src="firebase-config.js?v=133"></script>
-<script src="js/auth.js?v=133"></script>
+<link rel="stylesheet" href="css/style.css?v=134">
+<script src="firebase-config.js?v=134"></script>
+<script src="js/auth.js?v=134"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -165,12 +165,12 @@
         <button data-tf="1m" id="tf-1m" style="display:none">당일 분봉</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
       </span>
       <span class="osc-checks" id="lookup-osc">보조지표
-        <label><input type="checkbox" value="rsi"> RSI</label>
-        <label><input type="checkbox" value="macd"> MACD</label>
-        <label><input type="checkbox" value="stoch"> 스토캐스틱</label>
-        <label><input type="checkbox" value="obv"> OBV</label>
-        <label><input type="checkbox" value="disp"> 이격도</label>
-        <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동)</span>
+        <label><input type="checkbox" value="rsi"> RSI<span class="osc-i" data-tip="rsi">ⓘ</span></label>
+        <label><input type="checkbox" value="macd"> MACD<span class="osc-i" data-tip="macd">ⓘ</span></label>
+        <label><input type="checkbox" value="stoch"> 스토캐스틱<span class="osc-i" data-tip="stoch">ⓘ</span></label>
+        <label><input type="checkbox" value="obv"> OBV<span class="osc-i" data-tip="obv">ⓘ</span></label>
+        <label><input type="checkbox" value="disp"> 이격도<span class="osc-i" data-tip="disp">ⓘ</span></label>
+        <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동 · ⓘ에 커서를 올리면 설명)</span>
       </span>
     </div>
     <div class="controls" id="draw-tools" style="display:none;align-items:center;gap:8px">
@@ -208,9 +208,9 @@
     <div id="lookup-financials" class="card-flat" style="display:none;margin-top:16px"></div>
     <div id="lookup-reports" class="card-flat" style="display:none;margin-top:16px"></div>
     <div class="lookup-two" id="lookup-feed" style="display:none;margin-top:16px">
-      <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 6개월)</span></h3>
+      <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 1년)</span></h3>
         <div id="lookup-disc" class="lk-feed-list"></div></div>
-      <div class="card-flat"><h3 class="lk-h3">📰 뉴스 <span class="sub-note">(최근 1주일)</span></h3>
+      <div class="card-flat"><h3 class="lk-h3">📰 뉴스 <span class="sub-note">(최근 3개월)</span></h3>
         <div id="lookup-news" class="lk-feed-list"></div></div>
     </div>
     <!-- 이 종목의 원칙 이야기 + 원칙별 10년 성적 (최하단) -->
@@ -766,6 +766,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=133"></script>
+<script src="js/app.js?v=134"></script>
 </body>
 </html>
