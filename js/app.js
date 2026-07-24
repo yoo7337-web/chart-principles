@@ -6477,10 +6477,12 @@ function renderHldAnalytics(all) {
 
   const byPl = all.slice().sort((a, b) => (b.pl || 0) - (a.pl || 0));
   const chip = (h) => `<span class="hld-chip ${h.pl >= 0 ? "pos" : "neg"}" data-tk="${h.mk}_${h.ticker}">${esc(h.name)} ${won(h.pl, true)}</span>`;
+  const winners = byPl.filter((h) => (h.pl || 0) > 0).slice(0, 3);
+  const losers = byPl.filter((h) => (h.pl || 0) < 0).slice(-3).reverse();
   $("#hld-contrib").innerHTML = `<div class="sub-note" style="margin-bottom:4px">효자 TOP3</div>
-    <div class="hld-chips">${byPl.slice(0, 3).map(chip).join("")}</div>
+    <div class="hld-chips">${winners.length ? winners.map(chip).join("") : `<span class="mini-note">수익 종목 없음</span>`}</div>
     <div class="sub-note" style="margin:8px 0 4px">아픈 손가락 TOP3</div>
-    <div class="hld-chips">${byPl.slice(-3).reverse().map(chip).join("")}</div>`;
+    <div class="hld-chips">${losers.length ? losers.map(chip).join("") : `<span class="mini-note">손실 종목 없음 🎉</span>`}</div>`;
   $("#hld-contrib").querySelectorAll(".hld-chip").forEach((c) => c.onclick = () => {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(c.dataset.tk);
   });
