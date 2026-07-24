@@ -515,6 +515,12 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-toprow .scr-chain-head, .scr-toprow .scr-themes-head, .scr-toprow .scr-sec-actions {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: 0 0 10px; min-height: 26px; font-size: .92rem; }
+/* 업종 그룹: 우측 좁은 레일 시절의 세로 스택(flex-direction:column)을 상단 넓은 영역에선 가로 흐름으로.
+   실제 자식은 .scr-group(칩+세부업종 래퍼) — 이 단위로 wrap, 펼쳐진 그룹만 전폭 차지 */
+.scr-toprow .scr-groups { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+/* ⚠.scr-subs는 닫혀 있어도 DOM에 남아 :has(.scr-subs)면 전 그룹이 100%가 됨 → 펼친 그룹(.open)만 전폭 */
+.scr-toprow .scr-group { flex: 0 0 auto; }
+.scr-toprow .scr-group:has(.scr-gchip.open) { flex: 1 0 100%; }
 @media (max-width: 1000px) { .scr-toprow { grid-template-columns: 1fr; } }
 /* 트렌드 섹션별 갱신 시각(작게) */
 .tr-ts { font-size: .72rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
@@ -523,8 +529,21 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .hld-agrid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; align-items: stretch; }
 .hld-agrid3 { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 14px; margin-top: 14px; align-items: stretch; }
 @media (max-width: 1000px) { .hld-agrid, .hld-agrid3 { grid-template-columns: 1fr; } }
-.hld-donut-wrap { display: flex; gap: 16px; align-items: center; }
-.hld-donut { width: 160px; height: 160px; flex: 0 0 auto; }
+.hld-donut-wrap { display: flex; gap: 18px; align-items: center; }
+.hld-donut-box { position: relative; flex: 0 0 auto; }
+.hld-donut { width: 220px; height: 220px; display: block; }
+.hld-seg { transition: opacity .12s; cursor: default; }
+.hld-donut:hover .hld-seg { opacity: .45; }
+.hld-donut .hld-seg:hover { opacity: 1; }
+/* 산업 호버 툴팁(보유 종목 목록) */
+.hld-tip { display: none; position: absolute; z-index: 40; min-width: 220px; max-width: 300px;
+  background: #26262e; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.45); pointer-events: none; }
+.hld-tip-h { font-size: .84rem; font-weight: 700; margin-bottom: 5px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.hld-tip-r { display: flex; gap: 8px; align-items: baseline; font-size: .78rem; padding: 2px 0; }
+.hld-tip-r span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hld-secrow { cursor: default; border-radius: 6px; }
+.hld-secrow:hover { background: rgba(255,255,255,.05); }
 .hld-seclist { flex: 1; min-width: 0; }
 .hld-secrow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: .84rem; }
 .hld-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; align-self: center; }

@@ -6525,27 +6525,67 @@ function renderHldAnalytics(all) {
   });
 
   // ── ② 산업별 보유 비중(도넛 + 리스트) ──
-  const bySec = {};
-  all.forEach((h) => { const s = hldFineSector(h); bySec[s] = (bySec[s] || 0) + (h.val || 0); });
+  const bySec = {}, memBySec = {};
+  all.forEach((h) => {
+    const s = hldFineSector(h);
+    bySec[s] = (bySec[s] || 0) + (h.val || 0);
+    (memBySec[s] = memBySec[s] || []).push(h);
+  });
   const secs = Object.entries(bySec).sort((a, b) => b[1] - a[1]);
-  const R = 56, C = 2 * Math.PI * R;
+  const R = 78, SW = 34, CX = 110, C = 2 * Math.PI * R;   // 도넛 확대(반지름 56→78)
   let acc = 0;
   const segs = secs.map(([s, v], i) => {
     const frac = v / gVal, dash = frac * C;
-    const el = `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${HLD_COLORS[i % 8]}" stroke-width="26"
+    const el = `<circle class="hld-seg" data-sec="${esc(s)}" r="${R}" cx="${CX}" cy="${CX}" fill="none"
+      stroke="${HLD_COLORS[i % 8]}" stroke-width="${SW}"
       stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-acc * C + C / 4}"/>`;
     acc += frac;
     return el;
   }).join("");
   $("#hld-sector").innerHTML = `<div class="hld-donut-wrap">
-    <svg viewBox="0 0 160 160" class="hld-donut">${segs}
-      <text x="80" y="76" text-anchor="middle" font-size="12" fill="#8b8b93">산업</text>
-      <text x="80" y="92" text-anchor="middle" font-size="12" fill="#e7e7ec">${secs.length}개</text></svg>
-    <div class="hld-seclist">${secs.map(([s, v], i) => `<div class="hld-secrow">
+    <div class="hld-donut-box">
+      <svg viewBox="0 0 ${CX * 2} ${CX * 2}" class="hld-donut">${segs}
+        <text id="hld-donut-t1" x="${CX}" y="${CX - 4}" text-anchor="middle" font-size="13" fill="#8b8b93">산업</text>
+        <text id="hld-donut-t2" x="${CX}" y="${CX + 15}" text-anchor="middle" font-size="15" fill="#e7e7ec">${secs.length}개</text></svg>
+      <div class="hld-tip" id="hld-tip"></div>
+    </div>
+    <div class="hld-seclist">${secs.map(([s, v], i) => `<div class="hld-secrow" data-sec="${esc(s)}">
       <span class="hld-dot" style="background:${HLD_COLORS[i % 8]}"></span>
       <span class="hld-secname">${esc(s)}</span>
       <span class="hld-secpct">${(v / gVal * 100).toFixed(1)}%</span>
       <span class="sub-note">${won(v)}</span></div>`).join("")}</div></div>`;
+
+  // 호버: 도넛 조각·리스트 행 → 해당 산업의 보유 종목 툴팁(평가금 순) + 가운데 라벨 교체
+  const tip = $("#hld-tip"), t1 = $("#hld-donut-t1"), t2 = $("#hld-donut-t2");
+  const showSec = (sec, ev) => {
+    const mem = (memBySec[sec] || []).slice().sort((a, b) => (b.val || 0) - (a.val || 0));
+    const secVal = bySec[sec] || 0;
+    tip.innerHTML = `<div class="hld-tip-h">${esc(sec)} <span class="sub-note">${(secVal / gVal * 100).toFixed(1)}% · ${won(secVal)}</span></div>`
+      + mem.map((h) => `<div class="hld-tip-r"><span>${esc(h.name)}</span>
+        <span class="sub-note">${(( h.val || 0) / secVal * 100).toFixed(0)}%</span>
+        <b>${won(h.val)}</b>
+        <span class="${(h.plRate || 0) >= 0 ? "pos" : "neg"}">${pct(h.plRate, 1)}</span></div>`).join("");
+    tip.style.display = "block";
+    t1.textContent = sec.slice(0, 9);
+    t2.textContent = `${(secVal / gVal * 100).toFixed(1)}%`;
+    if (ev) {
+      const box = tip.parentElement.getBoundingClientRect();
+      tip.style.left = Math.min(Math.max(8, ev.clientX - box.left + 12), Math.max(8, box.width - 40)) + "px";
+      tip.style.top = Math.max(4, ev.clientY - box.top - 10) + "px";
+    }
+  };
+  const hideSec = () => {
+    tip.style.display = "none";
+    t1.textContent = "산업"; t2.textContent = `${secs.length}개`;
+  };
+  $("#hld-sector").querySelectorAll(".hld-seg").forEach((el) => {
+    el.addEventListener("mousemove", (ev) => showSec(el.dataset.sec, ev));
+    el.addEventListener("mouseleave", hideSec);
+  });
+  $("#hld-sector").querySelectorAll(".hld-secrow").forEach((el) => {
+    el.addEventListener("mouseenter", () => showSec(el.dataset.sec, null));
+    el.addEventListener("mouseleave", hideSec);
+  });
 
   // ── ③ 국가·시장 / 시총 체급 / 수익 기여 ──
   const bar = (label, frac, color) => `<div class="hld-brow"><span class="hld-blab">${label}</span>
