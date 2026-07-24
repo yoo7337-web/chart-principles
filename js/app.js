@@ -6377,6 +6377,100 @@ function hldSubmit() {
 const HLD_SERIES = {};   // 종목 시계열 캐시(수익추이용)
 const HLD_COLORS = ["#4391ff", "#f5445a", "#22c07a", "#f0b34c", "#9d7bff", "#38bdf8", "#fb923c", "#a3e635"];
 
+/* 세분 산업 분류 — 투자자 언어(빅테크·반도체 메모리 등).
+   ①종목 오버라이드 → ②국내 밸류체인 단계 → ③미국 GICS 한글 → ④히트맵 업종 폴백 */
+const HLD_FINE_TICKER = {
+  // 미국 — 큐레이션(밸류체인 데이터가 국내 전용이라 미국은 직접 매핑)
+  us_AAPL: "빅테크", us_MSFT: "빅테크", us_GOOGL: "빅테크", us_AMZN: "빅테크", us_META: "빅테크",
+  us_NVDA: "AI 반도체", us_AMD: "AI 반도체", us_AVGO: "AI 반도체", us_MRVL: "AI 반도체", us_ARM: "AI 반도체",
+  us_SMCI: "AI 서버·인프라", us_DELL: "AI 서버·인프라", us_ANET: "AI 서버·인프라",
+  us_MU: "반도체 메모리", us_WDC: "반도체 메모리",
+  us_INTC: "반도체 종합", us_QCOM: "반도체 종합", us_TXN: "반도체 종합", us_ADI: "반도체 종합", us_ON: "반도체 종합",
+  us_AMAT: "반도체 장비", us_LRCX: "반도체 장비", us_KLAC: "반도체 장비",
+  us_TSLA: "전기차", us_RIVN: "전기차", us_LCID: "전기차", us_F: "자동차", us_GM: "자동차",
+  us_CRM: "소프트웨어·클라우드", us_ORCL: "소프트웨어·클라우드", us_ADBE: "소프트웨어·클라우드",
+  us_NOW: "소프트웨어·클라우드", us_SNOW: "소프트웨어·클라우드", us_PLTR: "소프트웨어·클라우드",
+  us_DDOG: "소프트웨어·클라우드", us_INTU: "소프트웨어·클라우드", us_SHOP: "소프트웨어·클라우드",
+  us_CRWD: "사이버보안", us_PANW: "사이버보안", us_ZS: "사이버보안", us_NET: "사이버보안",
+  us_PYPL: "핀테크·거래소", us_COIN: "핀테크·거래소", us_HOOD: "핀테크·거래소", us_SOFI: "핀테크·거래소",
+  us_AFRM: "핀테크·거래소", us_MSTR: "핀테크·거래소", us_V: "결제 네트워크", us_MA: "결제 네트워크", us_AXP: "결제 네트워크",
+  us_NFLX: "미디어·스트리밍", us_DIS: "미디어·스트리밍", us_CMCSA: "미디어·스트리밍", us_ROKU: "미디어·스트리밍",
+  us_RBLX: "게임·메타버스", us_DKNG: "게임·베팅", us_PINS: "소셜·광고", us_SNAP: "소셜·광고", us_TTD: "소셜·광고",
+  us_ABNB: "여행·플랫폼", us_BKNG: "여행·플랫폼", us_MAR: "여행·호텔", us_DAL: "항공", us_CCL: "여행·크루즈",
+  us_UBER: "모빌리티 플랫폼", us_DASH: "배달 플랫폼", us_CVNA: "이커머스·리테일",
+  us_ENPH: "신재생에너지", us_FSLR: "신재생에너지", us_PLUG: "신재생에너지", us_NEE: "유틸리티",
+  us_LLY: "제약·비만치료제", us_ISRG: "의료기기", us_SYK: "의료기기", us_MDT: "의료기기", us_ABT: "의료기기",
+  us_UNH: "헬스케어 보험", us_ELV: "헬스케어 보험", us_CI: "헬스케어 보험",
+  us_LMT: "방산·우주", us_RTX: "방산·우주", us_BA: "항공우주",
+  // 국내 — 대표 종목 직접 지정(밸류체인 단계보다 직관적인 라벨)
+  kr_005930: "반도체 메모리", kr_000660: "반도체 메모리", kr_005935: "반도체 메모리",
+  kr_035420: "인터넷 플랫폼", kr_035720: "인터넷 플랫폼",
+  kr_005380: "완성차", kr_000270: "완성차", kr_012330: "자동차 부품",
+  kr_207940: "바이오 CDMO", kr_068270: "바이오시밀러",
+  kr_373220: "2차전지 셀", kr_006400: "2차전지 셀", kr_051910: "화학·소재",
+  kr_105560: "은행", kr_055550: "은행", kr_086790: "은행", kr_316140: "은행",
+  kr_032830: "보험", kr_000810: "보험",
+  kr_352820: "엔터·K팝", kr_041510: "엔터·K팝", kr_035900: "엔터·K팝", kr_122870: "엔터·K팝",
+  kr_012450: "방산·우주", kr_047810: "방산·우주", kr_064350: "방산·우주",
+  kr_329180: "조선", kr_042660: "조선", kr_010140: "조선",
+  kr_034020: "발전·원전 설비", kr_267260: "발전·전력기기", kr_010120: "전력기기",
+};
+// 국내 밸류체인 단계 key → 세분 라벨(오버라이드에 없는 종목). key는 CHAINS의 실제 stage.key.
+const CHAIN_FINE = {
+  design: "반도체 팹리스", fe_mat: "반도체 소재", fe_equip: "반도체 장비", foundry: "반도체 메모리",
+  be_equip: "반도체 장비", osat: "반도체 후공정", substrate: "반도체 기판", semi_etc: "반도체 기타",
+  disp_parts: "디스플레이 부품",
+  mineral: "2차전지 소재", cathode: "2차전지 소재", bmat: "2차전지 소재", bequip: "2차전지 장비", cell: "2차전지 셀",
+  parts: "자동차 부품", parts_etc: "자동차 부품", tire: "타이어", oem: "완성차", oem_etc: "완성차",
+  biotech: "신약·바이오", bio_etc: "바이오 기타", cdmo: "바이오 CDMO", pharma: "제약", pharma_etc: "제약",
+  device: "의료기기", device_etc: "의료기기", dx: "진단",
+  dmat: "디스플레이 소재", dmod: "디스플레이 부품", panel: "디스플레이 패널", panel_etc: "디스플레이 기타",
+  dparts: "방산 부품", system: "방산·우주", defense_etc: "방산 기타",
+  sequip: "조선 기자재", yard: "조선", shipping: "해운", ship_etc: "조선·해운 기타",
+  petro: "정유·석유화학", fine: "정밀화학", steel: "철강", nonferrous: "비철금속",
+  chem_etc: "화학 기타", metal_etc: "금속 기타", packaging: "포장재",
+  cmat: "건자재", cmat_etc: "건자재", build: "건설", build_etc: "건설", realestate: "부동산·리츠",
+  platform: "인터넷 플랫폼", game: "게임", ent: "엔터·K팝", telecom: "통신", adcomm: "광고·미디어",
+  itsvc: "IT 서비스", telecom_eq: "통신장비", media_etc: "미디어 기타",
+  bank: "은행", sec: "증권", insure: "보험", vc: "벤처캐피탈",
+  sec_etc: "증권", insure_etc: "보험", fin_etc: "기타 금융",
+  food: "식음료", cosmetic: "화장품", retail: "유통", fashion: "패션",
+  food_etc: "식음료", cosmetic_etc: "화장품", fashion_etc: "패션", retail_etc: "유통",
+  oil: "에너지", eequip: "전력기기", util: "유틸리티",
+  machine: "기계", elec: "전기·전자", indsvc: "산업 서비스", transport: "운송·물류",
+};
+// 미국 GICS(영문/한글) → 세분 폴백
+const US_FINE_SECTOR = {
+  "Information Technology": "IT·기술", "Health Care": "헬스케어", "Financials": "금융",
+  "Consumer Discretionary": "임의소비재", "Consumer Staples": "필수소비재", "Communication Services": "커뮤니케이션",
+  "Industrials": "산업재", "Energy": "에너지", "Materials": "소재", "Utilities": "유틸리티", "Real Estate": "부동산",
+};
+
+let _chainIndex = null;   // {code: stageKey} — CHAINS의 codes 배열에서 1회 구축
+function chainStageOf(code) {
+  if (!_chainIndex) {
+    _chainIndex = {};
+    Object.values(typeof CHAINS !== "undefined" ? CHAINS : {}).forEach((cfg) => {
+      (cfg.stages || []).forEach((st) => (st.codes || []).forEach((c) => {
+        if (!_chainIndex[c]) _chainIndex[c] = st.key;
+      }));
+    });
+  }
+  return _chainIndex[code];
+}
+
+function hldFineSector(h) {
+  const key = `${h.mk}_${h.ticker}`;
+  if (HLD_FINE_TICKER[key]) return HLD_FINE_TICKER[key];
+  if (h.mk === "kr") {
+    const st = chainStageOf(h.ticker);
+    if (st && CHAIN_FINE[st]) return CHAIN_FINE[st];
+  }
+  const t = (MARKET?.heatmap || []).find((x) => x.m === h.mk && x.t === h.ticker);
+  if (h.mk === "us" && t?.sector && US_FINE_SECTOR[t.sector]) return US_FINE_SECTOR[t.sector];
+  return t?.sector || (h.lev ? "레버리지·ETF" : "기타");
+}
+
 function renderHldAnalytics(all) {
   const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
   const gVal = all.reduce((a, h) => a + (h.val || 0), 0) || 1;
@@ -6431,12 +6525,8 @@ function renderHldAnalytics(all) {
   });
 
   // ── ② 산업별 보유 비중(도넛 + 리스트) ──
-  const secOf = (h) => {
-    const t = (MARKET?.heatmap || []).find((x) => x.m === h.mk && x.t === h.ticker);
-    return t?.sector || (h.lev ? "레버리지·ETF" : "기타");
-  };
   const bySec = {};
-  all.forEach((h) => { const s = secOf(h); bySec[s] = (bySec[s] || 0) + (h.val || 0); });
+  all.forEach((h) => { const s = hldFineSector(h); bySec[s] = (bySec[s] || 0) + (h.val || 0); });
   const secs = Object.entries(bySec).sort((a, b) => b[1] - a[1]);
   const R = 56, C = 2 * Math.PI * R;
   let acc = 0;
