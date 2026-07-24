@@ -736,10 +736,10 @@ def hankyung_reports(days: int = 30, max_pages: int = 60) -> dict:
 
 def kr_feed(code: str) -> dict:
     out = {"news": [], "disc": [], "reports": kr_reports(code)}
-    cut_news = datetime.now(KST) - timedelta(days=7)
-    cut_disc = datetime.now(KST) - timedelta(days=183)
+    cut_news = datetime.now(KST) - timedelta(days=90)    # 뉴스 최근 3개월
+    cut_disc = datetime.now(KST) - timedelta(days=365)   # 공시 최근 1년
     try:
-        arr = _getj(f"https://m.stock.naver.com/api/news/stock/{code}?pageSize=12")
+        arr = _getj(f"https://m.stock.naver.com/api/news/stock/{code}?pageSize=20")
         for grp in arr:
             for it in grp.get("items", []):
                 try:
@@ -752,11 +752,11 @@ def kr_feed(code: str) -> dict:
                     "t": ts.strftime("%m-%d %H:%M"), "title": re.sub(r"<[^>]+>", "", it["title"])[:90],
                     "link": f"https://n.news.naver.com/article/{it['officeId']}/{it['articleId']}",
                     "src": it.get("officeName", "")})
-        out["news"] = out["news"][:5]
+        out["news"] = out["news"][:12]
     except Exception:
         pass
     try:
-        arr = _getj(f"https://m.stock.naver.com/api/stock/{code}/disclosure?pageSize=30")
+        arr = _getj(f"https://m.stock.naver.com/api/stock/{code}/disclosure?pageSize=40")
         for it in arr:
             try:
                 ts = datetime.fromisoformat(it["datetime"]).replace(tzinfo=KST)
@@ -766,7 +766,7 @@ def kr_feed(code: str) -> dict:
                 continue
             out["disc"].append({"d": ts.strftime("%Y-%m-%d"), "title": it["title"][:80],
                                 "link": f"https://finance.naver.com/item/news_notice.naver?code={code}"})
-        out["disc"] = out["disc"][:8]
+        out["disc"] = out["disc"][:15]
     except Exception:
         pass
     return out
@@ -804,9 +804,9 @@ def us_feed(tk: str, cik: str | None) -> dict:
     import yfinance as yf
     tobj = yf.Ticker(tk)
     out = {"news": [], "disc": [], "reports": us_reports(tobj)}
-    cut = datetime.now(timezone.utc) - timedelta(days=7)
+    cut = datetime.now(timezone.utc) - timedelta(days=90)   # 뉴스 최근 3개월
     try:
-        for n in (tobj.news or [])[:12]:
+        for n in (tobj.news or [])[:25]:
             c = n.get("content") or n
             ts_raw = c.get("pubDate") or n.get("providerPublishTime")
             try:
@@ -822,7 +822,7 @@ def us_feed(tk: str, cik: str | None) -> dict:
                 out["news"].append({"t": ts.astimezone(KST).strftime("%m-%d %H:%M"),
                                     "title": title[:90], "link": link,
                                     "src": (c.get("provider") or {}).get("displayName", "")})
-        out["news"] = out["news"][:5]
+        out["news"] = out["news"][:12]
     except Exception:
         pass
     if cik:
@@ -831,7 +831,7 @@ def us_feed(tk: str, cik: str | None) -> dict:
                 f"https://data.sec.gov/submissions/CIK{cik}.json",
                 headers={"User-Agent": "chart-principles research yoo7337@gmail.com"}), timeout=15).read())
             rec = d["filings"]["recent"]
-            cut_d = (date.today() - timedelta(days=183)).isoformat()
+            cut_d = (date.today() - timedelta(days=365)).isoformat()   # 공시 최근 1년
             for form, fdate, acc, doc in zip(rec["form"], rec["filingDate"],
                                              rec["accessionNumber"], rec["primaryDocument"]):
                 if fdate < cut_d or form not in ("8-K", "10-Q", "10-K", "DEF 14A", "S-1", "4"):
@@ -840,7 +840,7 @@ def us_feed(tk: str, cik: str | None) -> dict:
                     continue
                 out["disc"].append({"d": fdate, "title": form,
                                     "link": f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{doc}"})
-                if len(out["disc"]) >= 8:
+                if len(out["disc"]) >= 15:
                     break
         except Exception:
             pass
@@ -872,7 +872,7 @@ def build_feed(quick: bool = False) -> dict:
             cmap = _corp_codes(key)
         except Exception:
             cmap = {}
-        cut = (date.today() - timedelta(days=183)).strftime("%Y%m%d")
+        cut = (date.today() - timedelta(days=365)).strftime("%Y%m%d")   # DART 공시 최근 1년
         today_s = date.today().strftime("%Y%m%d")
         done = fetched = fail_streak = 0
         for code in codes:
@@ -882,13 +882,13 @@ def build_feed(quick: bool = False) -> dict:
                 continue
             try:
                 d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
-                          f"&bgn_de={cut}&end_de={today_s}&page_count=8")
+                          f"&bgn_de={cut}&end_de={today_s}&page_count=15")
                 fail_streak = 0
                 if d.get("status") == "000" and d.get("list"):
                     disc = [{"d": f"{r['rcept_dt'][:4]}-{r['rcept_dt'][4:6]}-{r['rcept_dt'][6:]}",
                              "title": r["report_nm"][:80],
                              "link": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={r['rcept_no']}"}
-                            for r in d["list"][:8]]
+                            for r in d["list"][:15]]
                     if disc:
                         fmap.setdefault(k, {"news": [], "disc": []})["disc"] = disc
                         fetched += 1
