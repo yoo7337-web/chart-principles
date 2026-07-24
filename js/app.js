@@ -2815,7 +2815,7 @@ function renderHome() {
       hmZoomSector = null;
       $("#hm-back").style.display = "none";
       $("#home-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === btn));
-      renderIdxCards(); drawTreemap(); renderMovers(); renderRankings(); renderHomeNews();
+      renderIdxCards(); drawTreemap(); renderMovers(); renderRankings(); renderHomeNews(); renderHomeSchedule();
     };
   });
   $("#hm-back").onclick = () => {
@@ -2832,6 +2832,9 @@ function renderHome() {
   renderRankings();
   renderHomeNews();
   renderHomeDeals();
+  renderHomeSchedule();
+  $("#home-sch-more").onclick = (e) => { e.preventDefault(); activateTab("calendar"); };
+  $("#home-econ-more").onclick = (e) => { e.preventDefault(); activateTab("econcal"); };
   setTimeout(syncHomeHeights, 60);   // 레이아웃 안정 후 재동기화(초기 렌더 타이밍 보정)
   if (!renderHome._resizeBound) {   // 리사이즈 시 우측 높이 재동기화(1회 바인딩)
     renderHome._resizeBound = true;
@@ -2901,8 +2904,8 @@ function openStockDialog(mk, t, name, last, chg, unit) {
 // 오늘의 종목: 거래대금/거래량/급등/급락 칩 + 순위 리스트
 // 현재 시장에 토스 랭킹이 있는지 — 있으면 '오늘의 종목'은 중복이라 숨김(랭킹이 없을 때만 폴백 표시)
 function rankingsAvailable() {
-  const rk = TOSSM?.rankings;
-  return !!rk && RANK_CATS.some(([k]) => rk[`${homeMk}_${k}`]?.rows?.length);
+  // movers(30분 클라우드) 또는 토스 랭킹 중 하나라도 있으면 실시간 랭킹 섹션이 대체
+  return !!(MARKET?.movers?.[homeMk] || TOSSM?.rankings);
 }
 
 const MV_CATS = [["value", "거래대금"], ["volume", "거래량"], ["gainers", "급등"], ["losers", "급락"]];
@@ -2939,33 +2942,92 @@ function renderMovers() {
   });
 }
 
+// 금주(월~일) 실적발표·경제지표 — 홈 하단 우측. calendar.json(CAL) 재사용.
+function _weekRange() {
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7;  // 월=0
+  const mon = new Date(now); mon.setDate(now.getDate() - dow); mon.setHours(0, 0, 0, 0);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 0);
+  return [mon, sun];
+}
+function renderHomeSchedule() {
+  const eHost = $("#home-earnings"), cHost = $("#home-econ");
+  if (!eHost || !cHost) return;
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  const [mon, sun] = _weekRange();
+  const inWeek = (ds) => { const d = new Date(ds + "T00:00:00"); return d >= mon && d <= sun; };
+  const today = localDay(new Date());
+  const md = (ds) => ds.slice(5).replace("-", "/");
+  const yo = (ds) => "일월화수목금토"[new Date(ds + "T00:00:00").getDay()];
+
+  // 실적발표 — 홈 시장 토글 연동
+  const er = (CAL?.earnings?.[homeMk] || []).filter((e) => inWeek(e.date))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
+  eHost.innerHTML = er.length ? er.slice(0, 40).map((e) => `
+    <div class="sch-row${e.t ? " clickable" : ""}${e.date === today ? " today" : ""}" ${e.t ? `data-t="${e.t}"` : ""}>
+      <span class="sch-date">${md(e.date)}<span class="sub-note">(${yo(e.date)})</span></span>
+      ${e.t ? `<img class="sch-logo" src="${logoUrl(homeMk, e.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sch-logo"></span>`}
+      <span class="sch-name"><b>${esc(e.name)}</b></span>
+      <span class="sch-info sub-note">${homeMk === "kr" ? esc((e.event || "").slice(0, 18)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
+    </div>`).join("") : `<p class="mini-note">이번 주 예정된 실적발표가 없습니다.</p>`;
+  eHost.querySelectorAll(".sch-row.clickable").forEach((el) => el.onclick = () => {
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(`${homeMk}_${el.dataset.t}`);
+  });
+
+  // 경제지표 — 이번 주 중요도 중·상(글로벌 매크로라 시장 토글과 무관, 모든 국가)
+  const ec = (CAL?.econ || []).filter((e) => inWeek(e.d))
+    .sort((a, b) => a.d.localeCompare(b.d) || (b.imp - a.imp) || a.tm.localeCompare(b.tm));
+  const flag = { US: "🇺🇸", KR: "🇰🇷", CN: "🇨🇳", JP: "🇯🇵", EU: "🇪🇺" };
+  cHost.innerHTML = ec.length ? ec.slice(0, 40).map((e) => `
+    <div class="sch-row${e.d === today ? " today" : ""}">
+      <span class="sch-date">${md(e.d)}<span class="sub-note">(${yo(e.d)})</span></span>
+      <span class="sch-flag">${flag[e.c] || e.c}</span>
+      <span class="sch-name">${e.imp >= 1 ? "⭐ " : ""}${esc(ecKo ? ecKo(e.t) : e.t)}</span>
+      <span class="sch-info sub-note">${e.a != null ? e.a + (e.u || "") : (e.f != null ? "예상 " + e.f + (e.u || "") : "")}</span>
+    </div>`).join("") : `<p class="mini-note">이번 주 예정된 주요 지표가 없습니다.</p>`;
+}
+
 // 주요 뉴스 미리보기 (뉴스 탭 데이터 재사용, 상위 5건)
 // 실시간 랭킹 (toss_market.json) — 홈 시장 토글(homeMk)에 연동. TOSSM 없으면 섹션 숨김.
 const RANK_CATS = [["amount", "거래대금"], ["volume", "거래량"], ["gainers", "급등"],
                    ["losers", "급락"], ["toss", "🟦 토스 고객"]];
 let rankCat = "amount";
 
+// movers(market.json, 30분 클라우드 갱신) 카테고리 → 랭킹 카테고리 매핑
+const RANK_MV = { amount: "value", volume: "volume", gainers: "gainers", losers: "losers" };
+
+function rankRows(cat) {
+  if (cat === "toss") {
+    const g = TOSSM?.rankings?.[`${homeMk}_toss`];
+    return g?.rows ? { src: "toss", rows: g.rows } : null;
+  }
+  const mv = MARKET?.movers?.[homeMk]?.[RANK_MV[cat]];
+  if (!mv?.length) return null;
+  // movers 필드(t,name,last,chg,value,vol) → 랭킹 행 표준화(amount/volume/rank)
+  return { src: "movers", rows: mv.map((r, i) => ({
+    t: r.t, name: r.name, last: r.last, chg: r.chg, rank: i + 1,
+    amount: r.value, volume: r.vol, halted: r.halted })) };
+}
+
 function renderRankings() {
   const wrap = $("#rank-wrap");
   if (!wrap) return;
-  const rk = TOSSM?.rankings;
-  if (!rk) { wrap.style.display = "none"; return; }
-
-  // 현재 시장에서 제공되는 카테고리만 노출(미국은 거래량 랭킹 미수집)
-  const cats = RANK_CATS.filter(([k]) => rk[`${homeMk}_${k}`]?.rows?.length);
+  // 거래대금·거래량·급등·급락 = movers(30분 클라우드) / 토스 고객 = toss(체결, IP제한 배치)
+  const cats = RANK_CATS.filter(([k]) => rankRows(k)?.rows?.length);
   if (!cats.length) { wrap.style.display = "none"; return; }
   wrap.style.display = "";
   if (!cats.some(([k]) => k === rankCat)) rankCat = cats[0][0];
 
-  const g = rk[`${homeMk}_${rankCat}`];
-  // 토스는 15:40 노트북 배치라 노트북이 꺼져 있으면 스냅샷이 하루 이상 낡는다. "실시간"으로만 적으면
-  // 홈 '오늘의 종목'(30분 클라우드 갱신)과 값이 달라 보여 오해 → 경과 시간을 반드시 함께 표기.
-  const ageH = TOSSM.generated
-    ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
-  const stale = ageH != null && ageH >= 12;
-  $("#rank-note").innerHTML =
-    `(토스증권 ${g.duration === "realtime" ? "체결 기준" : "1일"} · ${relTime(TOSSM.generated)} 수집)` +
-    (stale ? ` <span class="rank-stale">⚠ ${Math.floor(ageH)}시간 전 스냅샷 (장중엔 지연)</span>` : "");
+  const g = rankRows(rankCat);
+  if (g.src === "movers") {
+    $("#rank-note").innerHTML = `(거래소 30분 갱신 · ${relTime(MARKET.generated)})`;
+  } else {
+    const ageH = TOSSM.generated
+      ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
+    const stale = ageH != null && ageH >= 12;
+    $("#rank-note").innerHTML = `(토스증권 체결 기준 · ${relTime(TOSSM.generated)} 수집)`
+      + (stale ? ` <span class="rank-stale">⚠ ${Math.floor(ageH)}시간 전 스냅샷 (IP제한 배치라 노트북 가동 시만 갱신)</span>` : "");
+  }
 
   $("#rank-chips").innerHTML = cats.map(([k, lab]) =>
     `<button class="chip${k === rankCat ? " active" : ""}" data-cat="${k}">${lab}</button>`).join("");
@@ -3035,11 +3097,14 @@ function renderHomeDeals() {
 
 // 우측(뉴스+딜) 전체 높이를 히트맵 컬럼 높이에 맞춤 → 각 절반은 grid 1fr, 넘치면 자체 스크롤
 function syncHomeHeights() {
-  const heat = document.querySelector(".home-heat"), right = document.querySelector(".home-right");
-  if (!heat || !right) return;
-  if (window.innerWidth <= 1100) { right.style.height = ""; return; }  // 1열 스택 구간은 자연 높이
-  const h = heat.offsetHeight;
-  if (h > 100) right.style.height = h + "px";   // 패널 숨김(offsetHeight≈0) 땐 건드리지 않음
+  // 홈의 각 2단 그리드(상=히트맵|뉴스딜, 하=랭킹|일정)에서 우측을 좌측 높이에 맞춤
+  document.querySelectorAll("#tab-heatmap .home-grid2").forEach((grid) => {
+    const left = grid.firstElementChild, right = grid.querySelector(".home-right");
+    if (!left || !right) return;
+    if (window.innerWidth <= 1100) { right.style.height = ""; return; }
+    const h = left.offsetHeight;
+    if (h > 100) right.style.height = h + "px";   // 패널 숨김(offsetHeight≈0) 땐 건드리지 않음
+  });
 }
 
 function hmTooltip() {

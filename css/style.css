@@ -170,6 +170,9 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .idx-name { font-size: .8rem; color: var(--muted); font-weight: 600; }
 .idx-val { font-size: 1.18rem; font-weight: 800; margin: 2px 0; }
 .idx-chg { font-size: .8rem; font-weight: 700; margin-bottom: 4px; }
+/* 지수·매크로 카드 등락률 색(한국식 상승=빨강/하락=파랑) — 전역 .pos/.neg는 td 스코프라 여기 명시 */
+.idx-chg.pos, .macro-val .pos { color: var(--kup); }
+.idx-chg.neg, .macro-val .neg { color: var(--kdn); }
 .home-h { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 8px; font-size: 1.05rem; }
 .home-more { font-size: .78rem; color: var(--accent); text-decoration: none; font-weight: 600; }
 
@@ -851,9 +854,12 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .tr-shkw.top3 { color: #ff8c9a; background: rgba(245,68,90,.1); font-weight: 600; }
 @media (max-width: 800px) { .tr-shkws { padding-left: 0; } }
 
-/* 개발일지 — 관리자 전용 버튼(그룹 nav 우측 끝) */
-.group.admin { margin-left: auto; border-style: dashed; opacity: .85; }
-.group.admin:hover { opacity: 1; }
+/* 개발일지 — 관리자 전용 작은 아이콘(헤더 우측, 로그아웃 아래) */
+.admin-icon { position: fixed; top: 46px; right: 16px; z-index: 50; width: 30px; height: 30px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  font-size: .9rem; cursor: pointer; line-height: 1; padding: 0; }
+.admin-icon:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) { .admin-icon { top: 8px; right: 8px; } }
 .dev-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 1000px) { .dev-split { grid-template-columns: 1fr; } }
 .dev-input { display: flex; gap: 6px; margin: 4px 0 10px; }
@@ -1071,6 +1077,17 @@ dialog { background: var(--card); color: var(--ink); }
 .home-rblock { min-height: 0; display: flex; flex-direction: column; }
 .home-rblock .home-h { margin-top: 0; flex: none; }
 .home-rblock .news-list { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+/* 금주 일정 행(실적발표·경제지표) */
+.sch-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .82rem; }
+.sch-row:last-child { border-bottom: none; }
+.sch-row.clickable { cursor: pointer; }
+.sch-row.clickable:hover .sch-name b { color: var(--accent); }
+.sch-row.today { background: rgba(67,145,255,.06); border-radius: 6px; }
+.sch-date { flex: 0 0 62px; color: var(--muted); font-size: .76rem; }
+.sch-logo { width: 20px; height: 20px; border-radius: 50%; background: #fff; object-fit: contain; flex: 0 0 auto; }
+.sch-flag { flex: 0 0 auto; }
+.sch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sch-info { flex: 0 0 auto; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #rank-wrap { margin-top: 22px; }
 .rank-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
 .rank-grid .mv-row:nth-last-child(2) { border-bottom: none; }   /* 각 열 마지막 행 라인 정리(짝수개 기준) */

@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>주식차트분석 — 귀납적 차트 원칙</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=132">
-<script src="firebase-config.js?v=132"></script>
-<script src="js/auth.js?v=132"></script>
+<link rel="stylesheet" href="css/style.css?v=133">
+<script src="firebase-config.js?v=133"></script>
+<script src="js/auth.js?v=133"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -22,8 +22,8 @@
   <button class="group" data-group="discover">🔍 종목 찾기</button>
   <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
-  <button class="group admin" id="admin-devlog" style="display:none">🛠 개발일지</button>
 </nav>
+<button class="admin-icon" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠</button>
 
 <nav class="tabs" data-group-tabs="research" style="display:none">
   <button class="tab" data-tab="rank">원칙</button>
@@ -390,10 +390,23 @@
       <div id="mv-list" class="mv-list card-flat"></div>
     </div>
 
-    <div id="rank-wrap" style="display:none">
-      <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
-      <div class="chips" id="rank-chips"></div>
-      <div id="rank-list" class="rank-grid mv-list card-flat"></div>
+    <!-- 하단 2단: 왼쪽=실시간 랭킹(히트맵 크기) / 오른쪽=금주 실적발표·경제지표 -->
+    <div class="home-grid2" id="home-grid-bottom">
+      <div class="home-col" id="rank-wrap" style="display:none">
+        <h2 class="home-h">🔥 실시간 랭킹 <span class="sub-note" id="rank-note"></span></h2>
+        <div class="chips" id="rank-chips"></div>
+        <div id="rank-list" class="rank-grid mv-list card-flat"></div>
+      </div>
+      <div class="home-right">
+        <div class="home-rblock">
+          <h2 class="home-h">📢 금주 실적발표 <a href="#" id="home-sch-more" class="home-more">달력 →</a></h2>
+          <div id="home-earnings" class="news-list card-flat"></div>
+        </div>
+        <div class="home-rblock">
+          <h2 class="home-h">📅 금주 경제지표 <a href="#" id="home-econ-more" class="home-more">더보기 →</a></h2>
+          <div id="home-econ" class="news-list card-flat"></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -753,6 +766,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=132"></script>
+<script src="js/app.js?v=133"></script>
 </body>
 </html>
