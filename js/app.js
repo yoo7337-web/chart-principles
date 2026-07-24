@@ -8,6 +8,7 @@ let TODAY = null;
 let SIM = null;
 let MARKET = null;
 let TOSSM = null;   // toss_market.json — 랭킹·국고채 커브(토스 Open API, 허용IP 필요 → 없을 수 있음)
+let INVESTOR = null;   // investor.json — 시장별 투자자(개인·외국인·기관) 일별 동향 + 외국인/기관 순매수 랭킹(KR)
 let NEWS = null;
 let MPRO = null;
 let FUND = null;
@@ -3030,7 +3031,8 @@ function renderHomeSchedule() {
 // 주요 뉴스 미리보기 (뉴스 탭 데이터 재사용, 상위 5건)
 // 실시간 랭킹 (toss_market.json) — 홈 시장 토글(homeMk)에 연동. TOSSM 없으면 섹션 숨김.
 const RANK_CATS = [["amount", "거래대금"], ["volume", "거래량"], ["gainers", "급등"],
-                   ["losers", "급락"], ["toss", "🟦 토스 고객"]];
+                   ["losers", "급락"], ["frgn_buy", "외국인 순매수"], ["frgn_sell", "외국인 순매도"],
+                   ["toss", "🟦 토스 고객"]];
 let rankCat = "amount";
 
 // movers(market.json, 30분 클라우드 갱신) 카테고리 → 랭킹 카테고리 매핑
@@ -3040,6 +3042,13 @@ function rankRows(cat) {
   if (cat === "toss") {
     const g = TOSSM?.rankings?.[`${homeMk}_toss`];
     return g?.rows ? { src: "toss", rows: g.rows } : null;
+  }
+  if (cat === "frgn_buy" || cat === "frgn_sell") {
+    if (homeMk !== "kr") return null;  // 외국인 순매수 랭킹은 국내만(네이버)
+    const arr = INVESTOR?.rank?.[cat === "frgn_buy" ? "foreign_buy" : "foreign_sell"];
+    return arr?.length ? { src: "investor", rows: arr.map((r, i) => ({
+      t: r.code, name: r.name, last: r.last, chg: null, rank: i + 1,
+      netbuy: r.net, dir: cat === "frgn_buy" ? "buy" : "sell" })) } : null;
   }
   const mv = MARKET?.movers?.[homeMk]?.[RANK_MV[cat]];
   if (!mv?.length) return null;
@@ -3061,6 +3070,8 @@ function renderRankings() {
   const g = rankRows(rankCat);
   if (g.src === "movers") {
     $("#rank-note").innerHTML = `(거래소 30분 갱신 · ${relTime(MARKET.generated)})`;
+  } else if (g.src === "investor") {
+    $("#rank-note").innerHTML = `(네이버 · 외국인 ${rankCat === "frgn_buy" ? "순매수" : "순매도"} 상위 · ${INVESTOR.generated ? relTime(INVESTOR.generated) : ""})`;
   } else {
     const ageH = TOSSM.generated
       ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
@@ -3077,7 +3088,9 @@ function renderRankings() {
 
   $("#rank-list").innerHTML = g.rows.map((r) => {
     const up = (r.chg ?? 0) >= 0;
-    const sub = rankCat === "volume"
+    const sub = r.dir
+      ? `외국인 ${r.dir === "buy" ? "순매수" : "순매도"}${r.netbuy != null ? " " + fmtMcap(Math.abs(r.netbuy) * 1e6, "kr") : ""}`
+      : rankCat === "volume"
       ? `거래량 ${(r.volume || 0).toLocaleString()}주`
       : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
     // 변동액 = 현재가 - 전일종가(현재가/(1+등락률)). 가격=검정, 변동액(액수+%) 전체를 국내 관례 색상(상승 빨강/하락 파랑)
@@ -6943,12 +6956,13 @@ Promise.all([
   getJSON("calendar.json"),
   getJSON("sector_news.json"),
   getJSON("toss_market.json"),
+  getJSON("investor.json"),
 ])
-  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal, sn, tm]) => {
+  .then(([j, a, cm, rg, rcm, td, sm, mk, nw, mp, fd, gu, vl, dl, nb, db, na, da, cal, sn, tm, iv]) => {
     DATA = j; APPLY = a; COMMENT = cm; REGIME = rg; RCOMMENT = rcm; TODAY = td; SIM = sm;
     MARKET = mk; NEWS = nw; MPRO = mp; FUND = fd; GURUS = gu; VAL = vl; DEALS = dl;
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal; SECNEWS = sn;
-    TOSSM = tm;
+    TOSSM = tm; INVESTOR = iv;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
