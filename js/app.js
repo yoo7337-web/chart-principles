@@ -2608,6 +2608,38 @@ function loadTechPat() {
 }
 const TECH_ICON = { flag: "🚩", v_rebound: "✅", high_pullback: "📈", trend_break: "📐",
                     new_high: "🏔", triangle: "🔺", cup_handle: "☕", box_resist: "📦" };
+// 패턴별 '무엇을 뜻하는가' — 시장 심리 해석과 쓰는 법(판정 조건·검증 수치는 tech_patterns.json에서 붙임)
+const TECH_TIP = {
+  flag: "급등 후 <b>차익실현 물량이 적게 나온</b> 상태. 깃대(급등)에 이어 좁은 조정이 깃발 모양을 만들며, 팔 사람이 없다는 뜻이라 재차 상승으로 이어지기 쉽습니다. 조정이 깊거나(−10% 초과) 길어지면(15일↑) 힘이 빠진 것으로 봅니다.",
+  v_rebound: "공포로 급락한 뒤 <b>저점에서 되돌아선</b> 자리. 투매가 끝나고 매수세가 들어왔다는 신호로, 낙폭이 클수록 되돌림 여력도 큽니다. 다만 하락 추세 자체는 아직 살아 있을 수 있어 손절선을 저점 아래로 두고 봅니다.",
+  high_pullback: "신고가를 낸 강한 종목이 <b>얕게 쉬어가는</b> 자리. 추세는 살아 있는데(MA20 위) 단기 과열만 식힌 상태라 진입 가격이 유리해집니다. 조정이 −12%를 넘어가면 추세 훼손으로 봅니다.",
+  trend_break: "내리막 추세선을 <b>위로 뚫은</b> 자리. 하락하던 고점 흐름을 종가가 넘어서면 매도 우위가 꺾였다는 뜻으로, 추세 전환의 첫 신호로 씁니다. 거래량이 함께 늘면 신뢰도가 올라갑니다.",
+  new_high: "52주 최고가 경신 — <b>물려 있는 매물이 없는</b> 상태. 강세의 증거지만 검증에서 <b>한국은 +1.62%p, 미국은 −0.52%p</b>로 방향이 엇갈려 채택하지 않았습니다(국내 한정 신호). 신고가만 보고 사기보다 눌림(신고가 눌림)까지 기다리는 편이 안전합니다.",
+  triangle: "고점은 낮아지고 저점은 높아지며 <b>변동성이 말라가는</b> 구간. 교과서에선 곧 큰 방향이 나온다고 보지만, 방향이 위인지 아래인지는 알려주지 않습니다 — 검증에서도 수렴 자체는 수익으로 이어지지 않았습니다(돌파를 확인한 뒤 대응).",
+  cup_handle: "긴 U자 하락·회복 뒤 짧은 눌림을 거쳐 <b>전고점을 넘는</b> 형태. 유명한 패턴이지만 컵의 깊이·기간을 어떻게 잡느냐에 따라 결과가 크게 달라지고, 우리 기준(120일)으로는 초과수익이 나오지 않았습니다.",
+  box_resist: "좁은 박스 상단(저항선)에 <b>붙어 있는</b> 상태. 뚫으면 상승이라고들 하지만, 실제로는 저항에 막혀 되밀리는 경우가 더 많아 8개 패턴 중 성적이 가장 나빴습니다. 돌파 후 안착을 확인하고 접근하세요.",
+};
+function techTipHtml(p, n) {
+  const pct = (v) => (v == null ? "-" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%p");
+  // pass_markets = 한·미 '둘 다 +' 조건 — 둘 다 음수인 경우와 한쪽만 +인 경우를 구분해 표기
+  const mkFail = !p.pass_markets && (p.edge_kr <= 0 && p.edge_us <= 0
+    ? "한국·미국 모두 초과수익 음수" : `${p.edge_kr > 0 ? "미국" : "한국"}에선 초과수익 음수(한·미 불일치)`);
+  const fail = [mkFail, !p.pass_halves && "전·후반 기간 불안정",
+                !p.pass_p && "통계 유의성 부족", !p.pass_n && "표본 부족"].filter(Boolean).join(" · ");
+  return `<div class="tt-h">${TECH_ICON[p.id] || "📊"} ${p.name}
+      <span class="${p.passed ? "tt-ok" : "tt-bad"}">${p.passed ? "✅ 검증 통과" : "⚠ 검증 미통과"}</span></div>
+    <p class="tt-mean">${TECH_TIP[p.id] || ""}</p>
+    <div class="tt-cond"><b>판정 기준</b> ${p.desc || ""}</div>
+    <table class="tt-tb"><tr><td>20일 초과수익</td><td class="${p.edge20 >= 0 ? "tt-p" : "tt-n"}">${pct(p.edge20)}</td>
+        <td>승률</td><td>${(p.win20 * 100).toFixed(1)}%</td></tr>
+      <tr><td>5일 / 60일</td><td colspan="3">${pct(p.edge5)} / ${pct(p.edge60)}</td></tr>
+      <tr><td>한국 / 미국</td><td colspan="3">${pct(p.edge_kr)} / ${pct(p.edge_us)}</td></tr>
+      <tr><td>표본</td><td>${(p.n || 0).toLocaleString()}건</td>
+        <td>p값</td><td>${p.p < 0.001 ? "&lt;0.001" : (p.p ?? 0).toFixed(4)}</td></tr></table>
+    <div class="tt-foot">${p.passed
+      ? `현재 신호 <b>${n}종목</b> · 초과수익 = 신호 20일 뒤 수익률 − 같은 종목 무작위 시점(시장) 평균`
+      : `<b>탈락 사유: ${fail || "초과수익 음수"}</b> — 근거가 약하니 참고만 하세요 (현재 ${n}종목)`}</div>`;
+}
 
 function renderScrTech() {
   const host = $("#scr-tech"); if (!host) return;
@@ -2620,11 +2652,8 @@ function renderScrTech() {
       const n = (cur[p.id] || []).filter((k) => pool.has(k)).length;
       const weak = !p.passed;
       const edge = p.edge20 != null ? `${p.edge20 >= 0 ? "+" : ""}${(p.edge20 * 100).toFixed(2)}%p` : "-";
-      const tip = weak
-        ? `⚠ 검증 미통과 — 20일 초과수익 ${edge}(표본 ${p.n?.toLocaleString()})${!p.pass_markets ? " · 한·미 방향 불일치" : ""}${!p.pass_halves ? " · 기간 불안정" : ""}${!p.pass_p ? " · 통계 유의성 부족" : ""} · 참고용`
-        : `✅ 검증 통과 — 20일 초과수익 ${edge} · 승률 ${(p.win20 * 100).toFixed(1)}% · 표본 ${p.n?.toLocaleString()} · ${p.p < 0.001 ? "p<0.001" : "p=" + p.p.toFixed(4)}`;
       return `<button class="scr-theme tech ${scrTechActive === p.id ? "on" : ""} ${weak ? "weak" : ""} ${n ? "" : "none"}"
-        data-id="${p.id}" title="${tip}">${TECH_ICON[p.id] || "📊"} ${p.name}
+        data-id="${p.id}">${TECH_ICON[p.id] || "📊"} ${p.name}
         <span class="tech-edge ${weak ? "" : "ok"}">${edge}</span>
         <span class="tech-n">${n}</span>${weak ? `<span class="tech-warn">⚠</span>` : ""}</button>`;
     };
@@ -2635,10 +2664,27 @@ function renderScrTech() {
       ${failed.length ? `<div class="scr-themes" style="margin-top:5px">${failed.map(chip).join("")}</div>
         <p class="sub-note tech-foot">⚠ 표시 = <b>검증 미통과</b>(초과수익이 음수이거나 한·미 방향 불일치·통계 유의성 부족).
           널리 쓰이는 패턴이라 제공하지만 <b>근거가 약하니 참고만</b> 하세요.</p>` : ""}`;
-    host.querySelectorAll(".scr-theme.tech").forEach((b) => b.onclick = () => {
-      scrTechActive = (scrTechActive === b.dataset.id) ? null : b.dataset.id;
-      scrThemeActive = null;           // 재무 테마 해제(상호배타)
-      renderScrThemes(); renderScreener();
+    const byId = Object.fromEntries(pats.map((p) => [p.id, p]));
+    let tip = $("#tech-tip");
+    if (!tip) { tip = document.createElement("div"); tip.id = "tech-tip"; document.body.appendChild(tip); }
+    host.querySelectorAll(".scr-theme.tech").forEach((b) => {
+      b.onclick = () => {
+        scrTechActive = (scrTechActive === b.dataset.id) ? null : b.dataset.id;
+        scrThemeActive = null;           // 재무 테마 해제(상호배타)
+        tip.style.display = "none";
+        renderScrThemes(); renderScreener();
+      };
+      // 말풍선: 패턴의 의미 + 판정 기준 + 10년 검증 수치(통과/탈락 사유)
+      b.onmouseenter = () => {
+        const p = byId[b.dataset.id]; if (!p) return;
+        tip.innerHTML = techTipHtml(p, (cur[p.id] || []).filter((k) => pool.has(k)).length);
+        tip.style.display = "block";
+        const r = b.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+        tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - tw - 12)) + "px";
+        // 아래 공간이 부족하면 칩 위쪽으로 뒤집어 표시
+        tip.style.top = (r.bottom + th + 12 > window.innerHeight ? Math.max(8, r.top - th - 8) : r.bottom + 8) + "px";
+      };
+      b.onmouseleave = () => { tip.style.display = "none"; };
     });
   });
 }

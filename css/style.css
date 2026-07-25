@@ -926,6 +926,26 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-theme.tech.weak.on { background: #6b6b78; border-color: #6b6b78; opacity: 1; }
 .scr-theme.tech .tech-warn { font-size: .72rem; color: #e5a13a; }
 .scr-theme.tech.none { opacity: .45; }   /* 선택 시장에 현재 신호 0건 */
+/* 기술적 테마 말풍선 — 패턴의 의미·판정 기준·10년 검증 수치 */
+#tech-tip { position: fixed; display: none; z-index: 9999; width: 372px; background: #26262e;
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: .78rem;
+  line-height: 1.55; color: var(--ink); box-shadow: 0 10px 30px rgba(0,0,0,.5); pointer-events: none; }
+#tech-tip .tt-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: .92rem; margin-bottom: 6px; }
+#tech-tip .tt-ok { font-size: .7rem; font-weight: 700; color: #3fbf7f; }
+#tech-tip .tt-bad { font-size: .7rem; font-weight: 700; color: #e5a13a; }
+#tech-tip .tt-mean { margin: 0 0 8px; color: #c9cbd3; }
+#tech-tip .tt-mean b { color: var(--ink); }
+#tech-tip .tt-cond { background: rgba(255,255,255,.05); border-radius: 8px; padding: 6px 9px;
+  font-size: .74rem; color: var(--muted); margin-bottom: 8px; }
+#tech-tip .tt-cond b { color: var(--ink); margin-right: 5px; }
+#tech-tip .tt-tb { width: 100%; border-collapse: collapse; font-size: .74rem; }
+#tech-tip .tt-tb td { padding: 2px 0; }
+#tech-tip .tt-tb td:nth-child(odd) { color: var(--muted); width: 84px; }
+#tech-tip .tt-tb td:nth-child(even) { font-weight: 700; }
+#tech-tip .tt-p { color: #3fbf7f; } #tech-tip .tt-n { color: #f5445a; }
+#tech-tip .tt-foot { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line);
+  font-size: .72rem; color: var(--muted); }
+#tech-tip .tt-foot b { color: #e5a13a; }
 .tech-foot { margin: 6px 0 0; font-size: .74rem; line-height: 1.5; color: var(--muted); }
 .tech-foot b { color: #e5a13a; }
 /* 세부 지표 필터 */
@@ -1062,11 +1082,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 /* 개발일지 — 관리자 전용 작은 아이콘(헤더 우측, 로그아웃 아래) */
 /* 관리자 개발일지 — 그룹 nav 라인 오른쪽 끝(고정 아이콘에서 변경) */
-/* 관리자 전용 개발일지 — 페이지 최하단(로그아웃 버튼 바로 위), 로그아웃과 같은 톤 */
-.admin-foot { text-align: center; margin: 26px 0 0; }
-.admin-foot button { font-size: .76rem; padding: 5px 14px; border: 1px dashed rgba(218,223,233,.18);
-  border-radius: 8px; background: #26262e; color: #8b8b93; cursor: pointer; }
-.admin-foot button:hover { color: var(--ink); border-color: rgba(218,223,233,.34); }
+.group.admin-group { margin-left: auto; border-style: dashed; opacity: .8; }
+.group.admin-group:hover { opacity: 1; }
 .admin-icon { position: fixed; top: 46px; right: 16px; z-index: 50; width: 30px; height: 30px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--muted);
   font-size: .9rem; cursor: pointer; line-height: 1; padding: 0; }
