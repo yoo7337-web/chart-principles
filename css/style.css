@@ -1471,6 +1471,22 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .td-mixed .sub-note { margin-left: 6px; }
 .td-mixed .td-tiles { margin-top: 7px; }
 .td-cell-h .sub-note { font-weight: 400; margin-left: 6px; }
+/* 원칙별 정리 */
+.td-rules { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.td-rules > b { font-size: .85rem; display: block; margin-bottom: 8px; }
+.td-rules > b .sub-note { font-weight: 400; margin-left: 5px; }
+.td-rrow { display: flex; align-items: center; gap: 10px; padding: 4px 0;
+  border-bottom: 1px solid rgba(218,223,233,.05); }
+.td-rname { flex: 0 0 210px; font-size: .8rem; font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.td-rname.buy { color: #ff8c9a; } .td-rname.sell { color: #7fb4ff; }
+.td-rn { flex: 0 0 34px; text-align: right; font-size: .82rem; font-weight: 700; }
+.td-rtiles { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; align-items: center; min-width: 0; }
+.td-mini { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: #fff; cursor: pointer; overflow: hidden; flex: 0 0 22px; }
+.td-mini img { width: 100%; height: 100%; object-fit: contain; }
+.td-mini.noimg { background: var(--card); }
+.td-mini:hover { border-color: var(--accent); }
 /* 표 안 상태 배지 */
 .td-stat { font-size: .76rem; font-weight: 600; white-space: nowrap; }
 .td-stat.flip { color: #e5a13a; }

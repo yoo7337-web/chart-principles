@@ -951,14 +951,35 @@ function renderTodayDash() {
         ${isBuy ? "매수 신호" : "매도 신호"} <b>${all.length}</b><span class="sub-note">종목</span></div>
       ${cells}</div>`;
   };
+  // ── 원칙(신호)별 정리 — 어떤 원칙이 오늘 많이 터졌나 ──
+  const byRule = {};
+  rows.forEach((s) => {
+    const r = byRule[s.rule] = byRule[s.rule] || { rule: s.rule, side: s.side, list: [] };
+    r.list.push(s);
+  });
+  const rules = Object.values(byRule).sort((a, b) => b.list.length - a.list.length);
+  const ruleRow = (r) => {
+    const isBuy = r.side === "buy";
+    const uniq = [...new Map(r.list.map((s) => [`${s.market}_${s.ticker}`, s])).values()];
+    return `<div class="td-rrow">
+      <span class="td-rname ${isBuy ? "buy" : "sell"}">${isBuy ? "🟢" : "🔴"} ${r.rule}</span>
+      <span class="td-rn">${uniq.length}</span>
+      <span class="td-rtiles">${uniq.slice(0, 10).map((s) => `
+        <button class="td-mini" data-key="${s.market}_${s.ticker}" title="${s.market === "kr" ? s.name : s.ticker}">
+          <img src="${logoUrl(s.market, s.ticker)}" alt="" loading="lazy" onerror="this.parentNode.classList.add('noimg')">
+        </button>`).join("")}${uniq.length > 10 ? `<span class="td-more">+${uniq.length - 10}</span>` : ""}</span>
+    </div>`;
+  };
   const mixed = list.filter((o) => o.mixed || o.conflict);
   host.innerHTML = `<div class="td-dash-h">📋 <b>${day}</b> 신호 요약
       <span class="sub-note">종목 ${list.length}곳 · 숫자 배지 = 같은 방향 연속 횟수 · 타일 클릭 = 종목 조회</span></div>
     <div class="td-cards">${card("buy")}${card("sell")}</div>
     ${mixed.length ? `<div class="td-mixed"><b>⚠ 매수·매도 동시 발생 ${mixed.length}곳</b>
       <span class="sub-note">방향이 엇갈리니 판단을 미루는 편이 안전합니다</span>
-      <div class="td-tiles">${mixed.slice(0, 12).map((o) => tile(o, "mix")).join("")}</div></div>` : ""}`;
-  host.querySelectorAll(".td-tile").forEach((b) => b.onclick = () => {
+      <div class="td-tiles">${mixed.slice(0, 12).map((o) => tile(o, "mix")).join("")}</div></div>` : ""}
+    ${rules.length ? `<div class="td-rules"><b>📐 원칙별 <span class="sub-note">(오늘 어떤 원칙이 몇 종목에서 켜졌나 · 많이 터진 순)</span></b>
+      ${rules.map(ruleRow).join("")}</div>` : ""}`;
+  host.querySelectorAll(".td-tile, .td-mini").forEach((b) => b.onclick = () => {
     document.querySelector('[data-tab="lookup"]').click();
     loadLookup(b.dataset.key);
   });
