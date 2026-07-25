@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v181", "2026-07-26", "코인↔증시 상관 + 그래프 값 라벨", "크립토 탭에 코인별×지수별(코스피·코스닥·S&P500·나스닥·반도체) 일간 수익률 상관 히트맵 신설. 핵심 발견: BTC와 코스피는 같은 날 상관 +0.00으로 무관이지만 코인을 하루 앞세우면 +0.15(최근 1년 +0.23, p=0.003) — 코스피가 미국 마감 뒤 열리는 세션 구조 때문. 코인은 코스피보다 나스닥과 훨씬 강하게 동행(ETH +0.41). Snapshot 실적·현금흐름 막대에 값 라벨 추가하고 '만' 축약을 없애 표 값과 일치시킴."],
   ["v180", "2026-07-26", "산업 진단을 주식찾기 12산업군으로 통합 + 코스피 변수 분석", "산업 진단이 원천 업종 77개를 쓰던 것을 주식찾기와 같은 12산업군으로 교체(산업군 클릭=세부 업종 펼침→종목). 이제 두 화면의 산업이 완전히 일치. 자산시장 로테이션에 글로벌 변수 9종(반도체지수·나스닥·VIX·미국10년물·달러인덱스·유가·구리·금·상해·닛케이) 추가하고, 코스피를 종속변수로 고정한 뷰 신설 — 주가는 선행 변수가 4개뿐이고 대부분 동행이라 선행/동행/후행을 구분해 표기."],
   ["v179", "2026-07-26", "공시 오류 클라우드 반영 + 단위 체계 개편", "⚠공시 버그가 로컬에선 고쳐졌으나 feed.json이 CLOUD_OWNED라 배포되지 않고 클라우드 엔진도 옛 코드였음 → engine 동기화 + 수정본 직접 시딩으로 라이브 반영(두산테스나 7건→15건). Snapshot에 단위 선택(원·백만원·십억원·억원) 추가 + 현금흐름 막대에 값 라벨 표시. 상세 재무제표 단위도 동일 체계로 통일."],
   ["v178", "2026-07-26", "🏙 자산시장 탭 — 부동산·채권 + 로테이션 검증", "주식만 보면 놓치는 '돈의 이동'을 보는 탭 신설. 2000년 이후 월간 데이터로 19개 시장의 교차상관(-12~+12개월)을 전수 계산해 유의한 선행관계 99건을 추출. 핵심 발견: 신용 스프레드가 부동산을 2개월 선행(r=-0.72)으로 압도적 1위, 코스피는 서울 아파트를 2개월 선행, 부동산은 12개월 뒤 코스피와 역상관. 화면=요약 카드 5 + 로테이션 표 + 부동산(가격지수·전년대비·공급) + 채권(금리·스프레드)."],
@@ -4361,7 +4362,17 @@ function renderCrypto() {
       `시세·시가총액은 <b>CoinGecko</b>, 일봉은 <b>yfinance</b>(24시간 거래라 주말도 포함), ` +
       `공포·탐욕은 <b>alternative.me</b>, 김치 프리미엄은 <b>업비트</b> 원화가와 글로벌 달러가×환율의 차이입니다. ` +
       `<span class="sub-note">${d.generated} 갱신 · 주식과 달리 24시간 거래되므로 갱신 시점과 현재 시세가 다를 수 있습니다.</span>`;
-    crCards(d); crMcap(); crFng(d); crLines(); crTable(d);
+    crCards(d); crMcap(); crFng(d); crLines(); crTable(d); crCorr();
+    $("#cr-corr-win")?.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      crCorrWin = b.dataset.w;
+      $("#cr-corr-win").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      crCorr();
+    });
+    $("#cr-corr-lag")?.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      crCorrLag = b.dataset.l;
+      $("#cr-corr-lag").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      crCorr();
+    });
     $("#cr-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
       crRange = +b.dataset.d;
       $("#cr-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
@@ -4488,6 +4499,48 @@ function crLines() {
   const lbl = [0, Math.floor(ts.length / 2), ts.length - 1].map((i) =>
     `<text x="${X(i)}" y="${h - 5}" text-anchor="${i === 0 ? "start" : i === ts.length - 1 ? "end" : "middle"}" class="cr-ax">${ts[i].slice(2)}</text>`).join("");
   el.innerHTML = `<svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}">${grid}${base100}${paths}${labels}${lbl}</svg>`;
+}
+
+/* 🔗 코인 ↔ 증시 상관 — 코인이 증시를 움직이는지 실측
+   ⚠세션 구조를 반드시 함께 설명해야 한다. 코스피는 미국 마감 뒤 열려서 **같은 날 종가끼리는
+     상관이 0에 가깝지만 하루 밀면 유의**해진다(실측 BTC-코스피 0일 +0.00 / 1일 +0.15). */
+let crCorrWin = "y5", crCorrLag = "0";
+function crCorr() {
+  const mc = CRYPTO?.market_corr, host = $("#cr-corr"), note = $("#cr-corr-note");
+  if (!mc) { if (host) host.innerHTML = ""; return; }
+  const IDX = mc.idx, tks = Object.keys(IDX);
+  const coins = (CRYPTO.coins || []).map((c) => c.sym).filter((s) => mc.coins[s]);
+  const cell = (rec) => {
+    if (!rec) return `<td class="num">-</td>`;
+    const r = crCorrLag === "0" ? rec[`${crCorrWin}_r0`] : rec[`${crCorrWin}_lag_r`];
+    const p = crCorrLag === "0" ? rec[`${crCorrWin}_p0`] : rec[`${crCorrWin}_lag_p`];
+    const lag = rec[`${crCorrWin}_lag`];
+    if (r == null) return `<td class="num">-</td>`;
+    const a = Math.abs(r);
+    // 상관 강도를 배경 진하기로 — 0.4↑ 진함, 0.2~0.4 중간, 0.1 미만은 사실상 무관
+    const bg = a >= 0.4 ? ".34" : a >= 0.25 ? ".22" : a >= 0.12 ? ".12" : ".04";
+    const col = r >= 0 ? "34,192,122" : "245,68,90";
+    const sig = p != null && p < 0.05;
+    return `<td class="num" style="background:rgba(${col},${bg})"
+      title="r=${r.toFixed(3)} · p=${p == null ? "-" : p.toFixed(4)}${
+        crCorrLag !== "0" && lag != null ? ` · 시차 ${lag > 0 ? `코인이 ${lag}일 앞섬` : lag < 0 ? `증시가 ${-lag}일 앞섬` : "같은 날"}` : ""}">
+      <b style="${sig ? "" : "opacity:.45"}">${r >= 0 ? "+" : ""}${r.toFixed(2)}</b>${
+        crCorrLag !== "0" && lag ? `<i class="cr-lag">${lag > 0 ? "+" : ""}${lag}d</i>` : ""}</td>`;
+  };
+  host.innerHTML = `<thead><tr><th>코인</th>${tks.map((t) => `<th class="num">${IDX[t]}</th>`).join("")}</tr></thead><tbody>` +
+    coins.map((s) => `<tr><td><b>${s.toUpperCase()}</b></td>
+      ${tks.map((t) => cell(mc.coins[s][t])).join("")}</tr>`).join("") + "</tbody>";
+  const btcKs = mc.coins.btc?.["^KS11"] || {};
+  note.innerHTML = `<p class="mini-note">
+    숫자는 <b>일간 수익률의 상관계수</b>(+1=완전 동행, 0=무관). 진한 칸일수록 관계가 강하고,
+    <b>흐린 숫자는 통계적으로 유의하지 않음</b>(p≥0.05).<br>
+    ⚠ <b>세션 시차에 주의하세요.</b> 코스피는 미국 증시가 끝난 뒤 열립니다. 그래서 BTC와 코스피는
+    <b>같은 날 종가끼리는 ${(btcKs.y5_r0 ?? 0).toFixed(2)}로 사실상 무관</b>이지만,
+    <b>코인을 하루 앞세우면 ${(btcKs.y5_lag_r ?? 0).toFixed(2)}</b>(최근 1년 ${(btcKs.y1_lag_r ?? 0).toFixed(2)},
+    p=${(btcKs.y1_lag_p ?? 1).toFixed(3)})로 유의해집니다 —
+    <b>밤사이 코인이 오르면 다음날 코스피가 강한 경향</b>이 있다는 뜻입니다.
+    '최적 시차' 탭에서 코인별로 몇 일 앞서는지 확인하세요.<br>
+    ⚠ 상관은 인과가 아닙니다. 코인·주식이 <b>같은 위험선호에 함께 반응</b>하는 것일 가능성이 큽니다.</p>`;
 }
 
 function crTable(d) {
@@ -6465,13 +6518,13 @@ function renderFinTrends(st) {
     return Math.abs(x) < 100 && x !== 0 ? x.toFixed(1) : Math.round(x).toLocaleString();
   };
   const pf = (v, d = 1) => v == null ? "-" : (v >= 0 ? "+" : "") + v.toFixed(d) + "%";
-  // 차트 막대 라벨용 — 자릿수를 줄여 겹침 방지(1,234 / 1.2만 형태)
+  /* 차트 막대 라벨 — **선택한 단위의 숫자를 그대로** 쓴다.
+     ⚠'만' 같은 임의 축약을 붙이면 아래 표의 값과 달라 보여 혼란스럽다(사용자 지적). */
   const ftNum = (x) => {
     if (x == null) return "";
     const a = Math.abs(x);
-    if (a >= 1e4) return (x / 1e4).toFixed(1) + "만";
-    if (a >= 100) return Math.round(x).toLocaleString();
-    return a < 1 ? x.toFixed(2) : x.toFixed(1);
+    return a >= 100 || a === 0 ? Math.round(x).toLocaleString()
+      : a < 1 ? x.toFixed(2) : x.toFixed(1);
   };
 
   // ---- 막대+라인 콤보 도우미 ----
@@ -6524,7 +6577,7 @@ function renderFinTrends(st) {
   let chartSvg = "", legend = "";
   if (ftView === "perf") {
     // 매출·영업이익·순이익 막대 + 이익률 라인(우축 스케일 별도)
-    const bg = barGroup(["rev", "op", "np"], ["#4391ff", "#22c07a", "#9d7bff"], ["매출", "영업이익", "순이익"]);
+    const bg = barGroup(["rev", "op", "np"], ["#4391ff", "#22c07a", "#9d7bff"], ["매출", "영업이익", "순이익"], true);
     const mVals = rows.flatMap((r) => [r.opm, r.npm]).filter((v) => v != null);
     let lineSvg = "";
     if (mVals.length) {

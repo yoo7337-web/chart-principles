@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=180">
-<script src="firebase-config.js?v=180"></script>
-<script src="js/auth.js?v=180"></script>
+<link rel="stylesheet" href="css/style.css?v=181">
+<script src="firebase-config.js?v=181"></script>
+<script src="js/auth.js?v=181"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -153,6 +153,20 @@
         </span></h3>
       <div id="cr-legend" class="cr-legend"></div>
       <div id="cr-lines"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">🔗 코인 ↔ 증시 상관 <span class="sub-note">(일간 수익률 · 코인이 증시를 움직이는지 검증)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="cr-corr-win">
+          <button data-w="y5" class="active">5년</button>
+          <button data-w="y1">최근 1년</button>
+        </span>
+        <span class="mk-toggle" id="cr-corr-lag">
+          <button data-l="0" class="active">같은 날</button>
+          <button data-l="best">최적 시차</button>
+        </span></h3>
+      <div class="tablewrap"><table id="cr-corr"></table></div>
+      <div id="cr-corr-note"></div>
     </div>
     <div class="card-flat" style="margin-top:14px">
       <h3 class="lk-h3">🪙 코인별 시세 <span class="sub-note">(시가총액 순 · 최고가는 사상 최고가 대비)</span></h3>
@@ -936,6 +950,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=180"></script>
+<script src="js/app.js?v=181"></script>
 </body>
 </html>
