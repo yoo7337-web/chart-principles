@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=181">
-<script src="firebase-config.js?v=181"></script>
-<script src="js/auth.js?v=181"></script>
+<link rel="stylesheet" href="css/style.css?v=182">
+<script src="firebase-config.js?v=182"></script>
+<script src="js/auth.js?v=182"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -207,6 +207,27 @@
         </span></h3>
       <div id="as-bond-legend" class="cr-legend"></div>
       <div id="as-bond"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">💱 환율 <span class="sub-note">(원화 대비 주요 통화 · 달러·유로 지수)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-fx-mode">
+          <button data-m="krw" class="active">원화 대비</button>
+          <button data-m="index">달러·유로 지수</button>
+          <button data-m="rel">원화 강약(지수)</button>
+        </span></h3>
+      <div id="as-fx-legend" class="cr-legend"></div>
+      <div id="as-fx"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">🥇 금·귀금속과 증시 <span class="sub-note">(안전자산과 위험자산의 관계)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-gold-mode">
+          <button data-m="trend" class="active">추이</button>
+          <button data-m="corr">증시와의 관계</button>
+        </span></h3>
+      <div id="as-gold-legend" class="cr-legend"></div>
+      <div id="as-gold"></div>
     </div>
     <div class="criteria" id="as-context" style="margin-top:14px"></div>
   </section>
@@ -950,6 +971,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=181"></script>
+<script src="js/app.js?v=182"></script>
 </body>
 </html>

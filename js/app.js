@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v182", "2026-07-26", "자산시장에 환율·금 추가", "💱환율: 원화 대비 8개 통화(ECOS 매매기준율 2000~) 지수화 + 달러인덱스·유로/달러 + 원화 강약(주요 통화 평균, 실효환율 근사). 🥇금·귀금속: 금·은 추이와 증시 관계 — 금은 코스피와 동행(+0.18)이라 '주식 빠지면 금 오른다'가 항상 성립하지 않고, 금이 국고채 3년을 2개월·비트코인을 3개월 선행. 로테이션 분석에 환율 3종·은·유로달러 추가로 코스피 관련 변수 27→32건."],
   ["v181", "2026-07-26", "코인↔증시 상관 + 그래프 값 라벨", "크립토 탭에 코인별×지수별(코스피·코스닥·S&P500·나스닥·반도체) 일간 수익률 상관 히트맵 신설. 핵심 발견: BTC와 코스피는 같은 날 상관 +0.00으로 무관이지만 코인을 하루 앞세우면 +0.15(최근 1년 +0.23, p=0.003) — 코스피가 미국 마감 뒤 열리는 세션 구조 때문. 코인은 코스피보다 나스닥과 훨씬 강하게 동행(ETH +0.41). Snapshot 실적·현금흐름 막대에 값 라벨 추가하고 '만' 축약을 없애 표 값과 일치시킴."],
   ["v180", "2026-07-26", "산업 진단을 주식찾기 12산업군으로 통합 + 코스피 변수 분석", "산업 진단이 원천 업종 77개를 쓰던 것을 주식찾기와 같은 12산업군으로 교체(산업군 클릭=세부 업종 펼침→종목). 이제 두 화면의 산업이 완전히 일치. 자산시장 로테이션에 글로벌 변수 9종(반도체지수·나스닥·VIX·미국10년물·달러인덱스·유가·구리·금·상해·닛케이) 추가하고, 코스피를 종속변수로 고정한 뷰 신설 — 주가는 선행 변수가 4개뿐이고 대부분 동행이라 선행/동행/후행을 구분해 표기."],
   ["v179", "2026-07-26", "공시 오류 클라우드 반영 + 단위 체계 개편", "⚠공시 버그가 로컬에선 고쳐졌으나 feed.json이 CLOUD_OWNED라 배포되지 않고 클라우드 엔진도 옛 코드였음 → engine 동기화 + 수정본 직접 시딩으로 라이브 반영(두산테스나 7건→15건). Snapshot에 단위 선택(원·백만원·십억원·억원) 추가 + 현금흐름 막대에 값 라벨 표시. 상세 재무제표 단위도 동일 체계로 통일."],
@@ -4631,7 +4632,17 @@ function renderAssets() {
       부동산·채권·환율은 <b>한국은행 ECOS</b>, 주가·코인은 yfinance. 2000년 이후 월간 데이터로
       19개 시장의 <b>교차상관(−12~+12개월)</b>을 전수 계산해 선행관계를 추렸습니다.
       <span class="sub-note">${d.generated} 갱신 · 상관은 인과가 아니며 표본이 월 단위라 참고 지표입니다.</span>`;
-    asCards(); asLeadTable(); asRealEstate(); asBond();
+    asCards(); asLeadTable(); asRealEstate(); asBond(); asFx(); asGold();
+    $("#as-fx-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asFxMode = b.dataset.m;
+      $("#as-fx-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asFx();
+    });
+    $("#as-gold-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asGoldMode = b.dataset.m;
+      $("#as-gold-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asGold();
+    });
     $("#as-re-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
       asReMode = b.dataset.m;
       $("#as-re-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
@@ -4745,6 +4756,100 @@ function asRealEstate() {
     <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
     (asReMode === "supply" ? `<span class="sub-note">첫 시점=100으로 맞춘 상대 추이(단위가 달라 직접 비교 불가)</span>` : "");
   asLines("#as-re", defs, { ...opt, from: "2005-01", h: 320 });
+}
+
+/* 💱 환율 — 원화 대비 통화 / 달러·유로 지수 / 원화 강약
+   ⚠원/달러가 오르면 '원화 약세'다. 방향을 헷갈리기 쉬워 화면에 항상 병기한다. */
+let asFxMode = "krw";
+const AS_FX_KRW = ["usdkrw", "jpykrw", "eurkrw", "cnykrw", "gbpkrw", "audkrw", "chfkrw", "twdkrw"];
+function asFx() {
+  const KO = ASSETS.names_ko || {}, leg = $("#as-fx-legend");
+  let defs, opt, note = "";
+  if (asFxMode === "krw") {
+    // 통화마다 자릿수가 달라(엔 900원대·달러 1,400원대) 같은 축에 그리면 안 보인다 → 지수화
+    defs = AS_FX_KRW.filter(asS).map((k) => {
+      const s = asS(k), i0 = s.t.findIndex((d) => d >= "2016-01");
+      const base = s.v[i0 >= 0 ? i0 : 0] || 1;
+      return { name: KO[k] || k, t: s.t.slice(i0), v: s.v.slice(i0).map((x) => x / base * 100) };
+    });
+    opt = { fmt: (v) => v.toFixed(0), from: "2016-01" };
+    note = `2016년 1월=100으로 맞춘 지수. <b>선이 올라가면 그 통화가 비싸진 것 = 원화 약세</b>입니다.`;
+  } else if (asFxMode === "index") {
+    defs = ["dxy", "eurusd"].filter(asS).map((k) => {
+      const s = asS(k), i0 = s.t.findIndex((d) => d >= "2016-01");
+      const base = s.v[i0 >= 0 ? i0 : 0] || 1;
+      return { name: KO[k] || k, t: s.t.slice(i0), v: s.v.slice(i0).map((x) => x / base * 100) };
+    });
+    opt = { fmt: (v) => v.toFixed(0), from: "2016-01" };
+    note = `<b>달러인덱스</b>는 주요 6개 통화 대비 달러 가치. <b>유로/달러</b>는 유로 강세일수록 올라갑니다
+      (자유롭게 받을 수 있는 '유로인덱스'가 없어 유로/달러로 대신합니다). 둘은 대체로 반대로 움직입니다.`;
+  } else {
+    // 원화 강약: 주요 통화 대비 원화 가치의 평균(원/X 지수의 역수) — 실효환율 근사
+    const base = {}, ts = [];
+    AS_FX_KRW.filter(asS).forEach((k) => {
+      const s = asS(k), i0 = s.t.findIndex((d) => d >= "2016-01");
+      const b0 = s.v[i0 >= 0 ? i0 : 0] || 1;
+      s.t.slice(i0).forEach((d, i) => {
+        (base[d] = base[d] || []).push(s.v[i0 + i] / b0);
+      });
+    });
+    Object.keys(base).sort().forEach((d) => { if (base[d].length >= 4) ts.push(d); });
+    // ⚠코스피를 같은 축에 얹으면 배율 차이(코스피 350 vs 원화 83)로 원화 선이 눌려 안 보인다 → 제외
+    defs = [{ name: "원화 가치", t: ts, v: ts.map((d) => 100 / (base[d].reduce((a, b) => a + b, 0) / base[d].length)) }];
+    opt = { fmt: (v) => v.toFixed(0), from: "2016-01" };
+    note = `주요 8개 통화 대비 원화 가치의 평균(2016-01=100, <b>올라가면 원화 강세</b>) — 실효환율 근사.
+      코스피를 겹쳐보면 <b>원화 강세 구간에 주가가 강한 경향</b>이 보입니다(원/달러 vs 코스피 동행 r=−0.34).`;
+  }
+  leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
+    <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") + `<span class="sub-note">${note}</span>`;
+  asLines("#as-fx", defs, { ...opt, h: 320 });
+}
+
+/* 🥇 금·귀금속 ↔ 증시 */
+let asGoldMode = "trend";
+function asGold() {
+  const KO = ASSETS.names_ko || {}, leg = $("#as-gold-legend"), host = $("#as-gold");
+  if (asGoldMode === "trend") {
+    const defs = ["gold", "silver", "kospi", "sp500"].filter(asS).map((k) => {
+      const s = asS(k), i0 = s.t.findIndex((d) => d >= "2016-01"), b0 = s.v[i0] || 1;
+      return { name: KO[k] || k, t: s.t.slice(i0), v: s.v.slice(i0).map((x) => x / b0 * 100),
+               dash: (k === "kospi" || k === "sp500") ? "4 3" : null };
+    });
+    leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
+      <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
+      `<span class="sub-note">2016-01=100. 점선=주가지수 — 금이 주식과 <b>같이 갈 때(유동성 장세)</b>와
+       <b>엇갈릴 때(위험회피)</b>가 구분됩니다.</span>`;
+    asLines("#as-gold", defs, { fmt: (v) => v.toFixed(0), from: "2016-01", h: 320 });
+    return;
+  }
+  // 관계 표 — 금·은이 증시와 어떤 시차·방향으로 엮이는지
+  leg.innerHTML = "";
+  const KIND = { lead: ["선행", "#22c07a"], sync: ["동행", "#4391ff"], lag: ["후행", "#9aa4b2"] };
+  const rows = [...(ASSETS.to_kospi || []), ...(ASSETS.from_kospi || []), ...(ASSETS.lead || [])]
+    .filter((x) => x.from === "gold" || x.to === "gold" || x.from === "silver" || x.to === "silver");
+  const seen = new Set();
+  const uniq = rows.filter((x) => {
+    const k = [x.from, x.to].sort().join("|");   // 양방향 중복(A>B, B>A) 제거
+    if (seen.has(k)) return false; seen.add(k); return true;
+  }).sort((a, b) => Math.abs(b.r) - Math.abs(a.r)).slice(0, 14);
+  host.innerHTML = uniq.length ? `<div class="as-lead">${uniq.map((x) => {
+      const neg = x.r < 0, w = Math.min(100, Math.abs(x.r) * 130);
+      const [kLab, kCol] = KIND[x.kind || "lead"];
+      const [lft, rgt] = x.lag >= 0 ? [KO[x.from] || x.from, KO[x.to] || x.to]
+                                    : [KO[x.to] || x.to, KO[x.from] || x.from];
+      return `<div class="as-lrow">
+        <span class="as-lfrom">${lft}</span>
+        <span class="as-larrow"><i class="as-kind" style="color:${kCol}">${kLab}</i>
+          ${x.lag ? `<b>${Math.abs(x.lag)}개월</b>` : ""}</span>
+        <span class="as-lto">${rgt}</span>
+        <span class="as-lbar"><i style="width:${w}%;background:${neg ? "#f5445a" : "#22c07a"}"></i></span>
+        <span class="as-lr ${neg ? "neg" : "pos"}">${x.r >= 0 ? "+" : ""}${x.r.toFixed(2)}</span>
+        <span class="as-ln sub-note">n=${x.n}</span></div>`;
+    }).join("")}</div>
+    <p class="mini-note">금은 <b>코스피와 동행(+0.18)</b>합니다 — 흔한 오해와 달리 '주식이 빠지면 금이 오른다'가
+      항상 성립하지는 않습니다. 유동성이 풀리면 금·주식이 <b>같이</b> 오르고, 진짜 위기에는 금만 오릅니다.
+      금이 국고채·비트코인을 몇 개월 선행하는 관계도 함께 보세요.</p>`
+    : `<p class="mini-note">유의한 관계 없음</p>`;
 }
 
 function asBond() {
