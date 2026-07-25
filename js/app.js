@@ -107,7 +107,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -168,6 +168,7 @@ function activateTab(tabId) {
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "econcal" && !ecRendered) renderEconCal();
   if (tabId === "trends" && !trendsRendered) renderTrends();
+  if (tabId === "crypto" && !cryptoRendered) renderCrypto();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -4178,6 +4179,178 @@ function drawEcDay() {
       <td>${e.tm}</td><td>${EC_FLAG[e.c] || e.c}</td>
       <td>${e.imp >= 1 ? "⭐ " : ""}${ecKo(e.t)}${e.per ? ` <span class="sub-note">(${e.per})</span>` : ""}</td>
       <td><b>${n(e.a, e.u)}</b></td><td>${n(e.f, e.u)}</td><td>${n(e.p, e.u)}</td></tr>`).join("") + `</table>`;
+}
+
+/* ---------- ₿ 크립토 마켓 overview (crypto.json) ---------- */
+let cryptoRendered = false, CRYPTO = null, crRange = 365, crPRange = 365, crOff = new Set();
+const CR_COLORS = ["#f7931a", "#8a7dff", "#f0b90b", "#4391ff", "#14f195", "#e6007a",
+                   "#c2a633", "#26a17b", "#2775ca", "#ff6b7d", "#00d4aa", "#a0a0aa"];
+const crC = (i) => CR_COLORS[i % CR_COLORS.length];
+
+function crFmtUsd(v) {
+  if (v == null) return "-";
+  const a = Math.abs(v);
+  if (a >= 1e12) return "$" + (v / 1e12).toFixed(2) + "T";
+  if (a >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
+  if (a >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+  if (a >= 1) return "$" + v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return "$" + v.toFixed(v < 0.01 ? 6 : 4);
+}
+const crPct = (v) => (v == null ? "-" : `<b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</b>`);
+
+function renderCrypto() {
+  cryptoRendered = true;
+  fetch("data/crypto.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    CRYPTO = d;
+    const ctx = $("#cr-context");
+    if (!d) { ctx.textContent = "crypto.json 없음 — python analysis\\crypto.py 실행 필요"; return; }
+    ctx.innerHTML = `<b>₿ 크립토</b> — 코인 시장 전체 규모와 주요 코인의 상대 성과를 한 화면에서 봅니다. ` +
+      `시세·시가총액은 <b>CoinGecko</b>, 일봉은 <b>yfinance</b>(24시간 거래라 주말도 포함), ` +
+      `공포·탐욕은 <b>alternative.me</b>, 김치 프리미엄은 <b>업비트</b> 원화가와 글로벌 달러가×환율의 차이입니다. ` +
+      `<span class="sub-note">${d.generated} 갱신 · 주식과 달리 24시간 거래되므로 갱신 시점과 현재 시세가 다를 수 있습니다.</span>`;
+    crCards(d); crMcap(); crFng(d); crLines(); crTable(d);
+    $("#cr-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      crRange = +b.dataset.d;
+      $("#cr-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      crMcap();
+    });
+    $("#cr-prange").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      crPRange = +b.dataset.d;
+      $("#cr-prange").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      crLines();
+    });
+  });
+}
+
+function crCards(d) {
+  const g = d.global || {}, f = d.fng || {}, k = d.kimchi || {};
+  const fngColor = f.now == null ? "" : f.now < 25 ? "kdn" : f.now < 45 ? "" : f.now < 55 ? "" : f.now < 75 ? "kup" : "kup";
+  const fngKo = { "Extreme Fear": "극단적 공포", "Fear": "공포", "Neutral": "중립",
+                  "Greed": "탐욕", "Extreme Greed": "극단적 탐욕" }[f.label] || f.label || "";
+  const card = (t, v, sub, cls) => `<div class="cr-card"><div class="sub-note">${t}</div>
+    <b class="${cls || ""}">${v}</b><span class="sub-note">${sub}</span></div>`;
+  $("#cr-cards").innerHTML =
+    card("전체 시가총액", crFmtUsd(g.mcap), `24시간 ${g.chg24 == null ? "-" : (g.chg24 >= 0 ? "+" : "") + g.chg24.toFixed(2) + "%"} · 거래대금 ${crFmtUsd(g.vol24)}`,
+         g.chg24 >= 0 ? "kup" : "kdn") +
+    card("비트코인 점유율", g.btc_dom == null ? "-" : g.btc_dom.toFixed(1) + "%",
+         `이더리움 ${g.eth_dom == null ? "-" : g.eth_dom.toFixed(1) + "%"} · 활성 코인 ${(g.coins || 0).toLocaleString()}종`) +
+    card("공포·탐욕 지수", f.now ?? "-", fngKo, fngColor) +
+    card("김치 프리미엄", k.premium == null ? "-" : (k.premium >= 0 ? "+" : "") + k.premium.toFixed(2) + "%",
+         k.krw ? `업비트 ${(k.krw / 1e4).toFixed(0)}만원 · 환율 ${k.fx}` : "업비트 원화가 vs 글로벌",
+         k.premium >= 0 ? "kup" : "kdn");
+}
+
+// 공용 미니 SVG — 면적/라인 1개
+function crArea(host, ts, vs, color, fmt, h = 190) {
+  const el = $(host); if (!el) return;
+  const W = Math.max(320, el.clientWidth || 560), P = { l: 54, r: 10, t: 12, b: 20 };
+  const n = vs.length;
+  if (n < 2) { el.innerHTML = `<p class="sub-note">데이터 부족</p>`; return; }
+  const mn = Math.min(...vs), mx = Math.max(...vs), pad = (mx - mn) * 0.12 || 1;
+  const lo = mn - pad, hi = mx + pad;
+  const X = (i) => P.l + (W - P.l - P.r) * (i / (n - 1));
+  const Y = (v) => P.t + (h - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+  const pts = vs.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const grid = [0, 0.5, 1].map((r) => {
+    const v = lo + (hi - lo) * r, y = Y(v);
+    return `<line x1="${P.l}" y1="${y}" x2="${W - P.r}" y2="${y}" stroke="var(--line)"/>
+      <text x="${P.l - 6}" y="${y + 3}" text-anchor="end" class="cr-ax">${fmt(v)}</text>`;
+  }).join("");
+  const lbl = [0, Math.floor(n / 2), n - 1].map((i) =>
+    `<text x="${X(i)}" y="${h - 5}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" class="cr-ax">${ts[i].slice(2)}</text>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}">
+    <defs><linearGradient id="crg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity=".34"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}<polygon points="${P.l},${h - P.b} ${pts} ${W - P.r},${h - P.b}" fill="url(#crg)"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>${lbl}</svg>`;
+}
+
+function crMcap() {
+  const m = CRYPTO?.mcap_hist; if (!m || !m.t?.length) return;
+  const k = Math.min(crRange, m.t.length);
+  crArea("#cr-mcap", m.t.slice(-k), m.v.slice(-k), "#f7931a", (v) => "$" + (v / 1e12).toFixed(2) + "T");
+}
+
+function crFng(d) {
+  const f = d.fng; if (!f?.t?.length) return;
+  const k = Math.min(90, f.t.length);
+  crArea("#cr-fng", f.t.slice(-k), f.v.slice(-k), "#8a7dff", (v) => v.toFixed(0), 190);
+}
+
+// 주요 코인 상대 수익률(시작=100) 멀티라인
+function crLines() {
+  const s = CRYPTO?.series, coins = CRYPTO?.coins || [];
+  const el = $("#cr-lines"); if (!s || !el) return;
+  const k = Math.min(crPRange, s.t.length), ts = s.t.slice(-k);
+  const W = Math.max(360, el.clientWidth || 900), h = 320, P = { l: 46, r: 92, t: 12, b: 22 };
+  const use = coins.filter((c) => s.c[c.sym] && !crOff.has(c.sym));
+  const norm = {};
+  use.forEach((c) => {
+    const raw = s.c[c.sym].slice(-k);
+    const base = raw.find((v) => v != null);
+    if (base) norm[c.sym] = raw.map((v) => (v == null ? null : (v / base) * 100));
+  });
+  const all = Object.values(norm).flat().filter((v) => v != null);
+  if (!all.length) { el.innerHTML = `<p class="sub-note">표시할 코인을 선택하세요</p>`; return; }
+  const mn = Math.min(...all), mx = Math.max(...all), pad = (mx - mn) * 0.08 || 1;
+  const lo = mn - pad, hi = mx + pad;
+  const X = (i) => P.l + (W - P.l - P.r) * (i / (ts.length - 1));
+  const Y = (v) => P.t + (h - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+  const grid = [0, .25, .5, .75, 1].map((r) => {
+    const v = lo + (hi - lo) * r, y = Y(v);
+    return `<line x1="${P.l}" y1="${y}" x2="${W - P.r}" y2="${y}" stroke="var(--line)"/>
+      <text x="${P.l - 6}" y="${y + 3}" text-anchor="end" class="cr-ax">${v.toFixed(0)}</text>`;
+  }).join("");
+  const base100 = (lo <= 100 && hi >= 100)
+    ? `<line x1="${P.l}" y1="${Y(100)}" x2="${W - P.r}" y2="${Y(100)}" stroke="#8b8b93" stroke-dasharray="4 4"/>` : "";
+  // 끝 라벨 겹침 방지 — y 순으로 최소 간격 13px 확보
+  const ends = use.map((c) => {
+    const a = norm[c.sym]; if (!a) return null;
+    for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return { c, v: a[i], y: Y(a[i]) };
+    return null;
+  }).filter(Boolean).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 13);
+  const paths = use.map((c) => {
+    const a = norm[c.sym]; if (!a) return "";
+    const i0 = coins.findIndex((x) => x.sym === c.sym);
+    const pts = a.map((v, i) => (v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`)).filter(Boolean).join(" ");
+    return `<polyline points="${pts}" fill="none" stroke="${crC(i0)}" stroke-width="1.8" opacity=".92"/>`;
+  }).join("");
+  const labels = ends.map((e) => {
+    const i0 = coins.findIndex((x) => x.sym === e.c.sym);
+    return `<text x="${W - P.r + 6}" y="${e.y + 3}" class="cr-end" fill="${crC(i0)}">${e.c.sym.toUpperCase()} ${e.v.toFixed(0)}</text>`;
+  }).join("");
+  const lbl = [0, Math.floor(ts.length / 2), ts.length - 1].map((i) =>
+    `<text x="${X(i)}" y="${h - 5}" text-anchor="${i === 0 ? "start" : i === ts.length - 1 ? "end" : "middle"}" class="cr-ax">${ts[i].slice(2)}</text>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}">${grid}${base100}${paths}${labels}${lbl}</svg>`;
+}
+
+function crTable(d) {
+  const coins = d.coins || [];
+  const host = $("#cr-legend");
+  host.innerHTML = coins.map((c, i) =>
+    `<button class="cr-chip ${crOff.has(c.sym) ? "off" : ""}" data-s="${c.sym}">
+      <i style="background:${crC(i)}"></i>${c.sym.toUpperCase()}</button>`).join("");
+  host.querySelectorAll(".cr-chip").forEach((b) => b.onclick = () => {
+    const s = b.dataset.s;
+    crOff.has(s) ? crOff.delete(s) : crOff.add(s);
+    b.classList.toggle("off", crOff.has(s));
+    crLines();
+  });
+  $("#cr-table").innerHTML =
+    `<thead><tr><th>#</th><th>코인</th><th class="num">가격</th><th class="num">24시간</th>
+      <th class="num">7일</th><th class="num">30일</th><th class="num">1년</th>
+      <th class="num">시가총액</th><th class="num">거래대금</th><th class="num">최고가 대비</th></tr></thead><tbody>` +
+    coins.map((c, i) => `<tr>
+      <td>${c.rank ?? i + 1}</td>
+      <td><i class="cr-dot" style="background:${crC(i)}"></i> <b>${c.sym.toUpperCase()}</b>
+        <span class="sub-note">${c.name}</span></td>
+      <td class="num">${crFmtUsd(c.price)}</td>
+      <td class="num">${crPct(c.c24)}</td><td class="num">${crPct(c.c7)}</td>
+      <td class="num">${crPct(c.c30)}</td><td class="num">${crPct(c.c1y)}</td>
+      <td class="num">${crFmtUsd(c.mcap)}</td><td class="num">${crFmtUsd(c.vol)}</td>
+      <td class="num">${crPct(c.hi_off)}</td></tr>`).join("") + "</tbody>";
 }
 
 /* ---------- 트렌드 레이더 (trends.json — 네이버 데이터랩+구글 급상승) ---------- */

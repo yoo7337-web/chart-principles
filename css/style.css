@@ -1377,3 +1377,23 @@ dialog { background: var(--card); color: var(--ink); }
   .rank-grid { grid-template-columns: 1fr; }
   .lk-side { position: static; }
 }
+
+/* ── ₿ 크립토 마켓 ─────────────────────────────────────────────── */
+.cr-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cr-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 2px; }
+.cr-card b { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+.cr-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; align-items: start; }
+.cr-ax { font-size: 10px; fill: var(--muted); }
+.cr-end { font-size: 11px; font-weight: 700; }
+.cr-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.cr-chip { display: inline-flex; align-items: center; gap: 5px; font-size: .76rem; font-weight: 700;
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg);
+  color: var(--ink); cursor: pointer; }
+.cr-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cr-chip.off { opacity: .38; }
+.cr-chip:hover { border-color: rgba(67,145,255,.45); }
+.cr-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+#cr-table td.num, #cr-table th.num { text-align: right; }
+#cr-table td .sub-note { margin-left: 5px; }
+@media (max-width: 1100px) { .cr-grid { grid-template-columns: 1fr; } }
