@@ -1464,3 +1464,19 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .td-stat.conflict { color: #f5445a; }
 .td-stat i { font-style: normal; font-size: .7rem; opacity: .8; }
 @media (max-width: 900px) { .td-cards { grid-template-columns: 1fr; } }
+
+/* 보유 — 종목별 매매 추이 */
+.hld-tr-head { margin-bottom: 8px; }
+.hld-tr-head i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px 0 8px; }
+.hld-trs { display: flex; flex-direction: column; gap: 3px; }
+.hld-tr { display: flex; align-items: center; gap: 9px; width: 100%; padding: 4px 8px;
+  border: 1px solid transparent; border-radius: 9px; background: none; color: var(--ink);
+  cursor: pointer; text-align: left; }
+.hld-tr:hover { background: rgba(255,255,255,.05); border-color: var(--line); }
+.hld-tr img { width: 20px; height: 20px; border-radius: 5px; object-fit: contain; background: #fff; flex: 0 0 20px; }
+.hld-tr-nm { flex: 0 0 132px; font-size: .8rem; font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.hld-tr-svg { flex: 1; height: 34px; min-width: 0; }
+.hld-tr-now { flex: 0 0 82px; text-align: right; font-size: .78rem; font-weight: 700; }
+.hld-tr-now.gone { color: #f5445a; font-weight: 600; }
+.hld-tr-last { flex: 0 0 96px; text-align: right; font-size: .72rem; }
