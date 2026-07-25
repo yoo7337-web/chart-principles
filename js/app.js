@@ -1654,6 +1654,8 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v171", "2026-07-26", "보유 비중 변화 시계열", "보유 포트폴리오에 📅 보유 비중 변화 차트 신설 — 100% 누적 영역(종목별/산업별 토글)에 편입▲·제외▼ 마커. 과거는 토스 체결내역(90일)으로 현재 보유에서 거꾸로 되감아 복원하고, 앞으로는 가져오기 때마다 날짜별 스냅샷이 쌓여 정확해집니다. 90일 이전은 API가 체결을 안 줘서 복원 불가(차트에 명시)."],
+  ["v170", "2026-07-25", "₿ 크립토 마켓 overview", "시장 보기에 크립토 탭 신설 — 전체 시가총액·BTC 점유율·공포탐욕·김치 프리미엄 카드 + 총 시총 추이 + 주요 코인 12종 상대 수익률 멀티라인(시작=100) + 코인별 시세 표. CoinGecko·yfinance·alternative.me·업비트(전부 무키)."],
   ["v169", "2026-07-25", "실적 vs 주가 괴리 테마 2종", "💎실적↑주가↓(저평가 후보)·🎈실적↓주가↑(고평가 경계) 신설. 실적=최근 분기 vs 전년 동분기 매출·영업이익 + TTM FCF마진 변화, 주가=6·12개월 절대+시장대비 4종 백분위. 백분위는 시장별로 산출(통합 시 KR/US 지수 등락차가 선별을 지배). 연간재무 10년 검증(4,019관측): 저평가는 12개월 뒤 중앙값 +5.8%·승률 58%, 고평가는 −6.5%·43.7%로 방향은 맞으나 표본(134·142<300)·유의성 부족 → '부분 검증' 표기. 소액매출·적자기업 오탐 차단 게이트 추가."],
   ["v166", "2026-07-25", "테마 말풍선 + 트렌드 탭 이동", "기술적 테마에 마우스를 올리면 패턴의 의미·판정 기준·10년 검증 수치(한국/미국 각각)·탈락 사유를 말풍선으로 표시. 🔥트렌드를 종목 찾기 → 시장 보기로 이동."],
   ["v164", "2026-07-25", "기술적 테마 8종(10년 검증) + 산업지표 팝업", "차트 패턴 8개를 원칙과 같은 잣대로 10년 검증(1,249종목·23.5만 이벤트) 후 주식찾기 테마로 추가 — 칩에 20일 초과수익·표본 병기. 통과 4종(플래그 +2.38%p·V반등 +1.36%p·신고가눌림 +0.80%p·추세선돌파 +0.26%p) / 미통과 4종(신고가·삼각수렴·컵핸들·박스저항)은 ⚠ 표시와 각주로 '근거 약함' 명시. 산업지표 %를 3개월 전 대비로 통일하고 카드 클릭 시 의미·5년 차트 팝업."],
@@ -6970,6 +6972,7 @@ function initHoldings() {
         });
         cur.krw = true; cur.updated = d.synced || pfToday();
         pf2Save(cur);
+        pfSnapshot();          // 가져올 때마다 그날 보유를 이력에 적재(시계열 차트 소스)
         let extraTxt = "";
         if (d.ver >= 2 && (d.cash || d.warnings || d.market || d.orders)) {  // API 확장(현금·경고·수급)은 점검 탭에서 사용
           tossSave(d);
@@ -6988,6 +6991,62 @@ function initHoldings() {
     });
   };
   hldRender();
+}
+
+/* ── 📅 보유 시계열 — 스냅샷 누적 + 토스 체결 역산 ──────────────────────────
+   cp_portfolio_v2는 '현재 시점 스냅샷'이라 과거가 없다. 두 갈래로 이력을 만든다.
+   ① 앞으로: 가져오기·저장 때마다 그날 보유를 cp_pf_hist_v1에 적재(시간이 갈수록 정확해짐)
+   ② 과거:  토스 체결내역(90일)으로 현재 보유에서 거꾸로 되감아 복원
+   ⚠90일 이전 매매는 API가 주지 않으므로 복원 불가 — 그 구간은 '가장 오래된 복원 시점'이 시작선. */
+const PFH_KEY = "cp_pf_hist_v1";
+function pfHistLoad() {
+  try { const d = JSON.parse(localStorage.getItem(PFH_KEY)); if (d && d.snaps) return d; } catch (e) {}
+  return { snaps: {} };
+}
+function pfHistSave(d) { localStorage.setItem(PFH_KEY, JSON.stringify(d)); }
+const pfDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+// 오늘 보유를 스냅샷으로 적재(같은 날 재저장은 덮어씀)
+function pfSnapshot() {
+  const hs = pfHoldings();
+  if (!hs.length) return;
+  const d = pfHistLoad();
+  d.snaps[pfDay(new Date())] = hs.map((h) => ({ t: h.ticker, m: h.mk, n: h.name, q: +h.qty || 0 }));
+  pfHistSave(d);
+}
+// 체결내역 역산 → {날짜: 보유맵} + 편입/제외 이벤트
+function pfBackfill() {
+  const orders = (tossLoad()?.orders || []).slice()
+    .filter((o) => o.filledAt && o.ticker && +o.qty > 0)
+    .sort((a, b) => String(b.filledAt).localeCompare(String(a.filledAt)));   // 최신 → 과거
+  const cur = {}, meta = {};
+  pfHoldings().forEach((h) => { cur[h.ticker] = +h.qty || 0; meta[h.ticker] = { mk: h.mk, name: h.name }; });
+  const states = [{ d: pfDay(new Date()), q: { ...cur } }], events = [];
+  const q = { ...cur };
+  orders.forEach((o) => {
+    const t = String(o.ticker), day = String(o.filledAt).slice(0, 10);
+    const before = q[t] || 0;
+    q[t] = before + (o.side === "BUY" ? -(+o.qty) : +(+o.qty));   // 주문 '직전' 상태로 되감기
+    if (q[t] < 1e-9) delete q[t];
+    if (!meta[t]) meta[t] = { mk: /^\d{6}$/.test(t) ? "kr" : "us", name: t };
+    // 편입 = 직전 보유 0에서 매수 / 제외 = 매도 후 보유 0
+    if (o.side === "BUY" && !(q[t] > 0)) events.push({ d: day, t, type: "in", name: meta[t].name });
+    if (o.side === "SELL" && !(before > 0)) events.push({ d: day, t, type: "out", name: meta[t].name });
+    states.push({ d: day, q: { ...q } });      // 그날 거래 직전 상태
+  });
+  return { states, events, meta, from: states[states.length - 1]?.d };
+}
+// 날짜별 보유 수량 — 스냅샷(정확) 우선, 없으면 역산 상태를 계단식으로 채움
+function pfHistDaily() {
+  const bf = pfBackfill();
+  const snaps = pfHistLoad().snaps;
+  const marks = {};                       // 날짜 → 보유맵
+  bf.states.forEach((s) => { marks[s.d] = s.q; });
+  Object.entries(snaps).forEach(([d, arr]) => {
+    marks[d] = arr.reduce((a, x) => { if (x.q > 0) a[x.t] = x.q; return a; }, {});
+    arr.forEach((x) => { if (!bf.meta[x.t]) bf.meta[x.t] = { mk: x.m, name: x.n || x.t }; });
+  });
+  const days = Object.keys(marks).sort();
+  return { marks, days, meta: bf.meta, events: bf.events, from: days[0] };
 }
 
 // 보유 변경 후: 보유 탭 + (열려 있으면) 점검 탭 동시 갱신
@@ -7131,6 +7190,124 @@ function hldFineSector(h) {
   const t = (MARKET?.heatmap || []).find((x) => x.m === h.mk && x.t === h.ticker);
   if (h.mk === "us" && t?.sector && US_FINE_SECTOR[t.sector]) return US_FINE_SECTOR[t.sector];
   return t?.sector || (h.lev ? "레버리지·ETF" : "기타");
+}
+
+/* 📅 보유 비중 변화 — 100% 누적 영역(종목별/산업별) + 편입▲·제외▼ 마커 */
+let hldTlMode = "stock";
+function renderHldTimeline(all) {
+  const host = $("#hld-timeline"); if (!host) return;
+  const hist = pfHistDaily();
+  if (hist.days.length < 2) {
+    host.innerHTML = `<p class="mini-note">이력이 아직 1개 시점뿐입니다 — 토스 체결내역(최근 90일)이 있는 파일을 가져오면
+      과거를 역산하고, 이후에는 가져올 때마다 시점이 쌓입니다.</p>`;
+    return;
+  }
+  host.innerHTML = `<p class="mini-note">시계열 불러오는 중…</p>`;
+  const tickers = [...new Set(hist.days.flatMap((d) => Object.keys(hist.marks[d])))];
+  const fx = pfFxRate() || 1;
+  Promise.all(tickers.map((t) => {
+    const key = `${hist.meta[t]?.mk || "kr"}_${t}`;
+    if (HLD_SERIES[key] !== undefined) return Promise.resolve();
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+      .then((st) => { HLD_SERIES[key] = st?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
+  })).then(() => {
+    // 종목별 날짜→종가 맵(원화 통일: 해외는 환율 적용)
+    const px = {};
+    tickers.forEach((t) => {
+      const mk = hist.meta[t]?.mk || "kr";
+      const s = HLD_SERIES[`${mk}_${t}`];
+      if (!s) return;
+      const m = {}; s.forEach((b) => { m[b.t] = b.c * (mk === "us" ? fx : 1); });
+      px[t] = m;
+    });
+    // 날짜축: 첫 이력일 ~ 오늘, 영업일(가격이 있는 날)만
+    const start = hist.days[0], end = pfDay(new Date());
+    const anyPx = Object.values(px)[0] || {};
+    const axis = Object.keys(anyPx).filter((d) => d >= start && d <= end).sort();
+    if (axis.length < 3) { host.innerHTML = `<p class="mini-note">가격 시계열이 없어 그릴 수 없습니다(유니버스 밖 종목만 보유).</p>`; return; }
+    // 이력일 → 축 인덱스 매핑. ⚠주말·휴장일(그리고 '오늘' 스냅샷이 마지막 거래일보다 뒤인 경우)은
+    //   축에 없는 날짜라, 단순히 'd 이하의 최근 이력'을 고르면 **현재 보유가 영영 반영되지 않는다**
+    //   (실측: 일요일에 열면 마지막 매수가 빠져 비중이 옛 상태로 굳음) → 축 끝으로 당겨 붙인다.
+    const stepAt = new Array(axis.length).fill(null);
+    hist.days.forEach((h) => {
+      let i = axis.findIndex((d) => d >= h);
+      if (i < 0) i = axis.length - 1;                        // 축 이후(주말·미래) → 마지막 거래일에 반영
+      stepAt[i] = hist.marks[h];                             // 같은 인덱스면 나중 이력이 이김
+    });
+    let _cur = hist.marks[hist.days[0]] || {};
+    const qtyByIdx = axis.map((_, i) => (stepAt[i] ? (_cur = stepAt[i]) : _cur));
+    const qtyOn = (d) => qtyByIdx[axis.indexOf(d)] || {};
+    const lastPx = (t, d) => {                              // 그 날짜 이하 마지막 종가(휴장·상장 공백 대응)
+      const m = px[t]; if (!m) return null;
+      if (m[d] != null) return m[d];
+      for (let i = axis.indexOf(d); i >= 0; i--) if (m[axis[i]] != null) return m[axis[i]];
+      return null;
+    };
+    // 그룹 키(종목 or 산업)별 일자 비중
+    const groupOf = (t) => hldTlMode === "sector"
+      ? hldFineSector({ ticker: t, mk: hist.meta[t]?.mk, name: hist.meta[t]?.name })
+      : (hist.meta[t]?.name || t);
+    const series = {}, totals = [];
+    axis.forEach((d, i) => {
+      const q = qtyByIdx[i];
+      let tot = 0; const row = {};
+      Object.entries(q).forEach(([t, n]) => {
+        const p = lastPx(t, d);
+        if (!p || !(n > 0)) return;
+        const g = groupOf(t), v = p * n;
+        row[g] = (row[g] || 0) + v; tot += v;
+      });
+      totals.push(tot);
+      Object.entries(row).forEach(([g, v]) => {
+        (series[g] = series[g] || new Array(axis.length).fill(0))[i] = tot ? v / tot : 0;
+      });
+    });
+    const keys = Object.keys(series).sort((a, b) => series[b].at(-1) - series[a].at(-1));
+    if (!keys.length) { host.innerHTML = `<p class="mini-note">평가금을 계산할 수 없습니다.</p>`; return; }
+    const W = 900, H = 300, P = { l: 34, r: 132, t: 16, b: 26 };
+    const X = (i) => P.l + (W - P.l - P.r) * (i / (axis.length - 1));
+    const Y = (v) => P.t + (H - P.t - P.b) * (1 - v);
+    // 누적 영역
+    let acc = new Array(axis.length).fill(0);
+    const areas = keys.map((g, gi) => {
+      const top = series[g].map((v, i) => acc[i] + v);
+      const path = top.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ") + " " +
+        acc.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).reverse().join(" ");
+      acc = top;
+      return `<polygon points="${path}" fill="${HLD_COLORS[gi % 8]}" fill-opacity=".78"
+        stroke="var(--card)" stroke-width=".6"><title>${g}</title></polygon>`;
+    }).join("");
+    // 끝 라벨(비중 3% 이상만) — 겹침 방지
+    let acc2 = 0, prevY = -99;
+    const labels = keys.map((g, gi) => {
+      const v = series[g].at(-1); const mid = acc2 + v / 2; acc2 += v;
+      if (v < 0.03) return "";
+      let y = Y(mid); y = Math.max(y, prevY + 12); prevY = y;
+      return `<text x="${W - P.r + 6}" y="${y + 3}" class="cr-end" fill="${HLD_COLORS[gi % 8]}">${
+        String(g).slice(0, 9)} ${(v * 100).toFixed(0)}%</text>`;
+    }).join("");
+    const grid = [0, .25, .5, .75, 1].map((r) =>
+      `<line x1="${P.l}" y1="${Y(r)}" x2="${W - P.r}" y2="${Y(r)}" stroke="var(--line)"/>
+       <text x="${P.l - 5}" y="${Y(r) + 3}" text-anchor="end" class="cr-ax">${(r * 100).toFixed(0)}%</text>`).join("");
+    // 편입/제외 마커
+    const evs = hist.events.filter((e) => e.d >= start).map((e) => {
+      let i = axis.findIndex((d) => d >= e.d); if (i < 0) i = axis.length - 1;
+      const y = e.type === "in" ? H - P.b : P.t;
+      return `<g><line x1="${X(i)}" y1="${P.t}" x2="${X(i)}" y2="${H - P.b}" stroke="#8b8b93"
+        stroke-dasharray="2 3" opacity=".5"/>
+        <text x="${X(i)}" y="${y + (e.type === "in" ? -3 : 10)}" text-anchor="middle" class="hld-ev ${e.type}"
+          >${e.type === "in" ? "▲" : "▼"}<title>${e.d} ${e.name} ${e.type === "in" ? "편입" : "제외"}</title></text></g>`;
+    }).join("");
+    const xl = [0, Math.floor(axis.length / 2), axis.length - 1].map((i) =>
+      `<text x="${X(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === axis.length - 1 ? "end" : "middle"}"
+        class="cr-ax">${axis[i].slice(2)}</text>`).join("");
+    const nSnap = Object.keys(pfHistLoad().snaps).length;
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${grid}${areas}${evs}${labels}${xl}</svg>
+      <p class="mini-note">${axis[0]} ~ ${axis.at(-1)} · 평가금 기준 100% 비중 ·
+        편입 ${hist.events.filter((e) => e.type === "in").length}건 · 제외 ${hist.events.filter((e) => e.type === "out").length}건
+        <br>⚠ ${start} 이전은 토스가 체결내역을 90일까지만 제공해 복원할 수 없습니다.
+        누적 스냅샷 ${nSnap}개 — 가져오기를 반복할수록 정확해집니다.</p>`;
+  });
 }
 
 function renderHldAnalytics(all) {
@@ -7295,6 +7472,13 @@ function hldRender() {
   $("#hld-analytics").style.display = "";
   $("#hld-table-h").style.display = "";
   renderHldAnalytics(all);   // 상단 분석(수익추이·산업비중·구성) — 비동기(시계열 lazy)
+  renderHldTimeline(all);    // 보유 비중 변화(체결 역산 + 스냅샷 누적)
+  const tl = $("#hld-tl-mode");
+  if (tl) tl.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    hldTlMode = b.dataset.m;
+    tl.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    renderHldTimeline(all);
+  });
   const secs = [["kr", "🇰🇷 국내주식"], ["us", "🇺🇸 해외주식"]];
   let gVal = 0, gCost = 0, gDay = 0, gDayHas = false;
   const secHtml = secs.map(([mk, label]) => {

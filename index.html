@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=170">
-<script src="firebase-config.js?v=170"></script>
-<script src="js/auth.js?v=170"></script>
+<link rel="stylesheet" href="css/style.css?v=171">
+<script src="firebase-config.js?v=171"></script>
+<script src="js/auth.js?v=171"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -715,6 +715,16 @@
           <div id="hld-sector"></div>
         </div>
       </div>
+      <div class="card-flat" style="margin-top:14px">
+        <h3 class="lk-h3">📅 보유 비중 변화
+          <span class="sub-note">(체결내역 역산 + 가져오기 시점 누적 · 편입▲ 제외▼)</span>
+          <span style="flex:1"></span>
+          <span class="mk-toggle" id="hld-tl-mode">
+            <button data-m="stock" class="active">종목별</button>
+            <button data-m="sector">산업별</button>
+          </span></h3>
+        <div id="hld-timeline"></div>
+      </div>
       <div class="hld-agrid3">
         <div class="card-flat"><h3 class="lk-h3">🌍 국가·시장</h3><div id="hld-country"></div></div>
         <div class="card-flat"><h3 class="lk-h3">🏋️ 시총 체급</h3><div id="hld-tier"></div></div>
@@ -886,6 +896,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=170"></script>
+<script src="js/app.js?v=171"></script>
 </body>
 </html>

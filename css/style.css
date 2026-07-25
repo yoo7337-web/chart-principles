@@ -1397,3 +1397,7 @@ dialog { background: var(--card); color: var(--ink); }
 #cr-table td.num, #cr-table th.num { text-align: right; }
 #cr-table td .sub-note { margin-left: 5px; }
 @media (max-width: 1100px) { .cr-grid { grid-template-columns: 1fr; } }
+/* 보유 비중 변화(시계열) */
+.hld-ev { font-size: 10px; cursor: help; }
+.hld-ev.in { fill: #22c07a; }
+.hld-ev.out { fill: #f5445a; }
