@@ -1405,12 +1405,28 @@ dialog { background: var(--card); color: var(--ink); }
 .guru-hist { margin: 12px 0; padding: 10px 12px; background: rgba(255,255,255,.03);
   border: 1px solid var(--line); border-radius: 10px; }
 .guru-hist > b { font-size: .88rem; }
-.guru-evs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
-.guru-ev { font-size: .74rem; font-weight: 600; padding: 3px 8px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--bg); }
-.guru-ev.in { color: #22c07a; }
-.guru-ev.out { color: #f5445a; }
-.guru-ev .sub-note { font-weight: 400; margin-left: 4px; }
+.gh-lb { font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+.gh-lb.pct { fill: var(--muted); font-weight: 700; }
+.gh-dot { cursor: help; }
+/* 최근 1년 편입·제외 */
+.guru-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.gf-col > b { font-size: .85rem; display: block; margin-bottom: 7px; }
+.gf-col > b .sub-note { font-weight: 400; margin-left: 5px; }
+.gf-list { display: flex; flex-direction: column; gap: 5px; }
+.gf-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg);
+  color: var(--ink); font-size: .8rem; cursor: default; }
+button.gf-item { cursor: pointer; }
+button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,255,255,.05); }
+.gf-item.in { border-left: 3px solid #22c07a; }
+.gf-item.out { border-left: 3px solid #f5445a; }
+.gf-item img { width: 20px; height: 20px; border-radius: 5px; object-fit: contain; background: #fff; flex: 0 0 20px; }
+.gf-noimg { width: 20px; text-align: center; font-size: .8rem; flex: 0 0 20px; }
+.gf-item.in .gf-noimg { color: #22c07a; }
+.gf-item.out .gf-noimg { color: #f5445a; }
+.gf-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gf-meta { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+@media (max-width: 900px) { .guru-flow { grid-template-columns: 1fr; } }
 /* 투자 대가 — 공시 이후 보도 */
 .guru-news { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .guru-nrow { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: .8rem;
@@ -1418,3 +1434,33 @@ dialog { background: var(--card); color: var(--ink); }
 .guru-nrow:hover { color: var(--accent); }
 .guru-nd { flex: 0 0 40px; font-size: .72rem; color: var(--muted); }
 .guru-nt { flex: 1; }
+
+/* ── 오늘의 신호 — 최신일 요약 대시보드 ─────────────────────────── */
+.td-dash-h { font-weight: 700; font-size: .95rem; margin-bottom: 10px; }
+.td-dash-h .sub-note { font-weight: 400; margin-left: 8px; }
+.td-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.td-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+.td-card.buy { border-color: rgba(245,68,90,.30); }
+.td-card.sell { border-color: rgba(67,145,255,.30); }
+.td-card-h { font-weight: 700; font-size: .9rem; margin-bottom: 8px; }
+.td-card-h b { font-size: 1.15rem; margin-left: 6px; }
+.td-card-h .sub-note { margin-left: 3px; }
+.td-cell { padding: 6px 0; border-top: 1px solid var(--line); }
+.td-cell.empty { opacity: .5; }
+.td-cell-h { font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
+.td-cell-h b { color: var(--ink); font-size: .88rem; margin-left: 3px; }
+.td-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.td-chip { font-size: .74rem; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+.td-chip.buy { border-color: rgba(245,68,90,.34); color: #ff8c9a; }
+.td-chip.sell { border-color: rgba(67,145,255,.34); color: #7fb4ff; }
+.td-chip:hover { background: rgba(255,255,255,.07); }
+.td-chip i { font-style: normal; font-size: .66rem; margin-left: 4px; opacity: .75; }
+/* 표 안 상태 배지 */
+.td-stat { font-size: .76rem; font-weight: 600; white-space: nowrap; }
+.td-stat.flip { color: #e5a13a; }
+.td-stat.first { color: #3fbf7f; }
+.td-stat.repeat { color: var(--muted); }
+.td-stat.conflict { color: #f5445a; }
+.td-stat i { font-style: normal; font-size: .7rem; opacity: .8; }
+@media (max-width: 900px) { .td-cards { grid-template-columns: 1fr; } }

@@ -891,9 +891,68 @@ function renderToday() {
       <td>${r.active_kr ? "✅ 켜짐" : "⛔ 꺼짐"}</td><td>${r.active_us ? "✅ 켜짐" : "⛔ 꺼짐"}</td>
     </tr>`).join("");
 
+  renderTodayDash();
   ["today-mk", "today-side", "today-active-only"].forEach((id) =>
-    document.getElementById(id).addEventListener("change", fillTodayTable));
+    document.getElementById(id).addEventListener("change", () => { renderTodayDash(); fillTodayTable(); }));
   fillTodayTable();
+}
+
+/* 📋 최신일 신호 요약 대시보드 — 매수/매도별 집계 + 상태(전환·최초·지속)별 종목 */
+const SIG_STATUS = {
+  flip: ["🔄", "방향 전환", "직전 신호와 반대 방향 — 흐름이 바뀌는 자리"],
+  first: ["🆕", "첫 신호", "최근 120일간 이 종목에 신호가 없었음"],
+  repeat: ["🔁", "같은 방향 지속", "직전에도 같은 방향 신호 — 추세가 이어지는 중"],
+};
+function todayLatest() {
+  const ds = [...new Set(TODAY.signals.map((s) => s.date))].sort();
+  return ds[ds.length - 1];
+}
+function renderTodayDash() {
+  const host = $("#today-dash"); if (!host) return;
+  const mk = $("#today-mk").value, activeOnly = $("#today-active-only").checked;
+  const day = todayLatest();
+  const rows = TODAY.signals.filter((s) => s.date === day && (!mk || s.market === mk) && (!activeOnly || s.active));
+  // 종목 단위로 묶기(한 종목에 여러 원칙이 걸릴 수 있음)
+  const byStock = {};
+  rows.forEach((s) => {
+    const k = `${s.market}_${s.ticker}`;
+    const o = byStock[k] = byStock[k] || { s, rules: [], side: s.side, conflict: s.conflict };
+    o.rules.push(s.rule);
+    if (o.side !== s.side) o.mixed = true;
+  });
+  const list = Object.values(byStock);
+  const bucket = (side, st) => list.filter((o) => !o.mixed && o.side === side && o.s.status === st);
+  const card = (side) => {
+    const all = list.filter((o) => !o.mixed && o.side === side);
+    const isBuy = side === "buy";
+    const cells = ["flip", "first", "repeat"].map((st) => {
+      const g = bucket(side, st);
+      const [ico, label, tip] = SIG_STATUS[st];
+      return `<div class="td-cell ${g.length ? "" : "empty"}" title="${tip}">
+        <div class="td-cell-h">${ico} ${label} <b>${g.length}</b></div>
+        <div class="td-chips">${g.slice(0, 12).map((o) => `
+          <button class="td-chip ${isBuy ? "buy" : "sell"}" data-key="${o.s.market}_${o.s.ticker}"
+            title="${o.rules.join(" · ")}${o.s.streak > 1 ? ` · ${o.s.streak}회 연속` : ""}${
+              o.s.prev_date ? ` · 직전 ${o.s.prev_side === "buy" ? "매수" : "매도"} ${o.s.prev_date}` : ""}"
+            >${o.s.market === "kr" ? o.s.name : o.s.ticker}${o.s.streak > 1 ? `<i>${o.s.streak}</i>` : ""}</button>`).join("")}
+          ${g.length > 12 ? `<span class="sub-note">+${g.length - 12}</span>` : ""}
+          ${g.length ? "" : `<span class="sub-note">없음</span>`}</div></div>`;
+    }).join("");
+    return `<div class="td-card ${isBuy ? "buy" : "sell"}">
+      <div class="td-card-h">${isBuy ? "🟢 매수 신호" : "🔴 매도 신호"} <b>${all.length}</b><span class="sub-note">종목</span></div>
+      ${cells}</div>`;
+  };
+  const mixed = list.filter((o) => o.mixed || o.conflict);
+  host.innerHTML = `<div class="td-dash-h">📋 <b>${day}</b> 신호 요약
+      <span class="sub-note">종목 ${list.length}곳 · 숫자 배지 = 같은 방향 연속 횟수 · 칩 클릭 = 종목 조회</span></div>
+    <div class="td-cards">${card("buy")}${card("sell")}</div>
+    ${mixed.length ? `<p class="mini-note">⚠ 매수·매도가 <b>동시에</b> 나온 종목 ${mixed.length}곳:
+      ${mixed.slice(0, 10).map((o) => o.s.market === "kr" ? o.s.name : o.s.ticker).join(" · ")}
+      — 방향이 엇갈리니 판단을 미루는 편이 안전합니다.</p>` : ""}`;
+  host.querySelectorAll(".td-chip").forEach((b) => b.onclick = () => {
+    document.querySelector('[data-tab="lookup"]').click();
+    loadLookup(b.dataset.key);
+  });
 }
 
 function fillTodayTable() {
@@ -901,16 +960,26 @@ function fillTodayTable() {
   const activeOnly = $("#today-active-only").checked;
   const rows = TODAY.signals.filter((s) =>
     (!mk || s.market === mk) && (!side || s.side === side) && (!activeOnly || s.active));
+  const stat = (s) => {
+    const d = SIG_STATUS[s.status];
+    if (!d) return "-";
+    const prev = s.prev_date ? `직전 ${s.prev_side === "buy" ? "매수" : "매도"} ${s.prev_date}` +
+      (s.days_since ? ` (${s.days_since}거래일 전)` : "") : "최근 120일 내 이전 신호 없음";
+    return `<span class="td-stat ${s.status}" title="${d[2]} · ${prev}">${d[0]} ${d[1]}${
+      s.status === "repeat" && s.streak > 1 ? ` <i>${s.streak}회</i>` : ""}</span>` +
+      (s.conflict ? ` <span class="td-stat conflict" title="같은 날 반대 방향 신호도 발생">⚠ 엇갈림</span>` : "");
+  };
   $("#today-table").innerHTML =
-    `<tr><th>신호일</th><th>종목</th><th>원칙</th><th>방향</th><th>종가</th><th>국면상</th><th>차트</th></tr>` +
+    `<tr><th>신호일</th><th>종목</th><th>원칙</th><th>방향</th><th>상태</th><th>종가</th><th>국면상</th><th>차트</th></tr>` +
     (rows.length ? rows.map((s, i) => `<tr style="${s.active ? "" : "opacity:.45"}">
       <td>${s.date}</td>
       <td class="td-stock"><img class="tbl-logo" src="${logoUrl(s.market, s.ticker)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
         <a href="#" class="goto-lookup" data-key="${s.market}_${s.ticker}">${s.market === "kr" ? s.name + " (" + s.ticker + ")" : s.ticker}</a></td>
       <td>${s.rule}</td><td>${s.side === "buy" ? "🟢 매수" : "🔴 매도"}</td>
+      <td>${stat(s)}</td>
       <td>${s.price.toLocaleString()}</td><td>${s.active ? "✅ 유효" : "⛔ 꺼짐"}</td>
       <td><button class="today-chart-btn" data-i="${i}">📈 보기</button></td>
-    </tr>`).join("") : `<tr><td colspan="7">조건에 맞는 신호 없음</td></tr>`);
+    </tr>`).join("") : `<tr><td colspan="8">조건에 맞는 신호 없음</td></tr>`);
   document.querySelectorAll(".goto-lookup").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.preventDefault();
@@ -2689,7 +2758,8 @@ function renderScrTech() {
     const byId = Object.fromEntries(pats.map((p) => [p.id, p]));
     let tip = $("#tech-tip");
     if (!tip) { tip = document.createElement("div"); tip.id = "tech-tip"; document.body.appendChild(tip); }
-    host.querySelectorAll(".scr-theme.tech").forEach((b) => {
+    // (아래는 기술적 테마 칩 바인딩 — 대가 카드의 편입·처분 칩은 renderGurus 말미에서 바인딩)
+  host.querySelectorAll(".scr-theme.tech").forEach((b) => {
       b.onclick = () => {
         scrTechActive = (scrTechActive === b.dataset.id) ? null : b.dataset.id;
         scrThemeActive = null;           // 재무 테마 해제(상호배타)
@@ -7982,42 +8052,97 @@ function loadGuruHist() {
 }
 function guruHistBlock(id, gh) {
   if (!gh?.quarters?.length || !Object.keys(gh.series || {}).length) return "";
-  const qs = gh.quarters, keys = Object.keys(gh.series)
-    .sort((a, b) => (gh.series[b].at(-1) || 0) - (gh.series[a].at(-1) || 0));
-  const W = 700, H = 250, P = { l: 34, r: 120, t: 14, b: 24 };
+  const qs = gh.quarters;
+  const keys = Object.keys(gh.series).sort((a, b) => (gh.series[b].at(-1) || 0) - (gh.series[a].at(-1) || 0));
+  // 라벨이 잘리지 않도록 우측 여백을 **가장 긴 종목명 기준**으로 잡고, 높이는 항목 수에 맞춰 늘린다
+  const shown = keys.filter((k) => (gh.series[k].at(-1) || 0) >= 0.02);
+  const nameW = Math.min(190, 60 + Math.max(...shown.map((k) => k.length), 6) * 6.4);
+  const H = Math.max(290, 52 + shown.length * 16);   // 라벨 수만큼 세로를 확보(잘림 방지)
+  const W = 760, P = { l: 40, r: nameW + 12, t: 16, b: 26 };
   const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, qs.length - 1));
   const Y = (v) => P.t + (H - P.t - P.b) * (1 - v);
   let acc = new Array(qs.length).fill(0);
-  const areas = keys.map((k, gi) => {
+  const bands = keys.map((k, gi) => {
     const s = gh.series[k].map((v) => v || 0);
     const top = s.map((v, i) => acc[i] + v);
     const path = top.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ") + " " +
       acc.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).reverse().join(" ");
+    const mid = top.map((v, i) => (v + acc[i]) / 2);
     acc = top;
-    return `<polygon points="${path}" fill="${HLD_COLORS[gi % 8]}" fill-opacity=".8"
-      stroke="var(--card)" stroke-width=".6"><title>${k}</title></polygon>`;
-  }).join("");
-  let acc2 = 0, prevY = -99;
-  const labels = keys.map((k, gi) => {
+    return { k, gi, path, s, mid };
+  });
+  const areas = bands.map((b) => `<polygon points="${b.path}" fill="${HLD_COLORS[b.gi % 8]}"
+    fill-opacity=".82" stroke="var(--card)" stroke-width=".7"><title>${b.k}</title></polygon>`).join("");
+  // 종목이 처음 들어온/완전히 빠진 분기에 점을 찍어 '언제 바뀌었는지'가 보이게 한다
+  const dots = bands.flatMap((b) => b.s.map((v, i) => {
+    const prev = i ? b.s[i - 1] : 0;
+    if (prev < 0.001 && v >= 0.005) return { i, y: Y(b.mid[i]), t: "in", k: b.k, w: v, d: qs[i] };
+    if (prev >= 0.005 && v < 0.001) return { i, y: Y(b.mid[i - 1]), t: "out", k: b.k, w: prev, d: qs[i] };
+    return null;
+  }).filter(Boolean)).map((p) => `<g class="gh-dot">
+      <circle cx="${X(p.i)}" cy="${p.y}" r="4.5" fill="${p.t === "in" ? "#22c07a" : "#f5445a"}"
+        stroke="#fff" stroke-width="1.2"/>
+      <title>${p.d} · ${p.k} ${p.t === "in" ? "편입" : "전량 처분"} (${(p.w * 100).toFixed(1)}%)</title></g>`).join("");
+  /* 라벨 배치 — ⚠누적 영역은 **첫 키가 맨 아래**라 keys 순서로 가면 y가 '감소'한다.
+     증가를 가정하고 `max(y, prev+gap)`로 밀면 라벨이 아래로 계속 밀려 차트 밖으로 나간다(실측 14개 이탈).
+     → y 오름차순(화면 위→아래)으로 정렬한 뒤 아래로 밀고, 마지막에 위로 되밀어 안쪽에 가둔다. */
+  let acc2 = 0;
+  const lab = [];
+  keys.forEach((k, gi) => {
     const v = gh.series[k].at(-1) || 0, mid = acc2 + v / 2; acc2 += v;
-    if (v < 0.035) return "";
-    let y = Math.max(Y(mid), prevY + 12); prevY = y;
-    return `<text x="${W - P.r + 6}" y="${y + 3}" class="cr-end" fill="${HLD_COLORS[gi % 8]}"
-      >${String(k).slice(0, 11)} ${(v * 100).toFixed(0)}%</text>`;
-  }).join("");
-  const grid = [0, .5, 1].map((r) =>
+    if (v >= 0.02) lab.push({ k, gi, v, y: Y(mid) });
+  });
+  lab.sort((a, b) => a.y - b.y);
+  const GAP = 16, top = P.t + 4, bot = H - P.b - 2;
+  for (let i = 0; i < lab.length; i++) lab[i].y = Math.max(lab[i].y, i ? lab[i - 1].y + GAP : top);
+  for (let i = lab.length - 1; i >= 0; i--) {
+    lab[i].y = Math.min(lab[i].y, i === lab.length - 1 ? bot : lab[i + 1].y - GAP);
+  }
+  const labels = lab.map((l) =>
+    `<g><rect x="${W - P.r + 2}" y="${(l.y - 7).toFixed(1)}" width="9" height="9" rx="2" fill="${HLD_COLORS[l.gi % 8]}"/>
+      <text x="${W - P.r + 15}" y="${(l.y + 1).toFixed(1)}" class="gh-lb">${l.k}</text>
+      <text x="${W - 4}" y="${(l.y + 1).toFixed(1)}" text-anchor="end" class="gh-lb pct">${(l.v * 100).toFixed(0)}%</text></g>`).join("");
+  const grid = [0, .25, .5, .75, 1].map((r) =>
     `<line x1="${P.l}" y1="${Y(r)}" x2="${W - P.r}" y2="${Y(r)}" stroke="var(--line)"/>
      <text x="${P.l - 5}" y="${Y(r) + 3}" text-anchor="end" class="cr-ax">${r * 100}%</text>`).join("");
-  const xl = [0, Math.floor(qs.length / 2), qs.length - 1].map((i) =>
-    `<text x="${X(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === qs.length - 1 ? "end" : "middle"}"
-      class="cr-ax">${qs[i].slice(2, 7)}</text>`).join("");
-  const evs = (gh.events || []).slice(0, 8).map((e) =>
-    `<span class="guru-ev ${e.type}">${e.type === "in" ? "▲ 편입" : "▼ 처분"} ${e.issuer}
-      <span class="sub-note">${e.d}${e.w ? ` · ${(e.w * 100).toFixed(1)}%` : ""}</span></span>`).join("");
-  return `<div class="guru-hist"><b>📅 보유 비중 변화 <span class="sub-note">(${qs[0]} ~ ${qs.at(-1)} · ${qs.length}개 분기)</span></b>
-    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${areas}${labels}${xl}</svg>
-    ${evs ? `<div class="guru-evs"><b class="sub-note">최근 편입·처분</b>${evs}</div>` : ""}
+  const step = Math.max(1, Math.ceil(qs.length / 6));
+  const xl = qs.map((q, i) => (i % step === 0 || i === qs.length - 1)
+    ? `<text x="${X(i)}" y="${H - 7}" text-anchor="${i === 0 ? "start" : i === qs.length - 1 ? "end" : "middle"}"
+        class="cr-ax">${q.slice(2, 7)}</text>` : "").join("");
+  return `<div class="guru-hist">
+    <b>📅 보유 비중 변화 <span class="sub-note">(${qs[0]} ~ ${qs.at(-1)} · ${qs.length}개 분기 ·
+      <span style="color:#22c07a">●</span> 편입 <span style="color:#f5445a">●</span> 전량 처분)</span></b>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${areas}${dots}${labels}${xl}</svg>
+    ${guruFlowBlock(gh)}
     ${guruNewsBlock(gh)}</div>`;
+}
+
+/* 🔀 최근 1년 편입·제외 — 로고 + 종목조회 링크 */
+function guruFlowBlock(gh) {
+  const evs = gh?.events || [];
+  if (!evs.length) return "";
+  const cut = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const recent = evs.filter((e) => e.d >= cut);
+  if (!recent.length) return `<p class="mini-note">최근 1년간 편입·제외 없음</p>`;
+  const mk = gh.country === "kr" ? "kr" : "us";
+  const card = (e) => {
+    const key = e.tk ? `${mk}_${e.tk}` : null;
+    const logo = e.tk ? logoUrl(mk, e.tk) : "";
+    return `<${key ? "button" : "div"} class="gf-item ${e.type}" ${key ? `data-key="${key}"` : ""}
+        title="${e.d} · ${e.issuer}${e.w ? ` · 비중 ${(e.w * 100).toFixed(1)}%` : ""}">
+      ${logo ? `<img src="${logo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
+             : `<span class="gf-noimg">${e.type === "in" ? "▲" : "▼"}</span>`}
+      <span class="gf-name">${e.issuer}</span>
+      <span class="gf-meta">${e.d.slice(2)}${e.w ? ` · ${(e.w * 100).toFixed(1)}%` : ""}</span>
+    </${key ? "button" : "div"}>`;
+  };
+  const ins = recent.filter((e) => e.type === "in"), outs = recent.filter((e) => e.type === "out");
+  return `<div class="guru-flow">
+    <div class="gf-col in"><b>🟢 신규 편입 <span class="sub-note">최근 1년 · ${ins.length}건</span></b>
+      <div class="gf-list">${ins.length ? ins.slice(0, 12).map(card).join("") : `<span class="sub-note">없음</span>`}</div></div>
+    <div class="gf-col out"><b>🔴 전량 처분 <span class="sub-note">최근 1년 · ${outs.length}건</span></b>
+      <div class="gf-list">${outs.length ? outs.slice(0, 12).map(card).join("") : `<span class="sub-note">없음</span>`}</div></div>
+  </div>`;
 }
 
 /* 📰 공시 이후 변동 — 마지막 공시일 뒤에 나온 기사(사실 확인 필요) */
@@ -8143,6 +8268,11 @@ function renderGurus() {
       </div>
     </details>`;
   }).join("");
+  // 편입·처분 카드 → 종목조회 이동(유니버스에 있는 종목만 버튼으로 렌더됨)
+  $("#gurus-list").querySelectorAll(".gf-item[data-key]").forEach((b) => b.onclick = () => {
+    document.querySelector('[data-tab="lookup"]').click();
+    loadLookup(b.dataset.key);
+  });
 }
 
 /* ---------- 내재가치 (DCF·RIM — 브라우저 계산) ---------- */
