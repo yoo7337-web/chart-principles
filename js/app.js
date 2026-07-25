@@ -1753,6 +1753,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v177", "2026-07-26", "산업 분류 한·미 통일(12산업군) + 신호 원칙별 정리", "화면마다 달랐던 5개 산업 분류를 산업지표가 붙어 있는 12산업군으로 통일. 수집 단계에서 타일에 grp를 계산해 주식찾기·산업진단·종목조회가 같은 기준을 쓴다. 미국은 GICS 대분류가 12개뿐이라 company.json의 세부 업종을 우선 사용(미분류 38종목은 yfinance로 보강 → 기타 0%). 밸류체인은 복수 소속·공정 순서를 담으므로 대체하지 않고 산업군 하위 축으로 병존. 오늘의 신호에 원칙별 정리 추가."],
   ["v175", "2026-07-26", "'불타기' 추세추종 매수 원칙 5종 채택 + 공시 오류 수정", "기존 채택 매수 원칙이 전부 역추세(BB하단·과매도)라 '오를 때 더 산다'는 원칙이 없었음 → 추세 필터를 얹은 후보 6종을 10년 검증해 5종 통과. 플래그 돌파 +3.45%·신고가+거래량+추세필터 +2.37%가 신규 채택되어 최종 매수 원칙 5개 중 4개가 돌파형으로 바뀜. ⚠공시 치명 오류 수정: DART corp_code 매핑 정규식이 항목 경계를 넘어 짝지어 상장사 63%가 남의 공시를 보고 있었음(실리콘투 1건→15건, 전체 1,153종목 정상화). 신호 요약 대시보드를 회사 로고 타일로 개편."],
   ["v174", "2026-07-26", "오늘의 신호 대시보드 + 종목별 매매 추이 + 대가 차트 개편", "오늘의 신호: 최신일 매수/매도 요약 대시보드(방향 전환·첫 신호·지속으로 분류, 연속 횟수 배지, 매수·매도 동시 발생 경고) + 표에 상태 열. 보유 포트폴리오: 종목별 매매 추이(계단형 보유 수량 + 편입·증량·감량·전량매도 마커, 수량·단가 툴팁). 투자 대가: 같은 분기 중복·부분 공시 제외로 차트 붕괴 수정, 라벨 잘림 해결, 편입/처분 지점 점 표시, 최근 1년 편입·제외를 로고+종목조회 링크 카드로 분리."],
   ["v172", "2026-07-26", "투자 대가 비중·3년 시계열·공시 후 보도 + 크립토 5년 + 수급 20일 누적", "투자 대가: 국내 대가 포트폴리오 비중 신설(DART 보유주식수×주가, '공시된 5%↑ 보유분 내 비중') · 국내/미국 전원 3년(13분기) 보유 비중 변화 차트 · 분기 공시 이후 나온 보도를 대가별로 수집(13F는 45일 지연이라 그 사이 매매 확인용). 크립토 전 차트 5년으로 확대. 포트폴리오 점검 수급 컨텍스트를 일별 막대 3세트 → 20일 누적 라인 1개로 통합하고 금액 표기."],
@@ -1971,7 +1972,7 @@ function renderMemo() {
 /* ---------- 주식찾기 (스크리너) — 국가/산업/시가총액 ---------- */
 // 데이터 소스: MARKET.heatmap = [{m,t,name,sector,mcap,chg}] (국내+미국 유니버스)
 const SCR_FX = 1350;  // '전체' 국가 비교 시 미국 시총 원화 환산(1$≈1,350원) — 대략치
-const scrState = { country: "kr", sectors: null, min: null, max: null, sort: "mcap" };  // 국가 필수(전체 제거) — 기본 한국. sectors=null → 업종 전체
+const scrState = { country: "kr", groups: null, sectors: null, min: null, max: null, sort: "mcap" };  // 국가 필수(전체 제거) — 기본 한국. sectors=null → 업종 전체
 const scrMetricSel = {};        // metricId → Set(bucketIdx) — 세부 지표 필터 선택
 let scrVals = new Map();         // "m_t" → 지표값 캐시(company.json 로드 후 구축)
 let scrValsReady = false;
@@ -2140,7 +2141,7 @@ function initScreener() {
   document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
     document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
     scrState.country = b.dataset.c;
-    scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
+    scrState.groups = scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
     $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = "";
     buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
     renderScrTech();  // 기술 테마 배지 수를 선택 국가 기준으로 재계산
@@ -2156,7 +2157,7 @@ function initScreener() {
   $("#scr-mcap-min").addEventListener("input", onMcap);
   $("#scr-mcap-max").addEventListener("input", onMcap);
   // 산업 초기화(전체)
-  $("#scr-sec-reset").onclick = () => { scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); renderScreener(); };
+  $("#scr-sec-reset").onclick = () => { scrState.groups = scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); renderScreener(); };
   // 정렬
   $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
   // 세부 지표·테마 초기화
@@ -2191,6 +2192,26 @@ const SCR_GROUPS = [
   { key: "transport", icon: "🚢", name: "운송·물류", sectors: ["해운사", "항공사", "항공화물운송과물류", "운송인프라"] },
 ];
 const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
+/* 한·미 공통 12산업군 — 수집 단계(market_dash)가 타일에 `grp`를 넣어준다.
+   같은 기준을 주식찾기·산업 진단·종목조회가 함께 쓰므로 화면 간 산업이 어긋나지 않는다.
+   (밸류체인 CHAINS는 대체가 아니라 이 아래의 '공정 단계' 축으로 병존) */
+const IND_GROUPS = [
+  { key: "semi", icon: "🔌", name: "반도체·IT" },
+  { key: "internet", icon: "📱", name: "인터넷·SW·미디어" },
+  { key: "bio", icon: "💊", name: "바이오·헬스" },
+  { key: "consumer", icon: "🛒", name: "소비재·유통" },
+  { key: "finance", icon: "🏦", name: "금융" },
+  { key: "chem", icon: "⚗️", name: "화학·철강" },
+  { key: "battery", icon: "🔋", name: "2차전지·소재" },
+  { key: "auto", icon: "🚗", name: "자동차" },
+  { key: "defense", icon: "🛡", name: "방산·기계" },
+  { key: "construct", icon: "🏗", name: "건설·부동산" },
+  { key: "ship", icon: "🚢", name: "조선·해운·운송" },
+  { key: "energy", icon: "⛽", name: "에너지·유틸리티" },
+];
+const IND_BY_KEY = Object.fromEntries(IND_GROUPS.map((g) => [g.key, g]));
+const indName = (k) => (IND_BY_KEY[k] || SCR_GROUP_ETC).name;
+const indLabel = (k) => { const g = IND_BY_KEY[k] || SCR_GROUP_ETC; return `${g.icon} ${g.name}`; };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
 let scrOpenGroup = null;  // 펼쳐진 그룹(아코디언)
 
@@ -2393,7 +2414,7 @@ function scrOpenFromChain(ind, stageKey) {
   if (!screenerRendered) initScreener();
   scrState.country = "kr";
   document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x.dataset.c === "kr"));
-  scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
+  scrState.groups = scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
   buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
   scrChainIndustry = ind; scrChainSel.clear();
   if (stageKey) scrChainSel.add(stageKey);
@@ -2602,21 +2623,32 @@ function renderScrChain() {
 
 function buildScrSectors() {
   const host = $("#scr-sectors");
-  const secs = scrSectorsFor("us");          // 산업(업종)필터는 미국 전용 → 미국 GICS 업종만
+  /* 산업 필터 = **한·미 공통 12산업군**(타일의 grp). 산업 진단 지표·종목조회와 같은 기준이라
+     화면 사이에 산업이 어긋나지 않는다. 그룹을 누르면 그 안의 원천 업종(세부)이 하단에 펼쳐진다. */
+  const pool = scrPool();
   const byG = {};
-  secs.forEach(([nm, n]) => { const k = scrGroupOf(nm); (byG[k] = byG[k] || { subs: [], total: 0 }); byG[k].subs.push([nm, n]); byG[k].total += n; });
-  const metaMap = Object.fromEntries([...SCR_GROUPS, SCR_GROUP_ETC].map((g) => [g.key, g]));
-  const order = [...SCR_GROUPS.map((g) => g.key), "etc"].filter((k) => byG[k]);
+  pool.forEach((t) => {
+    const k = t.grp || "etc";
+    const g = byG[k] = byG[k] || { subs: {}, total: 0 };
+    g.subs[t.sector] = (g.subs[t.sector] || 0) + 1;
+    g.total += 1;
+  });
+  Object.values(byG).forEach((g) => { g.subs = Object.entries(g.subs).sort((a, b) => b[1] - a[1]); });
+  const metaMap = Object.fromEntries([...IND_GROUPS, SCR_GROUP_ETC].map((g) => [g.key, g]));
+  const order = [...IND_GROUPS.map((g) => g.key), "etc"].filter((k) => byG[k]);
   const selHas = (nm) => scrState.sectors && scrState.sectors.has(nm);
   host.innerHTML = order.map((k) => {
     const g = metaMap[k], grp = byG[k];
-    const subs = grp.subs.sort((a, b) => b[1] - a[1]);
-    const selN = subs.filter(([nm]) => selHas(nm)).length;
-    const cls = selN === 0 ? "" : (selN === subs.length ? "all" : "some");
+    const selN = grp.subs.filter(([nm]) => selHas(nm)).length;
+    const grpOn = scrState.groups && scrState.groups.has(k);
+    const cls = grpOn ? "all" : selN ? "some" : "";
     const open = scrOpenGroup === k;
     // 세부업종 칩은 그룹 안이 아니라 하단 전폭 행(#scr-sub-host)에 — 국내 밸류체인 단계와 동일한 UX
     return `<div class="scr-group">
-      <button class="scr-gchip ${cls} ${open ? "open" : ""}" data-gk="${k}"><span class="scr-gi">${g.icon}</span>${g.name}${selN ? `<span class="scr-gsel">${selN}</span>` : ""}</button>
+      <button class="scr-gchip ${cls} ${open ? "open" : ""}" data-gk="${k}"
+        title="${g.name} ${grp.total}종목 — 클릭=선택/해제, 다시 클릭하면 세부업종 펼침"
+        ><span class="scr-gi">${g.icon}</span>${g.name}<span class="scr-gn">${grp.total}</span>${
+        selN ? `<span class="scr-gsel">${selN}</span>` : ""}</button>
       </div>`;
   }).join("");
 
@@ -2633,8 +2665,14 @@ function buildScrSectors() {
         </div>`
       : `<p class="mini-note">위에서 업종을 선택하면 세부업종이 표시됩니다.</p>`;
   }
+  // 산업군 칩: 선택 토글 + 펼치기(선택된 상태에서 다시 누르면 세부업종 표시)
   host.querySelectorAll(".scr-gchip").forEach((b) => b.onclick = () => {
-    scrOpenGroup = scrOpenGroup === b.dataset.gk ? null : b.dataset.gk; buildScrSectors();
+    const k = b.dataset.gk;
+    if (!scrState.groups) scrState.groups = new Set();
+    if (scrState.groups.has(k)) { scrState.groups.delete(k); scrOpenGroup = null; }
+    else { scrState.groups.add(k); scrOpenGroup = k; }
+    if (!scrState.groups.size) scrState.groups = null;
+    buildScrSectors(); renderScreener();
   });
   // 세부업종 칩은 하단 전폭 행에 있으므로 document 기준으로 바인딩
   document.querySelectorAll("#scr-sub-host .scr-sub").forEach((b) => b.onclick = () => {
@@ -2655,20 +2693,24 @@ function buildScrSectors() {
   updateScrSecCount();
 }
 function updateScrSecCount() {
+  const g = scrState.groups ? scrState.groups.size : 0;
   const n = scrState.sectors ? scrState.sectors.size : 0;
-  const total = scrSectorsFor("us").length;
-  $("#scr-sec-count").textContent = n ? `${n}개 업종 선택` : `전체 업종 (${total})`;
+  const el = $("#scr-sec-count");
+  if (!el) return;
+  el.textContent = g || n
+    ? [g ? `산업군 ${g}` : "", n ? `세부업종 ${n}` : ""].filter(Boolean).join(" · ") + " 선택"
+    : `전체 산업 (${IND_GROUPS.length}개 산업군)`;
 }
 // 국가에 따라 필터 UI 전환: 한국=밸류체인만 / 미국=산업(업종)필터만 / 전체=둘 다
 function scrSyncFilterVisibility() {
   const c = scrState.country;
+  // 산업군 필터는 이제 **한·미 공통**이라 항상 표시. 밸류체인(공정 단계)만 국내 전용.
   const chainCard = $("#scr-chain-card"), secRow = $("#scr-sector-row");
   if (chainCard) chainCard.style.display = (c === "us") ? "none" : "";
-  if (secRow) secRow.style.display = (c === "kr") ? "none" : "";
-  // ⚠하단 전폭 세부 행은 두 시장이 공유 → 전환 시 상대 시장 잔상 제거
-  const flow = $("#scr-chain-flow"), subHost = $("#scr-sub-host");
+  if (secRow) secRow.style.display = "";
+  // ⚠하단 전폭 세부 행은 밸류체인 단계와 세부업종이 공유 → 전환 시 잔상 제거
+  const flow = $("#scr-chain-flow");
   if (c === "us" && flow) flow.innerHTML = "";          // 미국인데 국내 밸류체인 단계가 남는 문제
-  if (c === "kr" && subHost) subHost.innerHTML = "";    // 국내인데 미국 세부업종이 남는 문제
 }
 
 function buildScrTiers() {
@@ -2909,7 +2951,9 @@ function renderScreener() {
   let rows = scrPool().filter((t) => {
     if (!scrTechPass(t)) return false;                                              // 기술적 테마(차트 패턴)
     if (chainKeys && t.m === "kr" && !chainKeys.has(t.m + "_" + t.t)) return false;  // 밸류체인=국내만
-    if (scrState.sectors && t.m === "us" && !scrState.sectors.has(t.sector)) return false;  // 산업(업종)필터=미국만
+    // 산업군(12개 공통) → 세부업종 순으로 좁힌다. 둘 다 한·미 공통 기준이라 시장 구분 없이 적용.
+    if (scrState.groups && !scrState.groups.has(t.grp || "etc")) return false;
+    if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
     const v = scrMcapVal(t);
     if (scrState.min != null && v < scrState.min) return false;
     if (scrState.max != null && v > scrState.max) return false;

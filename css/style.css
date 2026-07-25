@@ -1511,3 +1511,5 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .hld-tr-now { flex: 0 0 82px; text-align: right; font-size: .78rem; font-weight: 700; }
 .hld-tr-now.gone { color: #f5445a; font-weight: 600; }
 .hld-tr-last { flex: 0 0 96px; text-align: right; font-size: .72rem; }
+.scr-gn { font-size: .68rem; font-weight: 700; color: var(--muted); margin-left: 5px; }
+.scr-gchip.all .scr-gn, .scr-gchip.some .scr-gn { color: inherit; opacity: .75; }
