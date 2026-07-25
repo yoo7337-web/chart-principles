@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=153">
-<script src="firebase-config.js?v=153"></script>
-<script src="js/auth.js?v=153"></script>
+<link rel="stylesheet" href="css/style.css?v=154">
+<script src="firebase-config.js?v=154"></script>
+<script src="js/auth.js?v=154"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -147,9 +147,10 @@
 
   <section id="tab-lookup" class="panel">
     <!-- 스크롤해도 상단 고정: 좌=현재 종목(명·현재가) / 우=다른 종목 검색 -->
-    <div id="lk-sticky" class="lk-sticky">
+    <!-- empty 클래스: 종목 미선택 시 검색창을 안내문 바로 옆에(선택 후엔 우측 고정) -->
+    <div id="lk-sticky" class="lk-sticky empty">
       <span id="lk-sticky-info" class="lk-sticky-info"><span class="sub-note">종목을 검색하세요</span></span>
-      <span style="flex:1"></span>
+      <span class="lk-sticky-gap"></span>
       <label id="lookup-rule-wrap" style="display:none">원칙 <select id="lookup-rule"></select></label>
       <label class="lk-sticky-search">🔍 <input type="text" id="lookup-q" placeholder="종목 검색 (예: 현대차, NVDA)" list="lookup-list" autocomplete="off">
       <datalist id="lookup-list"></datalist></label>
@@ -827,6 +828,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=153"></script>
+<script src="js/app.js?v=154"></script>
 </body>
 </html>

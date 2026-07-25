@@ -1060,6 +1060,7 @@ function loadLookup(key) {
     $("#lookup-filter").style.display = "flex";
     $("#lookup-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
     // 고정 바 좌측: 현재 종목 요약(명·현재가·등락) — 스크롤해도 상단 유지
+    $("#lk-sticky").classList.remove("empty");   // 종목 선택됨 → 검색창 우측 고정
     const q = freshQuote(st);
     const price = q?.cur, chg = q?.chg;
     const col = chg == null ? "" : chg >= 0 ? "kup" : "kdn";

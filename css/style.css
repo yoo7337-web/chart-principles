@@ -1014,6 +1014,9 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-sticky-logo { width: 24px; height: 24px; border-radius: 50%; background: #fff; object-fit: contain; flex: 0 0 auto; }
 .lk-sticky-price { font-weight: 700; margin-left: 4px; white-space: nowrap; }
 .lk-sticky-price.kup { color: var(--kup); } .lk-sticky-price.kdn { color: var(--kdn); }
+/* 검색창 위치: 종목 선택 시 우측 고정(gap이 늘어남) / 미선택(.empty) 시 안내문 바로 옆 */
+.lk-sticky-gap { flex: 1 1 auto; }
+.lk-sticky.empty .lk-sticky-gap { flex: 0 0 10px; }
 .lk-sticky-search { display: flex; align-items: center; gap: 4px; background: var(--card);
   border: 1px solid var(--line); border-radius: 9px; padding: 4px 10px; }
 .lk-sticky-search input { border: none; background: none; color: var(--ink); font-size: .86rem; outline: none; width: 190px; }
