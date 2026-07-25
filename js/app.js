@@ -107,7 +107,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -169,6 +169,7 @@ function activateTab(tabId) {
   if (tabId === "econcal" && !ecRendered) renderEconCal();
   if (tabId === "trends" && !trendsRendered) renderTrends();
   if (tabId === "crypto" && !cryptoRendered) renderCrypto();
+  if (tabId === "assets" && !assetsRendered) renderAssets();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -1753,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v178", "2026-07-26", "🏙 자산시장 탭 — 부동산·채권 + 로테이션 검증", "주식만 보면 놓치는 '돈의 이동'을 보는 탭 신설. 2000년 이후 월간 데이터로 19개 시장의 교차상관(-12~+12개월)을 전수 계산해 유의한 선행관계 99건을 추출. 핵심 발견: 신용 스프레드가 부동산을 2개월 선행(r=-0.72)으로 압도적 1위, 코스피는 서울 아파트를 2개월 선행, 부동산은 12개월 뒤 코스피와 역상관. 화면=요약 카드 5 + 로테이션 표 + 부동산(가격지수·전년대비·공급) + 채권(금리·스프레드)."],
   ["v177", "2026-07-26", "산업 분류 한·미 통일(12산업군) + 신호 원칙별 정리", "화면마다 달랐던 5개 산업 분류를 산업지표가 붙어 있는 12산업군으로 통일. 수집 단계에서 타일에 grp를 계산해 주식찾기·산업진단·종목조회가 같은 기준을 쓴다. 미국은 GICS 대분류가 12개뿐이라 company.json의 세부 업종을 우선 사용(미분류 38종목은 yfinance로 보강 → 기타 0%). 밸류체인은 복수 소속·공정 순서를 담으므로 대체하지 않고 산업군 하위 축으로 병존. 오늘의 신호에 원칙별 정리 추가."],
   ["v175", "2026-07-26", "'불타기' 추세추종 매수 원칙 5종 채택 + 공시 오류 수정", "기존 채택 매수 원칙이 전부 역추세(BB하단·과매도)라 '오를 때 더 산다'는 원칙이 없었음 → 추세 필터를 얹은 후보 6종을 10년 검증해 5종 통과. 플래그 돌파 +3.45%·신고가+거래량+추세필터 +2.37%가 신규 채택되어 최종 매수 원칙 5개 중 4개가 돌파형으로 바뀜. ⚠공시 치명 오류 수정: DART corp_code 매핑 정규식이 항목 경계를 넘어 짝지어 상장사 63%가 남의 공시를 보고 있었음(실리콘투 1건→15건, 전체 1,153종목 정상화). 신호 요약 대시보드를 회사 로고 타일로 개편."],
   ["v174", "2026-07-26", "오늘의 신호 대시보드 + 종목별 매매 추이 + 대가 차트 개편", "오늘의 신호: 최신일 매수/매도 요약 대시보드(방향 전환·첫 신호·지속으로 분류, 연속 횟수 배지, 매수·매도 동시 발생 경고) + 표에 상태 열. 보유 포트폴리오: 종목별 매매 추이(계단형 보유 수량 + 편입·증량·감량·전량매도 마커, 수량·단가 툴팁). 투자 대가: 같은 분기 중복·부분 공시 제외로 차트 붕괴 수정, 라벨 잘림 해결, 편입/처분 지점 점 표시, 최근 1년 편입·제외를 로고+종목조회 링크 카드로 분리."],
@@ -4511,6 +4513,175 @@ function crTable(d) {
       <td class="num">${crPct(c.c30)}</td><td class="num">${crPct(c.c1y)}</td>
       <td class="num">${crFmtUsd(c.mcap)}</td><td class="num">${crFmtUsd(c.vol)}</td>
       <td class="num">${crPct(c.hi_off)}</td></tr>`).join("") + "</tbody>";
+}
+
+/* ---------- 🏙 자산시장 — 부동산·채권 + 로테이션 검증 (asset_rotation.json) ---------- */
+let assetsRendered = false, ASSETS = null, asReMode = "index", asBondMode = "yield";
+const AS_COLORS = ["#4391ff", "#f5445a", "#22c07a", "#f0b34c", "#9d7bff", "#38bdf8", "#fb923c"];
+
+// 공통 멀티라인 SVG — 월간 시리즈 여러 개를 한 축에 그린다(끝 라벨 겹침 방지 포함)
+function asLines(host, defs, opt = {}) {
+  const el = $(host); if (!el) return;
+  const use = defs.filter((d) => d.t?.length >= 2);
+  if (!use.length) { el.innerHTML = `<p class="mini-note">데이터 없음</p>`; return; }
+  const cut = opt.from || null;
+  const series = use.map((d) => {
+    const idx = d.t.map((x, i) => i).filter((i) => !cut || d.t[i] >= cut);
+    return { ...d, tt: idx.map((i) => d.t[i]), vv: idx.map((i) => d.v[i]) };
+  }).filter((d) => d.tt.length >= 2);
+  const months = [...new Set(series.flatMap((d) => d.tt))].sort();
+  const W = 900, H = opt.h || 300, P = { l: 52, r: 118, t: 14, b: 24 };
+  const X = (m) => P.l + (W - P.l - P.r) * (months.indexOf(m) / Math.max(1, months.length - 1));
+  const all = series.flatMap((d) => d.vv).filter((v) => v != null && isFinite(v));
+  let mn = Math.min(...all), mx = Math.max(...all);
+  if (opt.zero) { mn = Math.min(mn, 0); mx = Math.max(mx, 0); }
+  const pad = (mx - mn) * 0.1 || 1;
+  const lo = mn - pad, hi = mx + pad;
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+  const fmt = opt.fmt || ((v) => v.toFixed(1));
+  const grid = [0, .25, .5, .75, 1].map((r) => {
+    const v = lo + (hi - lo) * r;
+    return `<line x1="${P.l}" y1="${Y(v)}" x2="${W - P.r}" y2="${Y(v)}" stroke="var(--line)"/>
+      <text x="${P.l - 5}" y="${Y(v) + 3}" text-anchor="end" class="cr-ax">${fmt(v)}</text>`;
+  }).join("");
+  const zero = (lo <= 0 && hi >= 0)
+    ? `<line x1="${P.l}" y1="${Y(0)}" x2="${W - P.r}" y2="${Y(0)}" stroke="#8b8b93" stroke-dasharray="4 4"/>` : "";
+  const paths = series.map((d, i) => `<polyline points="${d.tt.map((m, j) =>
+    `${X(m).toFixed(1)},${Y(d.vv[j]).toFixed(1)}`).join(" ")}" fill="none"
+    stroke="${d.color || AS_COLORS[i % 7]}" stroke-width="${d.w || 1.9}"
+    ${d.dash ? `stroke-dasharray="${d.dash}"` : ""}/>`).join("");
+  const ends = series.map((d, i) => ({ name: d.name, color: d.color || AS_COLORS[i % 7],
+    v: d.vv[d.vv.length - 1], y: Y(d.vv[d.vv.length - 1]) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 14);
+  const labels = ends.map((e) => `<text x="${W - P.r + 6}" y="${e.y + 3}" class="cr-end"
+    fill="${e.color}">${e.name} ${fmt(e.v)}</text>`).join("");
+  const step = Math.max(1, Math.ceil(months.length / 6));
+  const xl = months.map((m, i) => (i % step === 0 || i === months.length - 1)
+    ? `<text x="${X(m)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === months.length - 1 ? "end" : "middle"}"
+        class="cr-ax">${m}</text>` : "").join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${grid}${zero}${paths}${labels}${xl}</svg>`;
+}
+
+const asS = (k) => ASSETS?.series?.[k];
+const asLast = (k) => { const s = asS(k); return s ? s.v[s.v.length - 1] : null; };
+const asPrev = (k, n = 1) => { const s = asS(k); return s && s.v.length > n ? s.v[s.v.length - 1 - n] : null; };
+
+function renderAssets() {
+  assetsRendered = true;
+  fetch("data/asset_rotation.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    ASSETS = d;
+    const ctx = $("#as-context");
+    if (!d) { ctx.textContent = "asset_rotation.json 없음 — python analysis\\asset_rotation.py 실행 필요"; return; }
+    ctx.innerHTML = `<b>🏙 자산시장</b> — 주식만 보면 놓치는 <b>돈의 이동</b>을 봅니다.
+      부동산·채권·환율은 <b>한국은행 ECOS</b>, 주가·코인은 yfinance. 2000년 이후 월간 데이터로
+      19개 시장의 <b>교차상관(−12~+12개월)</b>을 전수 계산해 선행관계를 추렸습니다.
+      <span class="sub-note">${d.generated} 갱신 · 상관은 인과가 아니며 표본이 월 단위라 참고 지표입니다.</span>`;
+    asCards(); asLeadTable(); asRealEstate(); asBond();
+    $("#as-re-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asReMode = b.dataset.m;
+      $("#as-re-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asRealEstate();
+    });
+    $("#as-bond-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asBondMode = b.dataset.m;
+      $("#as-bond-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asBond();
+    });
+  });
+}
+
+function asCards() {
+  const card = (t, v, sub, cls) => `<div class="cr-card"><div class="sub-note">${t}</div>
+    <b class="${cls || ""}">${v}</b><span class="sub-note">${sub}</span></div>`;
+  const cs = asLast("credit_spread"), cs1 = asPrev("credit_spread");
+  const ts = asLast("term_spread");
+  const b3 = asLast("bond3"), b10 = asLast("bond10");
+  const apt = asLast("apt_kr"), apt1 = asPrev("apt_kr"), aptY = asPrev("apt_kr", 12);
+  const fx = asLast("usdkrw");
+  const pc = (a, b) => (a == null || b == null ? "-" : `${a - b >= 0 ? "+" : ""}${((a / b - 1) * 100).toFixed(2)}%`);
+  $("#as-cards").innerHTML =
+    card("신용 스프레드", cs == null ? "-" : cs.toFixed(2) + "%p",
+         `회사채 BBB− − 국고 3년 · 전월 ${cs1 == null ? "-" : (cs - cs1 >= 0 ? "+" : "") + (cs - cs1).toFixed(2) + "%p"}`,
+         cs1 != null && cs > cs1 ? "kdn" : "kup") +
+    card("장단기 스프레드", ts == null ? "-" : ts.toFixed(2) + "%p",
+         `국고 10년 − 3년 ${ts < 0 ? "· ⚠ 역전" : ""}`, ts < 0 ? "kdn" : "") +
+    card("국고채 3년 / 10년", b3 == null ? "-" : `${b3.toFixed(2)} / ${b10?.toFixed(2)}%`, "월말 기준") +
+    card("전국 아파트", apt == null ? "-" : apt.toFixed(1),
+         `전월 ${pc(apt, apt1)} · 전년 ${pc(apt, aptY)}`, apt > apt1 ? "kup" : "kdn") +
+    card("원/달러", fx == null ? "-" : Math.round(fx).toLocaleString() + "원", "월말 기준");
+}
+
+/* 검증된 선행관계 — 상관이 강한 순. 상관계수 막대로 강도를 보여준다. */
+function asLeadTable() {
+  const KO = ASSETS.names_ko || {};
+  const lead = (ASSETS.lead || []).slice(0, 18);
+  const host = $("#as-lead");
+  if (!lead.length) { host.innerHTML = `<p class="mini-note">유의한 선행관계 없음</p>`; return; }
+  host.innerHTML = `<p class="mini-note">A가 움직인 뒤 B가 따라온 <b>평균 시차</b>와 상관계수입니다.
+      막대가 길수록 관계가 강하고, <span style="color:#f5445a">붉은색</span>은 <b>반대 방향</b>(A가 오르면 B는 내림)입니다.</p>
+    <div class="as-lead">${lead.map((x) => {
+      const neg = x.r < 0, w = Math.min(100, Math.abs(x.r) * 130);
+      return `<div class="as-lrow">
+        <span class="as-lfrom">${KO[x.from] || x.from}</span>
+        <span class="as-larrow">→ <b>${x.lag}개월</b></span>
+        <span class="as-lto">${KO[x.to] || x.to}</span>
+        <span class="as-lbar"><i style="width:${w}%;background:${neg ? "#f5445a" : "#22c07a"}"></i></span>
+        <span class="as-lr ${neg ? "neg" : "pos"}">${x.r >= 0 ? "+" : ""}${x.r.toFixed(2)}</span>
+        <span class="as-ln sub-note">n=${x.n}</span>
+      </div>`;
+    }).join("")}</div>`;
+}
+
+function asRealEstate() {
+  const KO = ASSETS.names_ko || {};
+  const leg = $("#as-re-legend");
+  let defs = [], opt = { fmt: (v) => v.toFixed(1) };
+  if (asReMode === "index") {
+    defs = ["apt_kr", "apt_se", "jeonse_kr", "jeonse_se"].filter(asS)
+      .map((k) => ({ name: KO[k], t: asS(k).t, v: asS(k).v }));
+    opt.fmt = (v) => v.toFixed(0);
+  } else if (asReMode === "yoy") {
+    defs = ["apt_kr", "apt_se", "jeonse_kr"].filter(asS).map((k) => {
+      const s = asS(k), v = s.v.map((x, i) => (i >= 12 && s.v[i - 12] ? (x / s.v[i - 12] - 1) * 100 : null));
+      const keep = v.map((x, i) => i).filter((i) => v[i] != null);
+      return { name: KO[k], t: keep.map((i) => s.t[i]), v: keep.map((i) => v[i]) };
+    });
+    defs.push(...["land_kr", "land_se"].filter(asS).map((k) => ({
+      name: KO[k] + "(월)", t: asS(k).t, v: asS(k).v, dash: "3 3", w: 1.4 })));
+    opt.zero = true; opt.fmt = (v) => v.toFixed(1) + "%";
+  } else {
+    defs = ["permit", "constr"].filter(asS).map((k) => {
+      const s = asS(k);   // 수량 단위가 달라 12개월 이동평균으로 정규화(첫 값=100)
+      const ma = s.v.map((_, i) => i < 11 ? null : s.v.slice(i - 11, i + 1).reduce((a, b) => a + b, 0) / 12);
+      const base = ma.find((x) => x != null) || 1;
+      const keep = ma.map((x, i) => i).filter((i) => ma[i] != null);
+      return { name: KO[k] + " 12개월평균", t: keep.map((i) => s.t[i]), v: keep.map((i) => ma[i] / base * 100) };
+    });
+    opt.fmt = (v) => v.toFixed(0);
+  }
+  leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
+    <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
+    (asReMode === "supply" ? `<span class="sub-note">첫 시점=100으로 맞춘 상대 추이(단위가 달라 직접 비교 불가)</span>` : "");
+  asLines("#as-re", defs, { ...opt, from: "2005-01", h: 320 });
+}
+
+function asBond() {
+  const KO = ASSETS.names_ko || {};
+  const leg = $("#as-bond-legend");
+  let defs, opt = { fmt: (v) => v.toFixed(2) + "%" };
+  if (asBondMode === "yield") {
+    defs = ["bond1", "bond3", "bond10", "corp3"].filter(asS)
+      .map((k) => ({ name: KO[k], t: asS(k).t, v: asS(k).v }));
+  } else {
+    defs = ["term_spread", "credit_spread"].filter(asS)
+      .map((k) => ({ name: KO[k], t: asS(k).t, v: asS(k).v }));
+    opt.zero = true; opt.fmt = (v) => v.toFixed(2) + "%p";
+  }
+  leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
+    <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
+    (asBondMode === "spread"
+      ? `<span class="sub-note">장단기 = 국고 10년−3년(경기) · 신용 = 회사채 BBB−−국고 3년(위험선호). 벌어지면 위험회피</span>` : "");
+  asLines("#as-bond", defs, { ...opt, from: "2005-01", h: 320 });
 }
 
 /* ---------- 트렌드 레이더 (trends.json — 네이버 데이터랩+구글 급상승) ---------- */

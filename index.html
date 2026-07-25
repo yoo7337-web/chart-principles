@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=177">
-<script src="firebase-config.js?v=177"></script>
-<script src="js/auth.js?v=177"></script>
+<link rel="stylesheet" href="css/style.css?v=178">
+<script src="firebase-config.js?v=178"></script>
+<script src="js/auth.js?v=178"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -47,6 +47,7 @@
   <button class="tab" data-tab="internals">시장 진단</button>
   <button class="tab" data-tab="rotation">산업 진단</button>
   <button class="tab" data-tab="crypto">₿ 크립토</button>
+  <button class="tab" data-tab="assets">🏙 자산시장</button>
   <button class="tab" data-tab="trends">🔥 트렌드</button>
   <button class="tab" data-tab="news">뉴스·일정</button>
 </nav>
@@ -158,6 +159,36 @@
       <div class="tablewrap"><table id="cr-table"></table></div>
     </div>
     <div class="criteria" id="cr-context" style="margin-top:14px"></div>
+  </section>
+
+  <section id="tab-assets" class="panel">
+    <div id="as-cards" class="cr-cards"></div>
+    <div class="card-flat">
+      <h3 class="lk-h3">🔄 자산시장 로테이션 <span class="sub-note">— 어느 시장이 어느 시장을 몇 개월 앞서 움직였나</span></h3>
+      <div id="as-lead"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">🏠 부동산 <span class="sub-note">(KB 주택가격지수 · 2000~ 월간)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-re-mode">
+          <button data-m="index" class="active">가격지수</button>
+          <button data-m="yoy">전년 대비</button>
+          <button data-m="supply">공급·거래</button>
+        </span></h3>
+      <div id="as-re-legend" class="cr-legend"></div>
+      <div id="as-re"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">📉 채권·금리 <span class="sub-note">(국고채·회사채 · 스프레드는 위험선호의 척도)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-bond-mode">
+          <button data-m="yield" class="active">금리</button>
+          <button data-m="spread">스프레드</button>
+        </span></h3>
+      <div id="as-bond-legend" class="cr-legend"></div>
+      <div id="as-bond"></div>
+    </div>
+    <div class="criteria" id="as-context" style="margin-top:14px"></div>
   </section>
 
   <section id="tab-trends" class="panel">
@@ -899,6 +930,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=177"></script>
+<script src="js/app.js?v=178"></script>
 </body>
 </html>

@@ -1513,3 +1513,18 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .hld-tr-last { flex: 0 0 96px; text-align: right; font-size: .72rem; }
 .scr-gn { font-size: .68rem; font-weight: 700; color: var(--muted); margin-left: 5px; }
 .scr-gchip.all .scr-gn, .scr-gchip.some .scr-gn { color: inherit; opacity: .75; }
+
+/* ── 🏙 자산시장 — 로테이션 표 ─────────────────────────────────── */
+.as-lead { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.as-lrow { display: flex; align-items: center; gap: 8px; padding: 4px 0;
+  border-bottom: 1px solid rgba(218,223,233,.05); font-size: .8rem; }
+.as-lfrom { flex: 0 0 118px; font-weight: 600; text-align: right; }
+.as-larrow { flex: 0 0 84px; color: var(--muted); font-size: .74rem; text-align: center; }
+.as-larrow b { color: var(--ink); }
+.as-lto { flex: 0 0 118px; font-weight: 600; }
+.as-lbar { flex: 1; height: 8px; background: rgba(255,255,255,.06); border-radius: 999px; min-width: 60px; }
+.as-lbar i { display: block; height: 100%; border-radius: 999px; }
+.as-lr { flex: 0 0 52px; text-align: right; font-weight: 700; font-size: .78rem; }
+.as-lr.pos { color: #22c07a; } .as-lr.neg { color: #f5445a; }
+.as-ln { flex: 0 0 50px; text-align: right; }
+@media (max-width: 800px) { .as-lfrom, .as-lto { flex-basis: 90px; } .as-ln { display: none; } }
