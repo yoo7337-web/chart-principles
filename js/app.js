@@ -4184,7 +4184,7 @@ function drawEcDay() {
 }
 
 /* ---------- ₿ 크립토 마켓 overview (crypto.json) ---------- */
-let cryptoRendered = false, CRYPTO = null, crRange = 365, crPRange = 365, crOff = new Set();
+let cryptoRendered = false, CRYPTO = null, crRange = 1825, crPRange = 1825, crOff = new Set();
 const CR_COLORS = ["#f7931a", "#8a7dff", "#f0b90b", "#4391ff", "#14f195", "#e6007a",
                    "#c2a633", "#26a17b", "#2775ca", "#ff6b7d", "#00d4aa", "#a0a0aa"];
 const crC = (i) => CR_COLORS[i % CR_COLORS.length];
@@ -4206,7 +4206,7 @@ function renderCrypto() {
     CRYPTO = d;
     const ctx = $("#cr-context");
     if (!d) { ctx.textContent = "crypto.json 없음 — python analysis\\crypto.py 실행 필요"; return; }
-    ctx.innerHTML = `<b>₿ 크립토</b> — 코인 시장 전체 규모와 주요 코인의 상대 성과를 한 화면에서 봅니다. ` +
+    ctx.innerHTML = `<b>₿ 크립토</b> — 코인 시장 전체 규모와 주요 코인의 상대 성과를 <b>5년</b> 기준으로 봅니다. ` +
       `시세·시가총액은 <b>CoinGecko</b>, 일봉은 <b>yfinance</b>(24시간 거래라 주말도 포함), ` +
       `공포·탐욕은 <b>alternative.me</b>, 김치 프리미엄은 <b>업비트</b> 원화가와 글로벌 달러가×환율의 차이입니다. ` +
       `<span class="sub-note">${d.generated} 갱신 · 주식과 달리 24시간 거래되므로 갱신 시점과 현재 시세가 다를 수 있습니다.</span>`;
@@ -4268,16 +4268,27 @@ function crArea(host, ts, vs, color, fmt, h = 190) {
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>${lbl}</svg>`;
 }
 
+/* 총 시총 — 1년 이하는 CoinGecko **실측**, 그 이상은 '가격×현재 유통량' 환산(무료로는 5년 실측이 없음).
+   두 계열은 기준이 달라(스테이블 포함/제외) 값이 다르므로 어느 쪽인지 항상 표기한다. */
 function crMcap() {
-  const m = CRYPTO?.mcap_hist; if (!m || !m.t?.length) return;
+  const act = CRYPTO?.mcap_hist, ap = CRYPTO?.mcap_5y;
+  const useApprox = crRange > 365 && ap?.t?.length;
+  const m = useApprox ? ap : act;
+  if (!m?.t?.length) return;
   const k = Math.min(crRange, m.t.length);
   crArea("#cr-mcap", m.t.slice(-k), m.v.slice(-k), "#f7931a", (v) => "$" + (v / 1e12).toFixed(2) + "T");
+  const note = $("#cr-mcap-note");
+  if (note) {
+    note.innerHTML = useApprox
+      ? `주요 코인 ${ap.n}종 · <b>스테이블코인 제외</b> · 가격 × <b>현재</b> 유통량으로 환산` +
+        (ap.err_med != null ? ` <span class="sub-note">(실측 대비 ${ap.err_med >= 0 ? "+" : ""}${ap.err_med}%)</span>` : "")
+      : `상위 ${act.n || 12}개 코인 합산(≈전체의 90%) · 스테이블코인 포함 · <b>실측</b>`;
+  }
 }
 
 function crFng(d) {
   const f = d.fng; if (!f?.t?.length) return;
-  const k = Math.min(90, f.t.length);
-  crArea("#cr-fng", f.t.slice(-k), f.v.slice(-k), "#8a7dff", (v) => v.toFixed(0), 190);
+  crArea("#cr-fng", f.t, f.v, "#8a7dff", (v) => v.toFixed(0), 190);
 }
 
 // 주요 코인 상대 수익률(시작=100) 멀티라인
@@ -7588,25 +7599,47 @@ function pfMarketRender() {
   const bonds = t?.market?.bonds;
   if (!inv && !bonds) { host.style.display = "none"; host.innerHTML = ""; return; }
   host.style.display = "";
-  const recs = inv?.[pfMkSel] ? [...inv[pfMkSel]].sort((a, b) => (a.d || "").localeCompare(b.d || "")) : [];
+  const all = inv?.[pfMkSel] ? [...inv[pfMkSel]].sort((a, b) => (a.d || "").localeCompare(b.d || "")) : [];
+  const recs = all.slice(-20);                          // 20일 누적 기준
+  const won = (v) => (v >= 0 ? "+" : "-") + (Math.abs(v) >= 1e12 ? (Math.abs(v) / 1e12).toFixed(2) + "조"
+    : Math.round(Math.abs(v) / 1e8).toLocaleString() + "억");
+  /* 일별 그룹막대 3세트 → **20일 누적 라인 1개**로 통합(사용자 요청).
+     누적선은 "이 기간 동안 누가 얼마나 사고팔았나"가 한눈에 보이고, 일별 막대의 노이즈가 사라진다. */
   let svg = "";
+  const KEYS = [["indiv", "개인", "#9aa4b2"], ["frgn", "외국인", "#f5445a"], ["inst", "기관", "#4391ff"]];
+  const cum = {};
   if (recs.length) {
-    const W = 640, H = 120, pad = 4, y0 = H / 2;
-    const max = Math.max(1, ...recs.flatMap((r) => [Math.abs(r.indiv || 0), Math.abs(r.frgn || 0), Math.abs(r.inst || 0)]));
-    const gw = (W - pad * 2) / recs.length;
-    const bw = Math.max(2, gw / 3 - 1.5);
-    const colors = { indiv: "#9aa4b2", frgn: "#f5445a", inst: "#4391ff" };
-    let bars = "";
-    recs.forEach((r, i) => ["indiv", "frgn", "inst"].forEach((k, j) => {
-      const v = r[k] || 0;
-      const hh = Math.abs(v) / max * (H / 2 - 6);
-      const x = pad + i * gw + j * (bw + 1.5);
-      bars += `<rect x="${x.toFixed(1)}" y="${(v >= 0 ? y0 - hh : y0).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, hh).toFixed(1)}" fill="${colors[k]}" rx="1"/>`;
-    }));
-    svg = `<svg viewBox="0 0 ${W} ${H}" class="pf-invbar" preserveAspectRatio="none">
-      <line x1="0" y1="${y0}" x2="${W}" y2="${y0}" stroke="#d5d9e0" stroke-width="1"/>${bars}</svg>`;
+    KEYS.forEach(([k]) => {
+      let s = 0;
+      cum[k] = recs.map((r) => (s += r[k] || 0));
+    });
+    const W = 660, H = 220, P = { l: 60, r: 96, t: 14, b: 22 };
+    const vals = KEYS.flatMap(([k]) => cum[k]).concat([0]);
+    const mn = Math.min(...vals), mx = Math.max(...vals), pad = (mx - mn) * 0.1 || 1;
+    const lo = mn - pad, hi = mx + pad;
+    const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, recs.length - 1));
+    const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+    const grid = [0, .25, .5, .75, 1].map((r) => {
+      const v = lo + (hi - lo) * r;
+      return `<line x1="${P.l}" y1="${Y(v)}" x2="${W - P.r}" y2="${Y(v)}" stroke="var(--line)"/>
+        <text x="${P.l - 5}" y="${Y(v) + 3}" text-anchor="end" class="cr-ax">${won(v)}</text>`;
+    }).join("");
+    const zero = lo <= 0 && hi >= 0
+      ? `<line x1="${P.l}" y1="${Y(0)}" x2="${W - P.r}" y2="${Y(0)}" stroke="#8b8b93" stroke-dasharray="4 4"/>` : "";
+    // 끝 라벨 겹침 방지
+    const ends = KEYS.map(([k, ko, c]) => ({ k, ko, c, v: cum[k].at(-1), y: Y(cum[k].at(-1)) }))
+      .sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 14);
+    const lines = KEYS.map(([k, ko, c]) =>
+      `<polyline points="${cum[k].map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")}"
+        fill="none" stroke="${c}" stroke-width="2"/>`).join("");
+    const labels = ends.map((e) =>
+      `<text x="${W - P.r + 6}" y="${e.y + 3}" class="cr-end" fill="${e.c}">${e.ko} ${won(e.v)}</text>`).join("");
+    const xl = [0, Math.floor(recs.length / 2), recs.length - 1].map((i) =>
+      `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === recs.length - 1 ? "end" : "middle"}"
+        class="cr-ax">${(recs[i].d || "").slice(5)}</text>`).join("");
+    svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${grid}${zero}${lines}${labels}${xl}</svg>`;
   }
-  const won = (v) => (v >= 0 ? "+" : "-") + (Math.abs(v) >= 1e12 ? (Math.abs(v) / 1e12).toFixed(1) + "조" : Math.round(Math.abs(v) / 1e8).toLocaleString() + "억");
   const frgnSum = recs.reduce((a, r) => a + (r.frgn || 0), 0);
   const pensionSum = recs.reduce((a, r) => a + (r.pension || 0), 0);
   const b2 = bonds?.KR_BOND_2Y, b10 = bonds?.KR_BOND_10Y;
@@ -7620,12 +7653,15 @@ function pfMarketRender() {
         <button data-m="kosdaq" class="${pfMkSel === "kosdaq" ? "active" : ""}">코스닥</button></span>` : ""}
     </div>
     ${recs.length ? `${svg}
-      <p class="legend"><span style="color:#9aa4b2">■</span> 개인 · <span style="color:#f5445a">■</span> 외국인 · <span style="color:#4391ff">■</span> 기관 — 일별 순매수 (최근 ${recs.length}일)</p>
+      <p class="legend"><span style="color:#9aa4b2">■</span> 개인 · <span style="color:#f5445a">■</span> 외국인 ·
+        <span style="color:#4391ff">■</span> 기관 — <b>${recs.length}일 누적 순매수</b>(기간 첫날부터 더한 금액,
+        선이 올라가면 계속 사들이는 중 · 0선 위=순매수)</p>
       <div class="prof-grid wide">
-        <div class="prof-row"><span>외국인 ${recs.length}일 누적 순매수</span>
-          <span><b class="${frgnSum >= 0 ? "pos" : "neg"}">${won(frgnSum)}</b></span></div>
-        <div class="prof-row"><span>연기금 ${recs.length}일 누적 순매수</span>
-          <span><b class="${pensionSum >= 0 ? "pos" : "neg"}">${won(pensionSum)}</b> <span class="sub-note">— 연기금은 저점 분할매수 성향의 장기 자금</span></span></div>
+        ${KEYS.map(([k, ko]) => `<div class="prof-row"><span>${ko} ${recs.length}일 누적</span>
+          <span><b class="${(cum[k]?.at(-1) || 0) >= 0 ? "pos" : "neg"}">${won(cum[k]?.at(-1) || 0)}</b></span></div>`).join("")}
+        <div class="prof-row"><span>연기금 ${recs.length}일 누적</span>
+          <span><b class="${pensionSum >= 0 ? "pos" : "neg"}">${won(pensionSum)}</b>
+            <span class="sub-note">— 저점 분할매수 성향의 장기 자금</span></span></div>
       </div>` : `<p class="mini-note">투자자별 매매대금 데이터 없음</p>`}
     ${spread != null ? `<p class="sub-note" style="margin-top:6px">국채 금리: 2년 ${b2}% · 10년 ${b10}% → 장단기 스프레드
       <b class="${spread >= 0 ? "pos" : "neg"}">${spread.toFixed(2)}%p</b>${spread < 0 ? " ⚠ 금리 역전 — 역사적으로 경기 둔화 선행 신호" : ""}</p>` : ""}
@@ -7927,8 +7963,80 @@ function pfRenderList(arr) {
 const GURU_CHG = { new: ["🆕 신규", "#4338ca"], add: ["➕ 증액", "#065f46"],
                    trim: ["➖ 축소", "#92400e"], hold: ["— 유지", "#6b7280"] };
 
+/* 📅 대가별 3년 보유 비중 시계열 (guru_history.json)
+   US = 13F 13분기 소급 / KR = 대량보유(5%) 보고 이력을 분기말로 스냅샷 */
+let GHIST = null;
+// 원화 큰 금액 — 국내 대가 평가액은 원 단위라 fmtMcap($T)을 쓰면 "94조원"이 "$94.07T"로 나온다
+function krwBig(v) {
+  if (v == null || isNaN(v)) return "-";
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v / 1e12).toFixed(1) + "조원";
+  if (a >= 1e8) return Math.round(v / 1e8).toLocaleString() + "억원";
+  return Math.round(v).toLocaleString() + "원";
+}
+function loadGuruHist() {
+  if (GHIST !== null) return Promise.resolve(GHIST);
+  return fetch("data/guru_history.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { GHIST = j || false; return GHIST; }).catch(() => { GHIST = false; return false; });
+}
+function guruHistBlock(id, gh) {
+  if (!gh?.quarters?.length || !Object.keys(gh.series || {}).length) return "";
+  const qs = gh.quarters, keys = Object.keys(gh.series)
+    .sort((a, b) => (gh.series[b].at(-1) || 0) - (gh.series[a].at(-1) || 0));
+  const W = 700, H = 250, P = { l: 34, r: 120, t: 14, b: 24 };
+  const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, qs.length - 1));
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - v);
+  let acc = new Array(qs.length).fill(0);
+  const areas = keys.map((k, gi) => {
+    const s = gh.series[k].map((v) => v || 0);
+    const top = s.map((v, i) => acc[i] + v);
+    const path = top.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ") + " " +
+      acc.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).reverse().join(" ");
+    acc = top;
+    return `<polygon points="${path}" fill="${HLD_COLORS[gi % 8]}" fill-opacity=".8"
+      stroke="var(--card)" stroke-width=".6"><title>${k}</title></polygon>`;
+  }).join("");
+  let acc2 = 0, prevY = -99;
+  const labels = keys.map((k, gi) => {
+    const v = gh.series[k].at(-1) || 0, mid = acc2 + v / 2; acc2 += v;
+    if (v < 0.035) return "";
+    let y = Math.max(Y(mid), prevY + 12); prevY = y;
+    return `<text x="${W - P.r + 6}" y="${y + 3}" class="cr-end" fill="${HLD_COLORS[gi % 8]}"
+      >${String(k).slice(0, 11)} ${(v * 100).toFixed(0)}%</text>`;
+  }).join("");
+  const grid = [0, .5, 1].map((r) =>
+    `<line x1="${P.l}" y1="${Y(r)}" x2="${W - P.r}" y2="${Y(r)}" stroke="var(--line)"/>
+     <text x="${P.l - 5}" y="${Y(r) + 3}" text-anchor="end" class="cr-ax">${r * 100}%</text>`).join("");
+  const xl = [0, Math.floor(qs.length / 2), qs.length - 1].map((i) =>
+    `<text x="${X(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === qs.length - 1 ? "end" : "middle"}"
+      class="cr-ax">${qs[i].slice(2, 7)}</text>`).join("");
+  const evs = (gh.events || []).slice(0, 8).map((e) =>
+    `<span class="guru-ev ${e.type}">${e.type === "in" ? "▲ 편입" : "▼ 처분"} ${e.issuer}
+      <span class="sub-note">${e.d}${e.w ? ` · ${(e.w * 100).toFixed(1)}%` : ""}</span></span>`).join("");
+  return `<div class="guru-hist"><b>📅 보유 비중 변화 <span class="sub-note">(${qs[0]} ~ ${qs.at(-1)} · ${qs.length}개 분기)</span></b>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${areas}${labels}${xl}</svg>
+    ${evs ? `<div class="guru-evs"><b class="sub-note">최근 편입·처분</b>${evs}</div>` : ""}
+    ${guruNewsBlock(gh)}</div>`;
+}
+
+/* 📰 공시 이후 변동 — 마지막 공시일 뒤에 나온 기사(사실 확인 필요) */
+function guruNewsBlock(gh) {
+  const ns = gh?.news || [];
+  const since = gh?.news_since;
+  if (!ns.length) {
+    return since ? `<p class="mini-note">📰 ${since} 공시 이후 관련 기사가 아직 없습니다.</p>` : "";
+  }
+  return `<div class="guru-news"><b class="sub-note">📰 공시 이후 보도
+      <span class="sub-note">(${since || "-"} 이후 · 13F는 분기말+45일 지연이라 이 사이 매매는 공시에 없음)</span></b>
+    ${ns.map((n) => `<a class="guru-nrow" href="${n.url}" target="_blank" rel="noopener">
+      <span class="guru-nd">${n.d.slice(5)}</span><span class="guru-nt">${n.title}</span>
+      ${n.src ? `<span class="sub-note">${n.src}</span>` : ""}</a>`).join("")}
+    <p class="mini-note">⚠ 기사는 <b>공시가 아닙니다</b> — 실제 편입·처분 여부는 다음 공시로 확인하세요.</p></div>`;
+}
+
 function renderGurus() {
   if (!GURUS) { $("#gurus-context").textContent = "gurus.json 없음 — python analysis\\gurus.py 실행 필요"; return; }
+  if (GHIST === null) { loadGuruHist().then(renderGurus); return; }   // 이력 1회 lazy 로드 후 재렌더
   gurusRendered = true;
   $("#gurus-context").innerHTML =
     `SEC 13F 의무공시 기반(분기말 <b>+45일 지연</b> — '최신'의 한계) · 확인 주기 <b>주 1회</b>(13F가 분기
@@ -7977,19 +8085,32 @@ function renderGurus() {
   $("#gurus-list").style.display = mk === "agg" ? "none" : "";
   if (mk === "agg") { renderGuruAgg(); return; }
   $("#gurus-list").innerHTML = GURUS.managers.filter((m) => (m.country || "us") === mk).map((m) => {
-    // 13F 비대상(트럼프 등) — 공개 재산신고 기반 정적 카드
+    const gh = GHIST?.managers?.[m.id];
+    // 13F 비대상(트럼프 등) + 국내 대량보유 공시형 — guru_history가 있으면 비중·시계열을 붙인다
     if (m.type === "disclosure") {
+      const lat = gh?.latest || {};
+      const ws = Object.entries(lat).sort((a, b) => b[1].w - a[1].w);
+      const wTable = ws.length ? `<div class="tablewrap"><table class="guru-table">
+          <tr><th>보유 종목</th><th>비중</th><th>지분율</th><th>평가액</th></tr>
+          ${ws.map(([k, v]) => `<tr><td>${k}</td>
+            <td><div class="wbar"><div style="width:${Math.min(100, v.w * 200)}%"></div></div>
+                ${(v.w * 100).toFixed(1)}%</td>
+            <td>${v.rt == null ? "-" : v.rt.toFixed(2) + "%"}</td>
+            <td>${v.value == null ? "-" : krwBig(v.value)}</td></tr>`).join("")}</table></div>
+        <p class="mini-note">⚠ 비중은 <b>공시된 보유분(5% 이상) 안에서의 비중</b>입니다 —
+          5% 미만 보유는 공시 의무가 없어 실제 포트폴리오 전체와 다릅니다.
+          평가액 = 최근 보고 보유주식수 × 최근 종가.</p>`
+        : `<div class="tablewrap"><table class="guru-table"><tr><th>주요 자산</th></tr>
+            ${m.holdings.map((h) => `<tr><td>${h.issuer}</td></tr>`).join("")}</table></div>`;
       return `<details class="stock-block guru-block">
         <summary><b>${m.name}</b> <span class="sub-note">${m.fund}</span>
-          <span class="badge dim">13F 비대상 · 공개 신고 기반</span>
+          <span class="badge dim">${ws.length ? "대량보유(5%) 공시 기반" : "13F 비대상 · 공개 신고 기반"}</span>
           <span class="badge dim">${m.report_date}</span></summary>
         <div class="guru-body">
           <p class="guru-style">투자 스타일: ${m.style}</p>
-          <p class="mini-note">⚠ ${m.source} — 비중·평가액 추정 불가 항목은 서술형으로만 표기</p>
           ${m.thesis ? `<div class="commentary guru-thesis"><b>구성 해설</b><br>${m.thesis}</div>` : ""}
-          <div class="tablewrap"><table class="guru-table">
-            <tr><th>주요 자산</th></tr>
-            ${m.holdings.map((h) => `<tr><td>${h.issuer}</td></tr>`).join("")}</table></div>
+          ${guruHistBlock(m.id, gh)}
+          ${wTable}
         </div>
       </details>`;
     }
@@ -8014,6 +8135,7 @@ function renderGurus() {
         <p class="guru-style">투자 스타일: ${m.style}</p>
         ${m.cash ? cashSvg(m.cash) : ""}
         ${m.thesis ? `<div class="commentary guru-thesis"><b>🤖 AI 추정 Thesis</b><br>${m.thesis}</div>` : ""}
+        ${guruHistBlock(m.id, gh)}
         <div class="tablewrap"><table class="guru-table">
           <tr><th>보유 종목 (상위 15)</th><th>비중</th><th>분기 변화</th></tr>${rows}</table></div>
         ${exits}

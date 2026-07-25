@@ -127,16 +127,16 @@
     <div class="cr-grid">
       <div class="card-flat">
         <h3 class="lk-h3">📈 전체 시장 시가총액
-          <span class="sub-note">상위 12개 코인 합산(≈전체의 90%) · 스테이블코인 포함</span>
+          <span class="sub-note" id="cr-mcap-note"></span>
           <span style="flex:1"></span>
           <span class="mk-toggle" id="cr-range">
             <button data-d="30">1M</button><button data-d="90">3M</button>
-            <button data-d="365" class="active">1Y</button>
+            <button data-d="365">1Y</button><button data-d="1825" class="active">5Y</button>
           </span></h3>
         <div id="cr-mcap"></div>
       </div>
       <div class="card-flat">
-        <h3 class="lk-h3">😨 공포·탐욕 지수 <span class="sub-note">(0=극단적 공포 · 100=극단적 탐욕)</span></h3>
+        <h3 class="lk-h3">😨 공포·탐욕 지수 <span class="sub-note">(0=극단적 공포 · 100=극단적 탐욕 · 5년)</span></h3>
         <div id="cr-fng"></div>
       </div>
     </div>
@@ -146,7 +146,7 @@
         <span style="flex:1"></span>
         <span class="mk-toggle" id="cr-prange">
           <button data-d="30">1M</button><button data-d="90">3M</button>
-          <button data-d="180">6M</button><button data-d="365" class="active">1Y</button>
+          <button data-d="365">1Y</button><button data-d="1825" class="active">5Y</button>
         </span></h3>
       <div id="cr-legend" class="cr-legend"></div>
       <div id="cr-lines"></div>

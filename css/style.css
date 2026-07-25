@@ -1401,3 +1401,20 @@ dialog { background: var(--card); color: var(--ink); }
 .hld-ev { font-size: 10px; cursor: help; }
 .hld-ev.in { fill: #22c07a; }
 .hld-ev.out { fill: #f5445a; }
+/* 투자 대가 — 3년 보유 비중 시계열 */
+.guru-hist { margin: 12px 0; padding: 10px 12px; background: rgba(255,255,255,.03);
+  border: 1px solid var(--line); border-radius: 10px; }
+.guru-hist > b { font-size: .88rem; }
+.guru-evs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.guru-ev { font-size: .74rem; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg); }
+.guru-ev.in { color: #22c07a; }
+.guru-ev.out { color: #f5445a; }
+.guru-ev .sub-note { font-weight: 400; margin-left: 4px; }
+/* 투자 대가 — 공시 이후 보도 */
+.guru-news { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.guru-nrow { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: .8rem;
+  color: var(--ink); text-decoration: none; border-bottom: 1px solid rgba(218,223,233,.05); }
+.guru-nrow:hover { color: var(--accent); }
+.guru-nd { flex: 0 0 40px; font-size: .72rem; color: var(--muted); }
+.guru-nt { flex: 1; }
