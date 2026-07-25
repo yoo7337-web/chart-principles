@@ -107,12 +107,23 @@ def _corp_codes(key: str) -> dict:
         return json.loads(cache.read_text(encoding="utf-8"))
     import io
     import zipfile
+    import xml.etree.ElementTree as ET
     raw = urllib.request.urlopen(
-        f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={key}", timeout=30).read()
-    xml = zipfile.ZipFile(io.BytesIO(raw)).read("CORPCODE.xml").decode("utf-8")
+        f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={key}", timeout=60).read()
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    root = ET.fromstring(z.read(z.namelist()[0]).decode("utf-8"))
+    # ⚠**반드시 <list> 항목 단위로 파싱**할 것. 정규식
+    #   `<corp_code>(\d+)</corp_code>.*?<stock_code>(\d{6})</stock_code>` + re.S 는
+    #   비상장사(stock_code가 공백)를 만나면 `.*?`가 **항목 경계를 넘어** 다음 상장사의
+    #   stock_code와 짝지어 버린다 → 종목코드에 **엉뚱한 회사의 corp_code**가 붙는다.
+    #   실측(2026-07-26): 상장 3,979개 중 **2,522개(63.4%) 오매핑** — 실리콘투·NAVER 등이
+    #   남의 공시를 보여주고 있었다.
     out = {}
-    for m in re.finditer(r"<corp_code>(\d+)</corp_code>.*?<stock_code>(\d{6})</stock_code>", xml, re.S):
-        out[m.group(2)] = m.group(1)
+    for c in root.iter("list"):
+        sc = (c.findtext("stock_code") or "").strip()
+        cc = (c.findtext("corp_code") or "").strip()
+        if sc and cc:
+            out[sc] = cc
     cache.write_text(json.dumps(out), encoding="utf-8")
     return out
 

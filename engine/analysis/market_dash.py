@@ -301,6 +301,23 @@ US_SECTOR_KO = {
 }
 
 
+_COMPANY_IND = None
+
+
+def _group_of(mk: str, sector: str, tk: str) -> str:
+    """산업군 판정 — 미국은 company.json의 세부 업종(industry)이 있어야 정확하다."""
+    global _COMPANY_IND
+    from industry_map import group_of
+    if _COMPANY_IND is None:
+        try:
+            c = json.loads((APP_DATA / "company.json").read_text(encoding="utf-8"))
+            m = c.get("map") or c
+            _COMPANY_IND = {k: (v or {}).get("industry") for k, v in m.items()}
+        except Exception:
+            _COMPANY_IND = {}
+    return group_of(mk, sector, _COMPANY_IND.get(f"{mk}_{tk}"), tk)
+
+
 def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list:
     tiles = []
     for (mk, tk), df in data.items():
@@ -329,6 +346,8 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
             "m": mk, "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
             "sector": sector, "mcap": mcap, "chg": round(chg_map.get((mk, tk), 0.0), 4),
             "c5": c5, "up": up,
+            # 한·미 공통 12산업군 — 주식찾기·산업진단·종목조회가 같은 값을 쓰도록 수집 단계에서 1회 계산
+            "grp": _group_of(mk, sector, tk),
         })
     return tiles
 
