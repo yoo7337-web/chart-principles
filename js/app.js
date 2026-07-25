@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v185", "2026-07-26", "산업 분류를 밸류체인 14산업으로 일원화", "앞서 만든 12산업군이 밸류체인과 이름이 겹쳐 중복이었음 → **밸류체인(CHAINS) 14산업을 표준**으로 통일. 디스플레이가 반도체에서 분리되고 조선·해운과 산업재·기계·운송이 나뉨. 주식찾기·산업 진단·종목조회가 전부 같은 14산업을 쓰고, 산업 키가 밸류체인 키와 1:1이라 산업을 고르면 공정 단계가 바로 이어짐(디스플레이→소재·장비→부품·모듈→패널). KR 기타 5(0.4%)·US 기타 0."],
   ["v184", "2026-07-26", "산업 필터 중복 제거 — 밸류체인을 산업군에 종속", "주식찾기 왼쪽 '산업(12산업군)'과 오른쪽 '산업 밸류체인(12산업)'이 이름·키까지 겹쳐(10/12 동일) 중복이었음. 밸류체인의 산업 선택 칩을 없애고 **산업군 선택을 그대로 따라가도록** 통합(디스플레이→반도체·IT 흡수). 이제 산업군 클릭 한 번으로 세부업종 + 밸류체인 단계가 함께 펼쳐지고, 밸류체인은 '공정 단계' 축만 담당. 크립토 상관 표는 하단으로 이동."],
   ["v182", "2026-07-26", "자산시장에 환율·금 추가", "💱환율: 원화 대비 8개 통화(ECOS 매매기준율 2000~) 지수화 + 달러인덱스·유로/달러 + 원화 강약(주요 통화 평균, 실효환율 근사). 🥇금·귀금속: 금·은 추이와 증시 관계 — 금은 코스피와 동행(+0.18)이라 '주식 빠지면 금 오른다'가 항상 성립하지 않고, 금이 국고채 3년을 2개월·비트코인을 3개월 선행. 로테이션 분석에 환율 3종·은·유로달러 추가로 코스피 관련 변수 27→32건."],
   ["v181", "2026-07-26", "코인↔증시 상관 + 그래프 값 라벨", "크립토 탭에 코인별×지수별(코스피·코스닥·S&P500·나스닥·반도체) 일간 수익률 상관 히트맵 신설. 핵심 발견: BTC와 코스피는 같은 날 상관 +0.00으로 무관이지만 코인을 하루 앞세우면 +0.15(최근 1년 +0.23, p=0.003) — 코스피가 미국 마감 뒤 열리는 세션 구조 때문. 코인은 코스피보다 나스닥과 훨씬 강하게 동행(ETH +0.41). Snapshot 실적·현금흐름 막대에 값 라벨 추가하고 '만' 축약을 없애 표 값과 일치시킴."],
@@ -2203,25 +2204,27 @@ const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
    같은 기준을 주식찾기·산업 진단·종목조회가 함께 쓰므로 화면 간 산업이 어긋나지 않는다.
    (밸류체인 CHAINS는 대체가 아니라 이 아래의 '공정 단계' 축으로 병존) */
 const IND_GROUPS = [
-  { key: "semi", icon: "🔌", name: "반도체·IT" },
-  { key: "internet", icon: "📱", name: "인터넷·SW·미디어" },
-  { key: "bio", icon: "💊", name: "바이오·헬스" },
-  { key: "consumer", icon: "🛒", name: "소비재·유통" },
-  { key: "finance", icon: "🏦", name: "금융" },
-  { key: "chem", icon: "⚗️", name: "화학·철강" },
-  { key: "battery", icon: "🔋", name: "2차전지·소재" },
+  { key: "semi", icon: "🔌", name: "반도체" },
+  { key: "battery", icon: "🔋", name: "2차전지" },
   { key: "auto", icon: "🚗", name: "자동차" },
-  { key: "defense", icon: "🛡", name: "방산·기계" },
-  { key: "construct", icon: "🏗", name: "건설·부동산" },
-  { key: "ship", icon: "🚢", name: "조선·해운·운송" },
+  { key: "bio", icon: "💊", name: "바이오·헬스" },
+  { key: "display", icon: "🖥️", name: "디스플레이" },
+  { key: "defense", icon: "🛡️", name: "방산·우주항공" },
+  { key: "ship", icon: "🚢", name: "조선·해운" },
+  { key: "chem", icon: "⚗️", name: "화학·소재" },
   { key: "energy", icon: "⛽", name: "에너지·유틸리티" },
+  { key: "machinery", icon: "🏭", name: "산업재·기계·운송" },
+  { key: "construction", icon: "🏗️", name: "건설·건자재" },
+  { key: "internet", icon: "📱", name: "인터넷·게임·엔터" },
+  { key: "finance", icon: "🏦", name: "금융" },
+  { key: "consumer", icon: "🛒", name: "소비재·유통" },
 ];
 const IND_BY_KEY = Object.fromEntries(IND_GROUPS.map((g) => [g.key, g]));
 /* 산업군 → 밸류체인(CHAINS) 매핑. 12개 중 10개는 키가 같고 디스플레이는 반도체·IT에 흡수,
    건설은 이름만 다르다. **밸류체인은 별도 산업 선택 없이 산업군을 따라간다**(중복 제거). */
-const GRP2CHAIN = { semi: ["semi", "display"], battery: ["battery"], auto: ["auto"], bio: ["bio"],
-  defense: ["defense"], ship: ["ship"], chem: ["chem"], construct: ["construction"],
-  internet: ["internet"], finance: ["finance"], consumer: ["consumer"], energy: [] };
+// 산업 = 밸류체인 산업과 **키가 완전히 동일**해졌다(14개 1:1) → 매핑 없이 키를 그대로 쓴다.
+// ⚠CHAINS는 아래에서 선언되므로 즉시 참조하면 TDZ 오류 — 호출 시점에 확인한다.
+const chainOf = (grp) => (grp && CHAINS[grp] ? grp : null);
 const indName = (k) => (IND_BY_KEY[k] || SCR_GROUP_ETC).name;
 const indLabel = (k) => { const g = IND_BY_KEY[k] || SCR_GROUP_ETC; return `${g.icon} ${g.name}`; };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
@@ -2680,8 +2683,7 @@ function buildScrSectors() {
     if (!scrState.groups.size) scrState.groups = null;
     // 밸류체인은 산업군을 따라간다 — 국내에서 해당 산업에 체인이 있으면 단계 표시
     scrChainSel.clear();
-    const chains = GRP2CHAIN[scrOpenGroup] || [];
-    scrChainIndustry = (scrState.country !== "us" && chains.length) ? chains[0] : null;
+    scrChainIndustry = scrState.country === "us" ? null : chainOf(scrOpenGroup);
     buildScrSectors(); renderScrChain(); renderScreener();
   });
   // 세부업종 칩은 하단 전폭 행에 있으므로 document 기준으로 바인딩
