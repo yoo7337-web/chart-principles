@@ -3387,6 +3387,54 @@ function renderBondCurve() {
       <div class="bond-fill" style="height:${h}%"></div>
       <span class="bond-lbl">${c.label}</span></div>`;
   }).join("");
+
+  renderGlobalRates();   // 미국 만기별 커브 + 주요국 비교(sector_metrics lazy)
+}
+
+// 글로벌 금리 — 🇺🇸 만기별 커브(야후 실시간) + 🌏 주요국 장·단기(ECOS 월간)
+function renderGlobalRates() {
+  const wrap = $("#global-rates-wrap");
+  if (!wrap) return;
+  loadSecMet().then((d) => {
+    const us = d?.us_curve || [], gl = d?.global_rates || [];
+    if (!us.length && !gl.length) { wrap.style.display = "none"; return; }
+    wrap.style.display = "";
+    // 미국 커브(막대) — 국고채와 동일한 시각 언어
+    if (us.length) {
+      $("#us-curve-note").textContent = `(${d.generated} 기준 · 야후 실시간)`;
+      const ys = us.map((c) => c.yield);
+      const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(0.001, hi - lo);
+      $("#us-curve").innerHTML = us.map((c) => {
+        const h = 24 + ((c.yield - lo) / span) * 76;
+        return `<div class="bond-bar"><span class="bond-val">${c.yield.toFixed(3)}</span>
+          <div class="bond-fill" style="height:${h}%"></div>
+          <span class="bond-lbl">${c.label}</span></div>`;
+      }).join("");
+      const y10 = us.find((c) => c.years === 10)?.yield, y3m = us.find((c) => c.years === 0.25)?.yield;
+      const y30 = us.find((c) => c.years === 30)?.yield;
+      const chips = [];
+      if (y10 != null && y3m != null) chips.push(["10Y−3M", +(y10 - y3m).toFixed(3)]);
+      if (y30 != null && y10 != null) chips.push(["30Y−10Y", +(y30 - y10).toFixed(3)]);
+      $("#us-curve-spread").innerHTML = chips.map(([k, v]) =>
+        `<span class="bond-sp ${v < 0 ? "neg" : ""}">${k} <b>${v >= 0 ? "+" : ""}${v.toFixed(3)}%p</b>${v < 0 ? " 역전" : ""}</span>`).join("")
+        + (chips.some(([, v]) => v < 0) ? `<span class="bond-warn">⚠ 역전 — 침체 신호</span>` : `<span class="sub-note">정상 우상향</span>`);
+    }
+    // 주요국 비교(장기·단기 가로 막대 + 스프레드)
+    if (gl.length) {
+      const maxR = Math.max(...gl.flatMap((r) => [r.long || 0, r.short || 0]), 1);
+      $("#global-rates").innerHTML = gl.map((r) => {
+        const bar = (v, c) => v == null ? "" :
+          `<div class="gr-bar"><span style="width:${(v / maxR * 100).toFixed(1)}%;background:${c}"></span></div><b>${v.toFixed(2)}%</b>`;
+        const sp = r.spread;
+        return `<div class="gr-row"><span class="gr-name">${r.country}</span>
+          <div class="gr-bars">
+            <div class="gr-line"><span class="sub-note">장기</span>${bar(r.long, "#4391ff")}</div>
+            <div class="gr-line"><span class="sub-note">단기</span>${bar(r.short, "#9aa4b2")}</div>
+          </div>
+          <span class="gr-sp ${sp != null && sp < 0 ? "neg" : ""}">${sp != null ? (sp >= 0 ? "+" : "") + sp.toFixed(2) + "%p" : "-"}</span></div>`;
+      }).join("") + `<p class="sub-note" style="margin-top:6px">장기=10년물 성격 · 단기=3개월 은행간 · 우측=장단기 스프레드(마이너스=역전)</p>`;
+    }
+  });
 }
 
 // 세계 증시 지도 — world.svg 인라인 + 국가 색칠 + 칩(getBBox 좌표) + 클릭 5년 차트 팝업

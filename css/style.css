@@ -534,6 +534,19 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 트렌드 섹션별 갱신 시각(작게) */
 .tr-ts { font-size: .72rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
 
+/* 주요국 금리 비교 */
+.gr-row { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.gr-row:last-of-type { border-bottom: none; }
+.gr-name { flex: 0 0 78px; font-size: .84rem; }
+.gr-bars { flex: 1; min-width: 0; }
+.gr-line { display: flex; gap: 6px; align-items: center; font-size: .74rem; }
+.gr-line .sub-note { flex: 0 0 26px; }
+.gr-line b { flex: 0 0 46px; text-align: right; font-size: .78rem; }
+.gr-bar { flex: 1; height: 8px; background: rgba(255,255,255,.05); border-radius: 4px; overflow: hidden; }
+.gr-bar span { display: block; height: 100%; border-radius: 4px; }
+.gr-sp { flex: 0 0 56px; text-align: right; font-size: .8rem; font-weight: 700; color: #4bd398; }
+.gr-sp.neg { color: #ff8c9a; }
+
 /* 섹터 산업지표 카드 */
 .sm-wrap { margin-top: 12px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 1100px) { .sm-wrap { grid-template-columns: 1fr; } }
