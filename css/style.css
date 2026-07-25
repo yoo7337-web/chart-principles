@@ -1449,13 +1449,28 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .td-cell.empty { opacity: .5; }
 .td-cell-h { font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
 .td-cell-h b { color: var(--ink); font-size: .88rem; margin-left: 3px; }
-.td-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.td-chip { font-size: .74rem; font-weight: 600; padding: 3px 8px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-.td-chip.buy { border-color: rgba(245,68,90,.34); color: #ff8c9a; }
-.td-chip.sell { border-color: rgba(67,145,255,.34); color: #7fb4ff; }
-.td-chip:hover { background: rgba(255,255,255,.07); }
-.td-chip i { font-style: normal; font-size: .66rem; margin-left: 4px; opacity: .75; }
+/* 종목 타일 — 로고 + 이름(+연속 횟수) */
+.td-tiles { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.td-tile { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 5px;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+  color: var(--ink); cursor: pointer; font-size: .76rem; font-weight: 600; max-width: 168px; }
+.td-tile img { width: 17px; height: 17px; border-radius: 50%; object-fit: contain;
+  background: #fff; flex: 0 0 17px; }
+.td-tnm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-tile.buy { border-color: rgba(245,68,90,.32); }
+.td-tile.sell { border-color: rgba(67,145,255,.32); }
+.td-tile.mix { border-color: rgba(229,161,58,.45); }
+.td-tile:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.3); }
+.td-streak { font-size: .66rem; font-weight: 700; color: var(--muted);
+  background: rgba(255,255,255,.10); border-radius: 999px; padding: 0 5px; }
+.td-more { font-size: .74rem; color: var(--muted); font-weight: 600; padding: 0 4px; }
+.td-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+.td-dot.buy { background: #f5445a; } .td-dot.sell { background: #4391ff; }
+.td-mixed { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.td-mixed > b { font-size: .82rem; color: #e5a13a; }
+.td-mixed .sub-note { margin-left: 6px; }
+.td-mixed .td-tiles { margin-top: 7px; }
+.td-cell-h .sub-note { font-weight: 400; margin-left: 6px; }
 /* 표 안 상태 배지 */
 .td-stat { font-size: .76rem; font-weight: 600; white-space: nowrap; }
 .td-stat.flip { color: #e5a13a; }

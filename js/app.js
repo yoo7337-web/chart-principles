@@ -922,34 +922,43 @@ function renderTodayDash() {
   });
   const list = Object.values(byStock);
   const bucket = (side, st) => list.filter((o) => !o.mixed && o.side === side && o.s.status === st);
+  // 종목 타일 — 로고 + 이름 + (지속이면) 연속 횟수. 로고가 있어 한눈에 어느 회사인지 읽힌다.
+  const tile = (o, side) => {
+    const s = o.s, nm = s.market === "kr" ? s.name : s.ticker;
+    const prev = s.prev_date ? `직전 ${s.prev_side === "buy" ? "매수" : "매도"} ${s.prev_date}` +
+      (s.days_since ? ` (${s.days_since}거래일 전)` : "") : "최근 120일 내 이전 신호 없음";
+    return `<button class="td-tile ${side}" data-key="${s.market}_${s.ticker}"
+      title="${nm} · ${o.rules.join(" · ")}\n${prev}${s.streak > 1 ? `\n${s.streak}회 연속 ${side === "buy" ? "매수" : "매도"} 신호` : ""}">
+      <img src="${logoUrl(s.market, s.ticker)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <span class="td-tnm">${nm}</span>
+      ${s.streak > 1 ? `<span class="td-streak">${s.streak}</span>` : ""}</button>`;
+  };
   const card = (side) => {
     const all = list.filter((o) => !o.mixed && o.side === side);
     const isBuy = side === "buy";
     const cells = ["flip", "first", "repeat"].map((st) => {
       const g = bucket(side, st);
       const [ico, label, tip] = SIG_STATUS[st];
-      return `<div class="td-cell ${g.length ? "" : "empty"}" title="${tip}">
-        <div class="td-cell-h">${ico} ${label} <b>${g.length}</b></div>
-        <div class="td-chips">${g.slice(0, 12).map((o) => `
-          <button class="td-chip ${isBuy ? "buy" : "sell"}" data-key="${o.s.market}_${o.s.ticker}"
-            title="${o.rules.join(" · ")}${o.s.streak > 1 ? ` · ${o.s.streak}회 연속` : ""}${
-              o.s.prev_date ? ` · 직전 ${o.s.prev_side === "buy" ? "매수" : "매도"} ${o.s.prev_date}` : ""}"
-            >${o.s.market === "kr" ? o.s.name : o.s.ticker}${o.s.streak > 1 ? `<i>${o.s.streak}</i>` : ""}</button>`).join("")}
-          ${g.length > 12 ? `<span class="sub-note">+${g.length - 12}</span>` : ""}
-          ${g.length ? "" : `<span class="sub-note">없음</span>`}</div></div>`;
+      if (!g.length) return `<div class="td-cell empty"><div class="td-cell-h">${ico} ${label} <b>0</b></div></div>`;
+      return `<div class="td-cell" title="${tip}">
+        <div class="td-cell-h">${ico} ${label} <b>${g.length}</b>
+          <span class="sub-note">${tip}</span></div>
+        <div class="td-tiles">${g.slice(0, 16).map((o) => tile(o, side)).join("")}
+          ${g.length > 16 ? `<span class="td-more">+${g.length - 16}</span>` : ""}</div></div>`;
     }).join("");
     return `<div class="td-card ${isBuy ? "buy" : "sell"}">
-      <div class="td-card-h">${isBuy ? "🟢 매수 신호" : "🔴 매도 신호"} <b>${all.length}</b><span class="sub-note">종목</span></div>
+      <div class="td-card-h"><span class="td-dot ${isBuy ? "buy" : "sell"}"></span>
+        ${isBuy ? "매수 신호" : "매도 신호"} <b>${all.length}</b><span class="sub-note">종목</span></div>
       ${cells}</div>`;
   };
   const mixed = list.filter((o) => o.mixed || o.conflict);
   host.innerHTML = `<div class="td-dash-h">📋 <b>${day}</b> 신호 요약
-      <span class="sub-note">종목 ${list.length}곳 · 숫자 배지 = 같은 방향 연속 횟수 · 칩 클릭 = 종목 조회</span></div>
+      <span class="sub-note">종목 ${list.length}곳 · 숫자 배지 = 같은 방향 연속 횟수 · 타일 클릭 = 종목 조회</span></div>
     <div class="td-cards">${card("buy")}${card("sell")}</div>
-    ${mixed.length ? `<p class="mini-note">⚠ 매수·매도가 <b>동시에</b> 나온 종목 ${mixed.length}곳:
-      ${mixed.slice(0, 10).map((o) => o.s.market === "kr" ? o.s.name : o.s.ticker).join(" · ")}
-      — 방향이 엇갈리니 판단을 미루는 편이 안전합니다.</p>` : ""}`;
-  host.querySelectorAll(".td-chip").forEach((b) => b.onclick = () => {
+    ${mixed.length ? `<div class="td-mixed"><b>⚠ 매수·매도 동시 발생 ${mixed.length}곳</b>
+      <span class="sub-note">방향이 엇갈리니 판단을 미루는 편이 안전합니다</span>
+      <div class="td-tiles">${mixed.slice(0, 12).map((o) => tile(o, "mix")).join("")}</div></div>` : ""}`;
+  host.querySelectorAll(".td-tile").forEach((b) => b.onclick = () => {
     document.querySelector('[data-tab="lookup"]').click();
     loadLookup(b.dataset.key);
   });
