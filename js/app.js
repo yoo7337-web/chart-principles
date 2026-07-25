@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v186", "2026-07-26", "동종업계 상대 주가 추이", "동종업계 비교에서 값이 비어 있던 3개월 열을 삭제하고, 조회 종목과 동종업계의 5년 상대 주가 추이 차트를 추가(출발점=100, 조회 종목은 굵은 빨간 선). 상장일이 달라 시작점이 제각각인 문제는 전 종목이 공통으로 존재하는 날짜를 찾아 그 시점을 100으로 재정규화해 해결."],
   ["v185", "2026-07-26", "산업 분류를 밸류체인 14산업으로 일원화", "앞서 만든 12산업군이 밸류체인과 이름이 겹쳐 중복이었음 → **밸류체인(CHAINS) 14산업을 표준**으로 통일. 디스플레이가 반도체에서 분리되고 조선·해운과 산업재·기계·운송이 나뉨. 주식찾기·산업 진단·종목조회가 전부 같은 14산업을 쓰고, 산업 키가 밸류체인 키와 1:1이라 산업을 고르면 공정 단계가 바로 이어짐(디스플레이→소재·장비→부품·모듈→패널). KR 기타 5(0.4%)·US 기타 0."],
   ["v184", "2026-07-26", "산업 필터 중복 제거 — 밸류체인을 산업군에 종속", "주식찾기 왼쪽 '산업(12산업군)'과 오른쪽 '산업 밸류체인(12산업)'이 이름·키까지 겹쳐(10/12 동일) 중복이었음. 밸류체인의 산업 선택 칩을 없애고 **산업군 선택을 그대로 따라가도록** 통합(디스플레이→반도체·IT 흡수). 이제 산업군 클릭 한 번으로 세부업종 + 밸류체인 단계가 함께 펼쳐지고, 밸류체인은 '공정 단계' 축만 담당. 크립토 상관 표는 하단으로 이동."],
   ["v182", "2026-07-26", "자산시장에 환율·금 추가", "💱환율: 원화 대비 8개 통화(ECOS 매매기준율 2000~) 지수화 + 달러인덱스·유로/달러 + 원화 강약(주요 통화 평균, 실효환율 근사). 🥇금·귀금속: 금·은 추이와 증시 관계 — 금은 코스피와 동행(+0.18)이라 '주식 빠지면 금 오른다'가 항상 성립하지 않고, 금이 국고채 3년을 2개월·비트코인을 3개월 선행. 로테이션 분석에 환율 3종·은·유로달러 추가로 코스피 관련 변수 27→32건."],
@@ -6419,6 +6420,70 @@ function renderLookupSurprise(st) {
 }
 
 // 동종업계 비교. KR=네이버 동일업종(주가·등락·3개월) / US=유니버스 내 동일 산업 시총 상위(PER·시총·주가)
+/* 📈 동종업계 상대 주가 — 5년 전(또는 가장 이른 공통 시점)=100으로 맞춘 추이.
+   ⚠종목마다 상장일이 달라 시작점이 제각각이면 비교가 무의미해진다 → **공통 시작일**을 잡고
+     그 시점을 100으로 재정규화한다. 데이터가 없는 피어는 조용히 건너뛴다. */
+function drawPeerChart(st, peers) {
+  const host = $("#peer-chart"); if (!host) return;
+  const self = { mk: st.market, ticker: st.ticker, name: st.name || st.ticker };
+  const list = [self, ...peers.filter((p) => p.ticker !== st.ticker)].slice(0, 7);
+  host.innerHTML = `<p class="mini-note">상대 주가 불러오는 중…</p>`;
+  Promise.all(list.map((p) => {
+    const key = `${p.mk}_${p.ticker}`;
+    if (HLD_SERIES[key] !== undefined) return Promise.resolve();
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+      .then((s) => { HLD_SERIES[key] = s?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
+  })).then(() => {
+    const got = list.map((p) => ({ ...p, s: HLD_SERIES[`${p.mk}_${p.ticker}`] })).filter((p) => p.s?.length > 30);
+    if (got.length < 2) { host.innerHTML = ""; return; }
+    // 공통 시작일 = 가장 늦게 시작하는 종목의 첫 날짜(그래야 전부 같은 기준)
+    const start = got.map((p) => p.s[0].t).sort().pop();
+    const defs = got.map((p) => {
+      const cut = p.s.filter((b) => b.t >= start);
+      const base = cut[0]?.c;
+      if (!base) return null;
+      return { name: p.name, t: cut.map((b) => b.t), v: cut.map((b) => b.c / base * 100),
+               self: p.ticker === st.ticker };
+    }).filter(Boolean);
+    if (defs.length < 2) { host.innerHTML = ""; return; }
+    const W = 640, H = 250, P = { l: 40, r: 104, t: 12, b: 22 };
+    const days = defs[0].t;
+    const idx = Object.fromEntries(days.map((d, i) => [d, i]));
+    const all = defs.flatMap((d) => d.v);
+    const mn = Math.min(...all), mx = Math.max(...all), pad = (mx - mn) * 0.08 || 1;
+    const lo = mn - pad, hi = mx + pad;
+    const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, days.length - 1));
+    const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+    const grid = [0, .5, 1].map((r) => {
+      const v = lo + (hi - lo) * r;
+      return `<line x1="${P.l}" y1="${Y(v)}" x2="${W - P.r}" y2="${Y(v)}" stroke="var(--line)"/>
+        <text x="${P.l - 5}" y="${Y(v) + 3}" text-anchor="end" class="cr-ax">${v.toFixed(0)}</text>`;
+    }).join("");
+    const base100 = (lo <= 100 && hi >= 100)
+      ? `<line x1="${P.l}" y1="${Y(100)}" x2="${W - P.r}" y2="${Y(100)}" stroke="#8b8b93" stroke-dasharray="4 4"/>` : "";
+    const paths = defs.map((d, i) => {
+      const pts = d.t.map((t, j) => (idx[t] != null ? `${X(idx[t]).toFixed(1)},${Y(d.v[j]).toFixed(1)}` : null))
+        .filter(Boolean).join(" ");
+      return `<polyline points="${pts}" fill="none" stroke="${d.self ? "#f5445a" : HLD_COLORS[(i + 1) % 8]}"
+        stroke-width="${d.self ? 2.6 : 1.5}" opacity="${d.self ? 1 : .85}"/>`;
+    }).join("");
+    const ends = defs.map((d, i) => ({ name: d.name, self: d.self, v: d.v[d.v.length - 1],
+      y: Y(d.v[d.v.length - 1]), c: d.self ? "#f5445a" : HLD_COLORS[(i + 1) % 8] })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 13);
+    const labels = ends.map((e) => `<text x="${W - P.r + 5}" y="${e.y + 3}" class="cr-end" fill="${e.c}"
+      ${e.self ? 'font-weight="800"' : ""}>${String(e.name).slice(0, 8)} ${e.v.toFixed(0)}</text>`).join("");
+    const xl = [0, Math.floor(days.length / 2), days.length - 1].map((i) =>
+      `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === days.length - 1 ? "end" : "middle"}"
+        class="cr-ax">${days[i].slice(0, 7)}</text>`).join("");
+    const yrs = ((new Date(days[days.length - 1]) - new Date(days[0])) / 3.156e10).toFixed(1);
+    host.innerHTML = `<h3 class="lk-h3" style="margin-top:12px">📈 상대 주가 추이
+        <span class="sub-note">(${days[0]}=100 · ${yrs}년 · <b style="color:#f5445a">굵은 선=조회 종목</b>)</span></h3>
+      <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${base100}${paths}${labels}${xl}</svg>
+      <p class="mini-note">같은 기간 <b>몇 배가 됐는지</b>를 비교합니다(100=출발점). 상장일이 달라 전 종목이
+        공통으로 존재하는 <b>${days[0]}</b>부터 그렸습니다.</p>`;
+  });
+}
+
 function renderLookupPeers(st) {
   const host = $("#lookup-peers");
   const key = `${st.market}_${st.ticker}`;
@@ -6432,11 +6497,12 @@ function renderLookupPeers(st) {
       <td class="hld-name"><img class="mv-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${p.ticker}.svg" onerror="this.style.visibility='hidden'">
         <span><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></span></td>
       <td>${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
-      <td class="${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td>
-      <td class="${(p.ret3m || 0) >= 0 ? "pos" : "neg"}">${p.ret3m != null ? (p.ret3m >= 0 ? "+" : "") + p.ret3m + "%" : "-"}</td></tr>`).join("");
+      <td class="${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td></tr>`).join("");
     host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(네이버 동일업종)</span></h3>
       <div class="tablewrap"><table class="hld-table peer-table">
-        <thead><tr><th>종목</th><th>주가</th><th>등락률</th><th>3개월</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <thead><tr><th>종목</th><th>주가</th><th>등락률</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div id="peer-chart"></div>`;
+    drawPeerChart(st, peers.map((x) => ({ mk: "kr", ticker: x.ticker, name: x.name })));
   } else {
     const self = FUND?.map?.[key];
     const ind = self?.industry;
@@ -6454,7 +6520,9 @@ function renderLookupPeers(st) {
       <td>${p.price != null ? fmtPrice(p.price, "us") : "-"}</td></tr>`).join("");
     host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(${ind} · 시총순)</span></h3>
       <div class="tablewrap"><table class="hld-table peer-table">
-        <thead><tr><th>종목</th><th>PER</th><th>시가총액</th><th>주가</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <thead><tr><th>종목</th><th>PER</th><th>시가총액</th><th>주가</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div id="peer-chart"></div>`;
+    drawPeerChart(st, list.filter((x) => !x.self).map((x) => ({ mk: "us", ticker: x.ticker, name: x.name })));
   }
   host.querySelectorAll("tr[data-goto]").forEach((tr) => tr.onclick = () => {
     if (!lookupRendered) initLookup();
