@@ -32,6 +32,7 @@
 <nav class="tabs" data-group-tabs="discover" style="display:none">
   <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="today">오늘의 신호</button>
+  <button class="tab" data-tab="watch">⭐ 관심종목</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
   <button class="tab" data-tab="value">내재가치</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
@@ -257,6 +258,28 @@
     <h2 style="margin-top:24px">📦 아마존 미국 베스트셀러 <span class="sub-note">(카테고리별 실시간 판매 순위 · 소비 트렌드 참고 · 쿠팡은 봇 차단으로 미지원)</span>
       <span class="tr-ts" id="tr-ts-amz"></span></h2>
     <div id="tr-amazon"></div>
+  </section>
+
+  <section id="tab-watch" class="panel">
+    <div id="watch-summary" class="idx-cards" style="margin-bottom:14px"></div>
+    <div class="card-flat">
+      <h3 class="lk-h3">⭐ 관심종목 <span class="sub-note" id="watch-count"></span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="watch-group">
+          <button data-g="none" class="active">전체</button>
+          <button data-g="ind">산업별</button>
+        </span>
+        <button class="today-chart-btn" id="watch-export">⬇ 내보내기</button>
+        <button class="today-chart-btn" id="watch-import">⬆ 가져오기</button>
+        <input type="file" id="watch-import-file" accept=".json" style="display:none">
+      </h3>
+      <div id="watch-list"></div>
+    </div>
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">📈 상대 주가 추이 <span class="sub-note">(관심종목 · 공통 시작일=100)</span></h3>
+      <div id="watch-chart"></div>
+    </div>
+    <div class="criteria" id="watch-context" style="margin-top:14px"></div>
   </section>
 
   <section id="tab-lookup" class="panel">

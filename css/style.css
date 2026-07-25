@@ -1535,3 +1535,15 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 #rot-table .rot-indent { padding-left: 22px; color: var(--muted); }
 .as-kind { font-style: normal; font-weight: 700; font-size: .72rem; margin-right: 4px; }
 .as-larrow { flex: 0 0 96px; }
+
+/* ⭐ 관심종목 */
+.watch-star { background: none; border: 0; cursor: pointer; color: #6b6b78; font-size: 1.05rem;
+  line-height: 1; padding: 0 3px; }
+.watch-star:hover { color: #f0b34c; }
+.watch-star.on { color: #f0b34c; }
+.lk-name .watch-star { font-size: 1.25rem; margin-left: 6px; vertical-align: -2px; }
+#scr-table th.scr-star, #scr-table td.scr-star { width: 26px; text-align: center; padding-left: 4px; padding-right: 0; }
+.watch-table td, .watch-table th { vertical-align: middle; }
+.watch-gh td { background: rgba(255,255,255,.05); font-size: .84rem; padding: 6px 10px; }
+.watch-memo { width: 100%; min-width: 90px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; color: var(--ink); font-size: .78rem; padding: 3px 7px; }

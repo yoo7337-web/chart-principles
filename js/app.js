@@ -107,7 +107,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -170,6 +170,7 @@ function activateTab(tabId) {
   if (tabId === "trends" && !trendsRendered) renderTrends();
   if (tabId === "crypto" && !cryptoRendered) renderCrypto();
   if (tabId === "assets" && !assetsRendered) renderAssets();
+  if (tabId === "watch") renderWatch();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -3007,12 +3008,13 @@ function renderScreener() {
   const dynCols = [...new Set([...themeCols, ...active])].filter((id) => !FIXED_COLS.includes(id)).slice(0, 3);
   const cols = [...FIXED_COLS, ...dynCols];
   const colHead = cols.map((id) => `<th class="scr-r">${scrColLabel(id)}</th>`).join("");
-  const head = `<thead><tr><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
+  const head = `<thead><tr><th class="scr-star">★</th><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
   const body = rows.map((t) => {
     const col = t.chg >= 0 ? "#f5445a" : "#4391ff";
     const vals = scrVals.get(t.m + "_" + t.t) || {};
     const extra = cols.map((id) => `<td class="scr-r">${scrFmtMetric(id, vals[id])}</td>`).join("");
     return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
+      <td class="scr-star">${starBtn(`${t.m}_${t.t}`, t.name)}</td>
       <td class="scr-name"><img class="mv-logo" src="${logoUrl(t.m, t.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${t.name}</b> <span class="sub-note">${t.t}</span></td>
       <td>${t.m === "kr" ? "🇰🇷" : "🇺🇸"}</td>
       <td>${t.sector}</td>
@@ -4579,6 +4581,167 @@ function crTable(d) {
       <td class="num">${crPct(c.hi_off)}</td></tr>`).join("") + "</tbody>";
 }
 
+/* ---------- ⭐ 관심종목 (localStorage `cp_watch_v1` — 브라우저에만 저장) ---------- */
+const WATCH_KEY = "cp_watch_v1";
+let _watch = null;
+function watchLoad() {
+  if (_watch === null) {
+    try { _watch = JSON.parse(localStorage.getItem(WATCH_KEY)) || {}; } catch (e) { _watch = {}; }
+  }
+  return _watch;
+}
+function watchSave(w) { _watch = w; localStorage.setItem(WATCH_KEY, JSON.stringify(w)); }
+const watchHas = (key) => !!watchLoad()[key];
+function watchToggle(key, meta) {
+  const w = watchLoad();
+  if (w[key]) delete w[key];
+  else w[key] = { mk: key.slice(0, 2), t: key.slice(3), name: meta?.name || key.slice(3),
+                  added: new Date().toISOString().slice(0, 10), memo: "" };
+  watchSave(w);
+  syncWatchStars();
+  if (watchRendered) renderWatch();
+  return !!w[key];
+}
+// 화면 곳곳의 ⭐ 버튼 상태를 한 번에 맞춘다(같은 종목이 여러 곳에 나올 수 있음)
+function syncWatchStars() {
+  document.querySelectorAll("[data-watch]").forEach((b) => {
+    const on = watchHas(b.dataset.watch);
+    b.classList.toggle("on", on);
+    b.textContent = on ? "★" : "☆";
+    b.title = on ? "관심종목에서 빼기" : "관심종목에 담기";
+  });
+}
+function starBtn(key, name) {
+  return `<button class="watch-star ${watchHas(key) ? "on" : ""}" data-watch="${key}"
+    data-name="${String(name || "").replace(/"/g, "&quot;")}"
+    title="${watchHas(key) ? "관심종목에서 빼기" : "관심종목에 담기"}">${watchHas(key) ? "★" : "☆"}</button>`;
+}
+// 위임 바인딩 — 동적으로 그려지는 버튼도 한 번의 등록으로 동작
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.("[data-watch]");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  watchToggle(b.dataset.watch, { name: b.dataset.name });
+});
+
+/* ⭐ 관심종목 탭 — 시세·산업·오늘 신호·메모를 한 표로 */
+let watchRendered = false, watchGroup = "none";
+function renderWatch() {
+  watchRendered = true;
+  const w = watchLoad(), keys = Object.keys(w);
+  const ctx = $("#watch-context");
+  if (ctx) ctx.innerHTML = `⭐는 종목조회 헤더·주식찾기 표·오늘의 신호 어디서든 누르면 담깁니다.
+    <b>이 브라우저에만 저장</b>되며 서버로 전송되지 않습니다 — 기기를 바꾸면 ⬇내보내기로 옮기세요.`;
+  const list = $("#watch-list"), sum = $("#watch-summary"), cnt = $("#watch-count");
+  if (!keys.length) {
+    if (sum) sum.innerHTML = "";
+    if (cnt) cnt.textContent = "";
+    list.innerHTML = `<p class="mini-note" style="padding:26px 0;text-align:center">
+      아직 담은 종목이 없습니다 — 종목조회나 주식찾기에서 <b>☆</b>를 눌러 담아보세요.</p>`;
+    $("#watch-chart").innerHTML = "";
+    bindWatchIO();
+    return;
+  }
+  // 시세·산업·오늘 신호 결합
+  const sigByKey = {};
+  (TODAY?.signals || []).forEach((s) => {
+    const k = `${s.market}_${s.ticker}`;
+    if (!sigByKey[k] || s.date > sigByKey[k].date) sigByKey[k] = s;
+  });
+  const rows = keys.map((k) => {
+    const it = w[k];
+    const tile = (MARKET?.heatmap || []).find((t) => `${t.m}_${t.t}` === k);
+    const q = MARKET?.quotes?.[k];
+    return { k, ...it, name: tile?.name || it.name, grp: tile?.grp || "etc", sector: tile?.sector,
+             mcap: tile?.mcap, price: q ? q[0] : null, chg: q ? q[1] : (tile?.chg ?? null),
+             sig: sigByKey[k] };
+  }).sort((a, b) => (b.mcap || 0) - (a.mcap || 0));
+  if (cnt) cnt.textContent = `${rows.length}종목`;
+  const up = rows.filter((r) => (r.chg ?? 0) > 0).length;
+  const buys = rows.filter((r) => r.sig?.side === "buy").length;
+  const sells = rows.filter((r) => r.sig?.side === "sell").length;
+  if (sum) sum.innerHTML = [["관심종목", `${rows.length}`, "담은 종목"],
+    ["오늘 상승", `${up} / ${rows.length}`, rows.length ? `${Math.round(up / rows.length * 100)}%` : ""],
+    ["🟢 매수 신호", `${buys}`, "최근 3영업일"], ["🔴 매도 신호", `${sells}`, "최근 3영업일"]]
+    .map(([t, v, s2]) => `<div class="idx-card"><div class="sub-note">${t}</div>
+      <b>${v}</b><span class="sub-note">${s2}</span></div>`).join("");
+  const row = (r) => {
+    const col = (r.chg ?? 0) >= 0 ? "#f5445a" : "#4391ff";
+    const sg = r.sig ? `<span class="td-stat ${r.sig.status || ""}">${r.sig.side === "buy" ? "🟢" : "🔴"}
+      ${r.sig.rule}<span class="sub-note"> ${r.sig.date.slice(5)}</span></span>` : `<span class="sub-note">-</span>`;
+    return `<tr class="watch-row" data-key="${r.k}">
+      <td class="scr-star">${starBtn(r.k, r.name)}</td>
+      <td class="scr-name"><img class="mv-logo" src="${logoUrl(r.mk, r.t)}" alt="" loading="lazy"
+        onerror="this.style.visibility='hidden'"><b>${r.name}</b> <span class="sub-note">${r.t}</span></td>
+      <td>${r.mk === "kr" ? "🇰🇷" : "🇺🇸"}</td>
+      <td><span class="sub-note">${indLabel(r.grp)}</span></td>
+      <td class="scr-r">${r.price != null ? fmtPrice(r.price, r.mk) : "-"}</td>
+      <td class="scr-r" style="color:${col}">${r.chg != null ? pct(r.chg, 2) : "-"}</td>
+      <td>${sg}</td>
+      <td><input class="watch-memo" data-key="${r.k}" value="${(r.memo || "").replace(/"/g, "&quot;")}"
+        placeholder="메모"></td>
+      <td class="sub-note">${r.added || ""}</td></tr>`;
+  };
+  const head = `<thead><tr><th class="scr-star">★</th><th>종목</th><th></th><th>산업</th>
+    <th class="scr-r">현재가</th><th class="scr-r">등락</th><th>최근 신호</th><th>메모</th><th>담은날</th></tr></thead>`;
+  let body;
+  if (watchGroup === "ind") {
+    const by = {};
+    rows.forEach((r) => (by[r.grp] = by[r.grp] || []).push(r));
+    body = IND_GROUPS.concat([SCR_GROUP_ETC]).filter((g) => by[g.key]).map((g) =>
+      `<tr class="watch-gh"><td colspan="9">${g.icon} <b>${g.name}</b>
+        <span class="sub-note">${by[g.key].length}종목</span></td></tr>` +
+      by[g.key].map(row).join("")).join("");
+  } else {
+    body = rows.map(row).join("");
+  }
+  list.innerHTML = `<div class="tablewrap"><table class="hld-table watch-table">${head}<tbody>${body}</tbody></table></div>`;
+  list.querySelectorAll(".watch-row").forEach((tr) => tr.onclick = (e) => {
+    if (e.target.closest(".watch-star, .watch-memo")) return;
+    gotoTabFull("lookup");
+    if (!lookupRendered) initLookup();
+    loadLookup(tr.dataset.key);
+  });
+  list.querySelectorAll(".watch-memo").forEach((inp) => {
+    inp.onclick = (e) => e.stopPropagation();
+    inp.onchange = () => { const d = watchLoad(); if (d[inp.dataset.key]) { d[inp.dataset.key].memo = inp.value; watchSave(d); } };
+  });
+  $("#watch-group").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    watchGroup = b.dataset.g;
+    $("#watch-group").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    renderWatch();
+  });
+  bindWatchIO();
+  drawPeerChartInto("#watch-chart", rows.map((r) => ({ mk: r.mk, ticker: r.t, name: r.name })));
+}
+function bindWatchIO() {
+  const ex = $("#watch-export"), im = $("#watch-import"), f = $("#watch-import-file");
+  if (ex) ex.onclick = () => {
+    const blob = new Blob([JSON.stringify(watchLoad(), null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `관심종목_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+  if (im && f) {
+    im.onclick = () => f.click();
+    f.onchange = (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      file.text().then((txt) => {
+        try {
+          const d = JSON.parse(txt);
+          const w = watchLoad(), before = Object.keys(w).length;
+          Object.entries(d).forEach(([k, v]) => { if (!w[k]) w[k] = v; });
+          watchSave(w);
+          alert(`가져오기 완료 — ${Object.keys(w).length - before}종목 추가`);
+          renderWatch(); syncWatchStars();
+        } catch (err) { alert("JSON 형식이 올바르지 않습니다."); }
+        e.target.value = "";
+      });
+    };
+  }
+}
+
 /* ---------- 🏙 자산시장 — 부동산·채권 + 로테이션 검증 (asset_rotation.json) ---------- */
 let assetsRendered = false, ASSETS = null, asReMode = "index", asBondMode = "yield";
 const AS_COLORS = ["#4391ff", "#f5445a", "#22c07a", "#f0b34c", "#9d7bff", "#38bdf8", "#fb923c"];
@@ -5959,7 +6122,8 @@ function renderLookupHead(st) {
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
-      <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span>${shortBadge}</div>
+      <div class="lk-name">${st.name}<span class="sub-note"> ${st.ticker} · ${st.market === "kr" ? "KRX" : "US"}</span>
+        ${starBtn(`${st.market}_${st.ticker}`, st.name)}${shortBadge}</div>
       <div class="lk-price"><span${col ? ` style="color:${col}"` : ""}>${fmtPrice(cur, st.market)}${chg != null ? ` ${up ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>
         <span class="sub-note">${src}</span></div>
     </div>`;
@@ -6424,9 +6588,15 @@ function renderLookupSurprise(st) {
    ⚠종목마다 상장일이 달라 시작점이 제각각이면 비교가 무의미해진다 → **공통 시작일**을 잡고
      그 시점을 100으로 재정규화한다. 데이터가 없는 피어는 조용히 건너뛴다. */
 function drawPeerChart(st, peers) {
-  const host = $("#peer-chart"); if (!host) return;
-  const self = { mk: st.market, ticker: st.ticker, name: st.name || st.ticker };
-  const list = [self, ...peers.filter((p) => p.ticker !== st.ticker)].slice(0, 7);
+  const self = { mk: st.market, ticker: st.ticker, name: st.name || st.ticker, self: true };
+  drawPeerChartInto("#peer-chart", [self, ...peers.filter((p) => p.ticker !== st.ticker)]);
+}
+
+/* 여러 종목의 상대 주가를 한 축에 — 종목조회 동종업계·관심종목이 함께 쓴다 */
+function drawPeerChartInto(sel, items) {
+  const host = $(sel); if (!host) return;
+  const list = (items || []).slice(0, 8);
+  if (list.length < 2) { host.innerHTML = list.length ? `<p class="mini-note">2종목 이상이어야 비교할 수 있습니다.</p>` : ""; return; }
   host.innerHTML = `<p class="mini-note">상대 주가 불러오는 중…</p>`;
   Promise.all(list.map((p) => {
     const key = `${p.mk}_${p.ticker}`;
@@ -6435,6 +6605,7 @@ function drawPeerChart(st, peers) {
       .then((s) => { HLD_SERIES[key] = s?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
   })).then(() => {
     const got = list.map((p) => ({ ...p, s: HLD_SERIES[`${p.mk}_${p.ticker}`] })).filter((p) => p.s?.length > 30);
+    const selfTk = (list.find((p) => p.self) || {}).ticker;
     if (got.length < 2) { host.innerHTML = ""; return; }
     // 공통 시작일 = 가장 늦게 시작하는 종목의 첫 날짜(그래야 전부 같은 기준)
     const start = got.map((p) => p.s[0].t).sort().pop();
@@ -6443,7 +6614,7 @@ function drawPeerChart(st, peers) {
       const base = cut[0]?.c;
       if (!base) return null;
       return { name: p.name, t: cut.map((b) => b.t), v: cut.map((b) => b.c / base * 100),
-               self: p.ticker === st.ticker };
+               self: p.ticker === selfTk };
     }).filter(Boolean);
     if (defs.length < 2) { host.innerHTML = ""; return; }
     const W = 640, H = 250, P = { l: 40, r: 104, t: 12, b: 22 };
@@ -6476,8 +6647,8 @@ function drawPeerChart(st, peers) {
       `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === days.length - 1 ? "end" : "middle"}"
         class="cr-ax">${days[i].slice(0, 7)}</text>`).join("");
     const yrs = ((new Date(days[days.length - 1]) - new Date(days[0])) / 3.156e10).toFixed(1);
-    host.innerHTML = `<h3 class="lk-h3" style="margin-top:12px">📈 상대 주가 추이
-        <span class="sub-note">(${days[0]}=100 · ${yrs}년 · <b style="color:#f5445a">굵은 선=조회 종목</b>)</span></h3>
+    host.innerHTML = `${selfTk ? `<h3 class="lk-h3" style="margin-top:12px">📈 상대 주가 추이
+        <span class="sub-note">(${days[0]}=100 · ${yrs}년 · <b style="color:#f5445a">굵은 선=조회 종목</b>)</span></h3>` : ""}
       <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${base100}${paths}${labels}${xl}</svg>
       <p class="mini-note">같은 기간 <b>몇 배가 됐는지</b>를 비교합니다(100=출발점). 상장일이 달라 전 종목이
         공통으로 존재하는 <b>${days[0]}</b>부터 그렸습니다.</p>`;
@@ -6725,10 +6896,10 @@ function renderFinTrends(st) {
         const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
         svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
         // 값 라벨 — 막대가 짧으면 겹치므로 양수는 위, 음수는 아래에 붙인다
-        if (withLabel) svg += `<text x="${x + bw / 2}" y="${v >= 0 ? yS(v) - 3 : yS(v) + 9}" font-size="7.5"
+        if (withLabel) svg += `<text x="${x + bw / 2}" y="${v >= 0 ? yS(v) - 4 : yS(v) + 11}" font-size="10.5"
           text-anchor="middle" fill="${colors[j]}">${ftNum(v * uMul)}</text>`;
       });
-      svg += `<text x="${cx}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`;
+      svg += `<text x="${cx}" y="${H - 9}" font-size="11.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`;
     });
     const legend = keys.map((k, j) => `<span style="color:${colors[j]}">■</span> ${labels[j]}`).join("  ");
     return { svg, legend, yS };
@@ -6746,7 +6917,7 @@ function renderFinTrends(st) {
       svg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
         fill="none" stroke="${colors[j]}" stroke-width="2"${dash[j] ? ` stroke-dasharray="${dash[j]}"` : ""}/>`
         + pts.map((p, i2) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${colors[j]}"/>
-          <text x="${p[0]}" y="${p[1] + (j % 2 ? 14 : -7)}" font-size="8.5" text-anchor="middle" fill="${colors[j]}">${p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1)}%</text>`).join("");
+          <text x="${p[0]}" y="${p[1] + (j % 2 ? 16 : -8)}" font-size="10.5" text-anchor="middle" fill="${colors[j]}">${p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1)}%</text>`).join("");
     });
     // 기간 라벨(막대 없을 때)
     svg += rows.map((r, i) => `<text x="${padL + gw * i + gw / 2}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`).join("");
