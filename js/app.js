@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v180", "2026-07-26", "산업 진단을 주식찾기 12산업군으로 통합 + 코스피 변수 분석", "산업 진단이 원천 업종 77개를 쓰던 것을 주식찾기와 같은 12산업군으로 교체(산업군 클릭=세부 업종 펼침→종목). 이제 두 화면의 산업이 완전히 일치. 자산시장 로테이션에 글로벌 변수 9종(반도체지수·나스닥·VIX·미국10년물·달러인덱스·유가·구리·금·상해·닛케이) 추가하고, 코스피를 종속변수로 고정한 뷰 신설 — 주가는 선행 변수가 4개뿐이고 대부분 동행이라 선행/동행/후행을 구분해 표기."],
   ["v179", "2026-07-26", "공시 오류 클라우드 반영 + 단위 체계 개편", "⚠공시 버그가 로컬에선 고쳐졌으나 feed.json이 CLOUD_OWNED라 배포되지 않고 클라우드 엔진도 옛 코드였음 → engine 동기화 + 수정본 직접 시딩으로 라이브 반영(두산테스나 7건→15건). Snapshot에 단위 선택(원·백만원·십억원·억원) 추가 + 현금흐름 막대에 값 라벨 표시. 상세 재무제표 단위도 동일 체계로 통일."],
   ["v178", "2026-07-26", "🏙 자산시장 탭 — 부동산·채권 + 로테이션 검증", "주식만 보면 놓치는 '돈의 이동'을 보는 탭 신설. 2000년 이후 월간 데이터로 19개 시장의 교차상관(-12~+12개월)을 전수 계산해 유의한 선행관계 99건을 추출. 핵심 발견: 신용 스프레드가 부동산을 2개월 선행(r=-0.72)으로 압도적 1위, 코스피는 서울 아파트를 2개월 선행, 부동산은 12개월 뒤 코스피와 역상관. 화면=요약 카드 5 + 로테이션 표 + 부동산(가격지수·전년대비·공급) + 채권(금리·스프레드)."],
   ["v177", "2026-07-26", "산업 분류 한·미 통일(12산업군) + 신호 원칙별 정리", "화면마다 달랐던 5개 산업 분류를 산업지표가 붙어 있는 12산업군으로 통일. 수집 단계에서 타일에 grp를 계산해 주식찾기·산업진단·종목조회가 같은 기준을 쓴다. 미국은 GICS 대분류가 12개뿐이라 company.json의 세부 업종을 우선 사용(미분류 38종목은 yfinance로 보강 → 기타 0%). 밸류체인은 복수 소속·공정 순서를 담으므로 대체하지 않고 산업군 하위 축으로 병존. 오늘의 신호에 원칙별 정리 추가."],
@@ -4612,25 +4613,52 @@ function asCards() {
     card("원/달러", fx == null ? "-" : Math.round(fx).toLocaleString() + "원", "월말 기준");
 }
 
-/* 검증된 선행관계 — 상관이 강한 순. 상관계수 막대로 강도를 보여준다. */
+/* 시장 간 관계 — 코스피를 종속변수로 고정한 뷰가 기본(주식에 영향을 주는 변수를 보려는 목적) */
+let asLeadMode = "kospi";
+const AS_KIND = { lead: ["선행", "#22c07a", "이 변수가 먼저 움직인 뒤 코스피가 따라옴 — 예측에 쓸 수 있는 신호"],
+                  sync: ["동행", "#4391ff", "같은 달에 함께 움직임 — 같은 요인에 반응(예측이 아니라 확인용)"],
+                  lag: ["후행", "#9aa4b2", "코스피가 먼저 움직인 뒤 이 변수가 따라옴"] };
 function asLeadTable() {
   const KO = ASSETS.names_ko || {};
-  const lead = (ASSETS.lead || []).slice(0, 18);
   const host = $("#as-lead");
-  if (!lead.length) { host.innerHTML = `<p class="mini-note">유의한 선행관계 없음</p>`; return; }
-  host.innerHTML = `<p class="mini-note">A가 움직인 뒤 B가 따라온 <b>평균 시차</b>와 상관계수입니다.
-      막대가 길수록 관계가 강하고, <span style="color:#f5445a">붉은색</span>은 <b>반대 방향</b>(A가 오르면 B는 내림)입니다.</p>
-    <div class="as-lead">${lead.map((x) => {
+  const src = asLeadMode === "kospi" ? (ASSETS.to_kospi || [])
+    : asLeadMode === "from-kospi" ? (ASSETS.from_kospi || [])
+    : (ASSETS.lead || []).map((x) => ({ ...x, kind: "lead" }));
+  const rows = src.slice(0, 20);
+  const bindMode = () => $("#as-lead-mode")?.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    asLeadMode = b.dataset.m;
+    $("#as-lead-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    asLeadTable();
+  });
+  if (!rows.length) { host.innerHTML = `<p class="mini-note">유의한 관계 없음</p>`; bindMode(); return; }
+  const note = asLeadMode === "kospi"
+    ? `<b>코스피(종속변수)</b>에 유의한 관계가 있는 변수입니다. 주가는 정보를 빨리 반영해
+       <b>선행하는 변수가 드물고</b>(4건) 대부분 <b>동행</b>합니다 — 동행 지표는 예측이 아니라
+       <b>'지금 무슨 일이 벌어지는지' 확인</b>하는 데 씁니다.`
+    : asLeadMode === "from-kospi"
+    ? `<b>코스피(독립변수)</b>가 앞서 움직인 뒤 따라온 시장입니다. 주식이 다른 자산의 선행지표 역할을 합니다.`
+    : `전체 시장 쌍 중 <b>선행관계</b>가 유의한 것만 상관 강한 순으로.`;
+  host.innerHTML = `<p class="mini-note">${note}<br>
+      막대가 길수록 관계가 강하고, <span style="color:#f5445a">붉은색</span>은 <b>반대 방향</b>(하나가 오르면 다른 하나는 내림)입니다.</p>
+    <div class="as-lead">${rows.map((x) => {
       const neg = x.r < 0, w = Math.min(100, Math.abs(x.r) * 130);
-      return `<div class="as-lrow">
-        <span class="as-lfrom">${KO[x.from] || x.from}</span>
-        <span class="as-larrow">→ <b>${x.lag}개월</b></span>
-        <span class="as-lto">${KO[x.to] || x.to}</span>
+      const [kLab, kCol, kTip] = AS_KIND[x.kind || "lead"];
+      // 항상 '왼쪽(먼저) → 오른쪽(나중)' 순서로 읽히게 배치
+      const nm = (k) => KO[k] || k;
+      const [lft, rgt] = x.lag > 0 ? [nm(x.from), nm(x.to)]
+        : x.lag < 0 ? [nm(x.to), nm(x.from)]          // 후행이면 실제로는 뒤쪽이 먼저 움직인 것
+        : [nm(x.from), nm(x.to)];
+      return `<div class="as-lrow" title="${kTip}">
+        <span class="as-lfrom">${lft}</span>
+        <span class="as-larrow"><i class="as-kind" style="color:${kCol}">${kLab}</i>
+          ${x.lag ? `<b>${Math.abs(x.lag)}개월</b>` : ""}</span>
+        <span class="as-lto">${rgt}</span>
         <span class="as-lbar"><i style="width:${w}%;background:${neg ? "#f5445a" : "#22c07a"}"></i></span>
         <span class="as-lr ${neg ? "neg" : "pos"}">${x.r >= 0 ? "+" : ""}${x.r.toFixed(2)}</span>
         <span class="as-ln sub-note">n=${x.n}</span>
       </div>`;
     }).join("")}</div>`;
+  bindMode();
 }
 
 function asRealEstate() {
@@ -5223,31 +5251,51 @@ function drawRotation() {
   const rot = MPRO.rotation[mk];
   if (!rot) return;
   const m = rot.market;
-  // 섹터별 시가총액 합(히트맵 유니버스) → 큰 순 정렬 + 시총 열 표시
-  const mcapBySec = {};
+  /* 분류 기준 = **주식찾기와 동일한 12산업군**(rot.groups). 원천 업종은 산업군을 펼쳤을 때
+     그 안의 세부로만 보여준다. (예전엔 여기만 업종 77개를 써서 주식찾기와 산업이 어긋났다) */
+  const groups = rot.groups || [];
+  const secByGrp = {};
+  (rot.sectors || []).forEach((s) => (secByGrp[s.grp || "etc"] = secByGrp[s.grp || "etc"] || []).push(s));
+  const mcapByGrp = {};
   (MARKET?.heatmap || []).filter((t) => t.m === mk).forEach((t) => {
-    if (t.sector && t.mcap) mcapBySec[t.sector] = (mcapBySec[t.sector] || 0) + t.mcap;
+    const g = t.grp || "etc";
+    if (t.mcap) mcapByGrp[g] = (mcapByGrp[g] || 0) + t.mcap;
   });
-  const totMcap = Object.values(mcapBySec).reduce((a, b) => a + b, 0);
-  const sorted = rot.sectors.slice().sort((a, b) => (mcapBySec[b.sector] || 0) - (mcapBySec[a.sector] || 0));
+  const totMcap = Object.values(mcapByGrp).reduce((a, b) => a + b, 0);
+  const part = (v, warnLow) => v == null ? "<td>-</td>" :
+    `<td class="${v >= 60 ? "pos" : v < (warnLow ?? 30) ? "neg" : ""}">${v}%</td>`;
+  const row = (s, isGrp) => {
+    const mc = isGrp ? (mcapByGrp[s.grp] ?? s.mcap) : null;
+    const label = isGrp ? `${indLabel(s.grp)}` : `${s.sector}`;
+    return `<tr class="${isGrp ? "rot-row rot-grp" : "rot-sub"}" data-grp="${s.grp || ""}"
+        data-sector="${isGrp ? "" : s.sector}" title="${isGrp ? "클릭 = 세부 업종 펼치기" : "클릭 = 소속 종목·최신 기사"}">
+      <td class="${isGrp ? "" : "rot-indent"}">${isGrp ? "▸ " : "└ "}${label}
+        <span class="sub-note">(${s.n})</span></td>
+      <td class="scr-r">${mc ? fmtMcap(mc, mk) : ""}</td>
+      <td class="scr-r sub-note">${mc && totMcap ? (mc / totMcap * 100).toFixed(1) + "%" : ""}</td>
+      ${rsCell(s.w1)}${rsCell(s.m1)}${rsCell(s.m3)}${rsCell(s.rs_w1)}${rsCell(s.rs_m1)}${rsCell(s.rs_m3)}
+      ${part(s.up)}${part(s.ma20)}<td>${s.hi52 ?? "-"}</td></tr>`;
+  };
   $("#rot-table").innerHTML =
-    `<tr><th>섹터 (종목수)</th><th class="scr-r">시가총액</th><th class="scr-r">비중</th><th>1주</th><th>1개월</th><th>3개월</th>
+    `<tr><th>산업군 (종목수)</th><th class="scr-r">시가총액</th><th class="scr-r">비중</th><th>1주</th><th>1개월</th><th>3개월</th>
        <th>RS 1주</th><th>RS 1개월</th><th>RS 3개월</th><th>오늘 상승</th><th>20일선 위</th><th>52주 신고</th></tr>
      <tr style="font-weight:700"><td>시장 전체</td><td class="scr-r">${totMcap ? fmtMcap(totMcap, mk) : "-"}</td><td class="scr-r">100%</td>
        ${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>` +
-    sorted.map((s) => {
-      const part = (v, warnLow) => v == null ? "<td>-</td>" :
-        `<td class="${v >= 60 ? "pos" : v < (warnLow ?? 30) ? "neg" : ""}">${v}%</td>`;
-      const mc = mcapBySec[s.sector];
-      return `<tr class="rot-row" data-sector="${s.sector}" title="클릭 = 소속 종목·최신 기사 보기">
-      <td>▸ ${s.sector} <span class="sub-note">(${s.n})</span></td>
-      <td class="scr-r">${mc ? fmtMcap(mc, mk) : "-"}</td>
-      <td class="scr-r sub-note">${mc && totMcap ? (mc / totMcap * 100).toFixed(1) + "%" : "-"}</td>
-      ${rsCell(s.w1)}${rsCell(s.m1)}${rsCell(s.m3)}${rsCell(s.rs_w1)}${rsCell(s.rs_m1)}${rsCell(s.rs_m3)}
-      ${part(s.up)}${part(s.ma20)}<td>${s.hi52 ?? "-"}</td>
-    </tr>`;}).join("");
-  document.querySelectorAll("#rot-table .rot-row").forEach((tr) =>
-    tr.addEventListener("click", () => toggleRotMembers(tr, tr.dataset.sector, mk)));
+    groups.map((g) => row(g, true)).join("");
+  // 산업군 클릭 → 그 아래에 세부 업종 행 삽입/제거(다시 클릭하면 접힘)
+  document.querySelectorAll("#rot-table .rot-grp").forEach((tr) => tr.addEventListener("click", () => {
+    const g = tr.dataset.grp;
+    const opened = tr.nextElementSibling?.classList.contains("rot-sub");
+    while (tr.nextElementSibling?.classList.contains("rot-sub")) tr.nextElementSibling.remove();
+    while (tr.nextElementSibling?.classList.contains("rot-members")) tr.nextElementSibling.remove();
+    if (opened) return;
+    const subs = (secByGrp[g] || []).slice().sort((a, b) => b.n - a.n);
+    subs.reverse().forEach((s) => tr.insertAdjacentHTML("afterend", row(s, false)));
+    tr.parentNode.querySelectorAll(".rot-sub").forEach((str) => {
+      if (str.dataset.bound) return; str.dataset.bound = "1";
+      str.addEventListener("click", (e) => { e.stopPropagation(); toggleRotMembers(str, str.dataset.sector, mk); });
+    });
+  }));
 }
 
 /* ---------- 섹터 산업지표 (sector_metrics.json — ECOS·야후 프록시·재무집계) ---------- */
@@ -5407,11 +5455,11 @@ function secMetricsHtml(sector) {
 function toggleRotMembers(tr, sector, mk) {
   const open = tr.nextElementSibling?.classList.contains("rot-members");
   document.querySelectorAll(".rot-members").forEach((r) => r.remove());
-  document.querySelectorAll("#rot-table .rot-row td:first-child").forEach((td) => {
+  document.querySelectorAll("#rot-table .rot-row td:first-child, #rot-table .rot-sub td:first-child").forEach((td) => {
     td.innerHTML = td.innerHTML.replace("▾", "▸");
   });
   if (open) return;
-  tr.querySelector("td").innerHTML = tr.querySelector("td").innerHTML.replace("▸", "▾");
+  tr.querySelector("td").innerHTML = tr.querySelector("td").innerHTML.replace("└", "▾");
   const members = (MARKET?.heatmap || [])
     .filter((t) => t.m === mk && t.sector === sector)
     .sort((a, b) => b.mcap - a.mcap);

@@ -1528,3 +1528,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .as-lr.pos { color: #22c07a; } .as-lr.neg { color: #f5445a; }
 .as-ln { flex: 0 0 50px; text-align: right; }
 @media (max-width: 800px) { .as-lfrom, .as-lto { flex-basis: 90px; } .as-ln { display: none; } }
+/* 산업 진단 — 산업군 → 세부 업종 계층 */
+#rot-table .rot-grp { font-weight: 600; }
+#rot-table .rot-sub { background: rgba(255,255,255,.025); font-size: .92em; }
+#rot-table .rot-sub:hover { background: rgba(255,255,255,.06); }
+#rot-table .rot-indent { padding-left: 22px; color: var(--muted); }
+.as-kind { font-style: normal; font-weight: 700; font-size: .72rem; margin-right: 4px; }
+.as-larrow { flex: 0 0 96px; }

@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=179">
-<script src="firebase-config.js?v=179"></script>
-<script src="js/auth.js?v=179"></script>
+<link rel="stylesheet" href="css/style.css?v=180">
+<script src="firebase-config.js?v=180"></script>
+<script src="js/auth.js?v=180"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -164,7 +164,13 @@
   <section id="tab-assets" class="panel">
     <div id="as-cards" class="cr-cards"></div>
     <div class="card-flat">
-      <h3 class="lk-h3">🔄 자산시장 로테이션 <span class="sub-note">— 어느 시장이 어느 시장을 몇 개월 앞서 움직였나</span></h3>
+      <h3 class="lk-h3">🔄 자산시장 로테이션 <span class="sub-note">— 어느 시장이 어느 시장을 몇 개월 앞서 움직였나</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-lead-mode">
+          <button data-m="kospi" class="active">코스피에 미치는 변수</button>
+          <button data-m="from-kospi">코스피가 미치는 영향</button>
+          <button data-m="all">전체</button>
+        </span></h3>
       <div id="as-lead"></div>
     </div>
     <div class="card-flat" style="margin-top:14px">
@@ -930,6 +936,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=179"></script>
+<script src="js/app.js?v=180"></script>
 </body>
 </html>
