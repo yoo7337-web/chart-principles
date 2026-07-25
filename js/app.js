@@ -2221,6 +2221,9 @@ const IND_GROUPS = [
   { key: "internet", icon: "📱", name: "인터넷·게임·엔터" },
   { key: "finance", icon: "🏦", name: "금융" },
   { key: "consumer", icon: "🛒", name: "소비재·유통" },
+  // 사업이 여러 산업에 걸쳐 하나로 묶을 수 없는 복합 지주회사(LG·CJ·두산·롯데지주 등).
+  // 자회사가 한 산업에 몰린 지주(POSCO홀딩스=철강)는 그 산업에 그대로 둔다.
+  { key: "holding", icon: "🏛️", name: "지주회사" },
 ];
 const IND_BY_KEY = Object.fromEntries(IND_GROUPS.map((g) => [g.key, g]));
 /* 산업군 → 밸류체인(CHAINS) 매핑. 12개 중 10개는 키가 같고 디스플레이는 반도체·IT에 흡수,
