@@ -906,6 +906,23 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   border-radius: 999px; background: var(--bg); cursor: pointer; color: var(--ink); }
 .scr-theme:hover { border-color: rgba(67,145,255,.45); }
 .scr-theme.on { background: #9d7bff; border-color: #9d7bff; color: #fff; }
+/* 기술적 테마(차트 패턴) — 검증 결과 병기 */
+#scr-tech { grid-column: 1 / -1; border-bottom: 0; padding-bottom: 4px; }  /* 칩 8개 — 전폭 한 줄 배치 */
+#scr-tech .scr-themes-head .sub-note { font-weight: 400; margin-left: 6px; }
+.scr-theme.tech { display: inline-flex; align-items: center; gap: 6px; }
+.scr-theme.tech.on { background: #2f7bd8; border-color: #2f7bd8; }
+.scr-theme.tech .tech-edge { font-size: .74rem; font-weight: 700; color: var(--muted); }
+.scr-theme.tech .tech-edge.ok { color: #3fbf7f; }
+.scr-theme.tech.on .tech-edge { color: rgba(255,255,255,.85); }
+.scr-theme.tech .tech-n { font-size: .72rem; font-weight: 700; color: var(--muted);
+  background: rgba(255,255,255,.07); border-radius: 999px; padding: 1px 6px; }
+.scr-theme.tech.on .tech-n { background: rgba(0,0,0,.22); color: #fff; }
+.scr-theme.tech.weak { border-style: dashed; opacity: .82; }
+.scr-theme.tech.weak.on { background: #6b6b78; border-color: #6b6b78; opacity: 1; }
+.scr-theme.tech .tech-warn { font-size: .72rem; color: #e5a13a; }
+.scr-theme.tech.none { opacity: .45; }   /* 선택 시장에 현재 신호 0건 */
+.tech-foot { margin: 6px 0 0; font-size: .74rem; line-height: 1.5; color: var(--muted); }
+.tech-foot b { color: #e5a13a; }
 /* 세부 지표 필터 */
 .scr-detail { margin-top: 12px; padding: 12px 16px; }
 .scr-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
@@ -1317,6 +1334,8 @@ dialog { background: var(--card); color: var(--ink); }
 .lk-side .lk-mgrid.fin3 .lk-mrow b { font-size: 1rem; }
 .lk-side .lk-mcard-h { font-size: .8rem; }
 .lk-side .lk-cap { padding: 0 14px 6px; }
+.lk-side .lk-cap b { font-size: .9rem; }        /* 좁은 레일: 값이 카드 제목(.95rem)보다 크지 않게 */
+.lk-side .lk-cap > div { min-width: 108px; padding: 6px 10px; }
 .lk-side .card-flat { padding-left: 14px; padding-right: 14px; }
 /* 주가 헤더 — 스크롤 시 상단 고정(회사 정보 항상 보이게) */
 .lk-main .lookup-head { position: sticky; top: 0; z-index: 6; background: var(--bg);

@@ -1662,6 +1662,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v164", "2026-07-25", "기술적 테마 8종(10년 검증) + 산업지표 팝업", "차트 패턴 8개를 원칙과 같은 잣대로 10년 검증(1,249종목·23.5만 이벤트) 후 주식찾기 테마로 추가 — 칩에 20일 초과수익·표본 병기. 통과 4종(플래그 +2.38%p·V반등 +1.36%p·신고가눌림 +0.80%p·추세선돌파 +0.26%p) / 미통과 4종(신고가·삼각수렴·컵핸들·박스저항)은 ⚠ 표시와 각주로 '근거 약함' 명시. 산업지표 %를 3개월 전 대비로 통일하고 카드 클릭 시 의미·5년 차트 팝업."],
   ["v158", "2026-07-25", "종목 프로파일 그래프 재설계", "기간 수익률을 한 줄 통합(막대=절대·점=시장대비), 베타·변동성 게이지, 수급 좌우 대비 막대 — 좁은 레일에서 직관적으로."],
   ["v156", "2026-07-25", "글로벌 금리커브", "미국 국채 만기별 커브(3M·5Y·10Y·30Y 실시간) + 주요국 6개국 장·단기 금리 비교(ECOS). 매크로 탭 하단."],
   ["v148", "2026-07-25", "섹터 산업지표 + 외국인 랭킹 수정", "섹터 클릭 시 ECOS 수출금액지수·BSI·프록시 15종·섹터 합산 CAPEX/매출 표시. 외국인 순매수·순매도가 같던 버그를 자체 수급 집계로 해결."],
@@ -2044,6 +2045,7 @@ function initScreener() {
     scrState.sectors = null; scrState.min = scrState.max = null; scrOpenGroup = null;
     $("#scr-mcap-min").value = ""; $("#scr-mcap-max").value = "";
     buildScrSectors(); buildScrTiers(); setScrUnitLabel(); scrSyncFilterVisibility();
+    renderScrTech();  // 기술 테마 배지 수를 선택 국가 기준으로 재계산
     renderScreener();
   });
   // 시총 직접 입력
@@ -2621,14 +2623,16 @@ function renderScrTech() {
   loadTechPat().then((d) => {
     const pats = d?.patterns || [], cur = d?.current || {};
     if (!pats.length) { host.innerHTML = ""; return; }
+    // 스캔 대상은 화면 유니버스·선택 국가보다 넓음 — 실제로 표에 뜰 종목 수만 배지에 표시
+    const pool = new Set(scrPool().map((t) => t.m + "_" + t.t));
     const chip = (p) => {
-      const n = (cur[p.id] || []).length;
+      const n = (cur[p.id] || []).filter((k) => pool.has(k)).length;
       const weak = !p.passed;
       const edge = p.edge20 != null ? `${p.edge20 >= 0 ? "+" : ""}${(p.edge20 * 100).toFixed(2)}%p` : "-";
       const tip = weak
-        ? `⚠ 검증 미통과 — 20일 초과수익 ${edge}(표본 ${p.n?.toLocaleString()}) · ${!p.pass_markets ? "한·미 방향 불일치" : ""}${!p.pass_halves ? " 기간 불안정" : ""}${!p.pass_p ? " 통계 유의성 부족" : ""} · 참고용`
-        : `✅ 검증 통과 — 20일 초과수익 ${edge} · 승률 ${(p.win20 * 100).toFixed(1)}% · 표본 ${p.n?.toLocaleString()} · p<0.01`;
-      return `<button class="scr-theme tech ${scrTechActive === p.id ? "on" : ""} ${weak ? "weak" : ""}"
+        ? `⚠ 검증 미통과 — 20일 초과수익 ${edge}(표본 ${p.n?.toLocaleString()})${!p.pass_markets ? " · 한·미 방향 불일치" : ""}${!p.pass_halves ? " · 기간 불안정" : ""}${!p.pass_p ? " · 통계 유의성 부족" : ""} · 참고용`
+        : `✅ 검증 통과 — 20일 초과수익 ${edge} · 승률 ${(p.win20 * 100).toFixed(1)}% · 표본 ${p.n?.toLocaleString()} · ${p.p < 0.001 ? "p<0.001" : "p=" + p.p.toFixed(4)}`;
+      return `<button class="scr-theme tech ${scrTechActive === p.id ? "on" : ""} ${weak ? "weak" : ""} ${n ? "" : "none"}"
         data-id="${p.id}" title="${tip}">${TECH_ICON[p.id] || "📊"} ${p.name}
         <span class="tech-edge ${weak ? "" : "ok"}">${edge}</span>
         <span class="tech-n">${n}</span>${weak ? `<span class="tech-warn">⚠</span>` : ""}</button>`;
@@ -2693,6 +2697,7 @@ function renderScreener() {
   const useTheme = scrValsReady && scrThemeActive;
   const chainKeys = (scrChainIndustry && scrChainSel.size) ? scrChainKeys() : null;  // 밸류체인 단계 선택 시 해당 종목만
   let rows = scrPool().filter((t) => {
+    if (!scrTechPass(t)) return false;                                              // 기술적 테마(차트 패턴)
     if (chainKeys && t.m === "kr" && !chainKeys.has(t.m + "_" + t.t)) return false;  // 밸류체인=국내만
     if (scrState.sectors && t.m === "us" && !scrState.sectors.has(t.sector)) return false;  // 산업(업종)필터=미국만
     const v = scrMcapVal(t);
