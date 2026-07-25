@@ -515,6 +515,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-toprow .scr-chain-head, .scr-toprow .scr-themes-head, .scr-toprow .scr-sec-actions {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: 0 0 10px; min-height: 26px; font-size: .92rem; }
+/* 산업을 선택해 단계(.scr-stage)가 펼쳐지면 밸류체인 카드가 전폭 사용(단계가 좌측 절반에 갇히지 않게).
+   :has()로 단계 존재를 감지 — 미선택 시엔 테마와 나란히 2열 유지. */
+.scr-toprow .scr-chain:has(.scr-stage) { grid-column: 1 / -1; }
+.scr-toprow .scr-chain:has(.scr-stage) .scr-chain-flow { justify-content: flex-start; }
+
 /* 업종 그룹: 우측 좁은 레일 시절의 세로 스택(flex-direction:column)을 상단 넓은 영역에선 가로 흐름으로.
    실제 자식은 .scr-group(칩+세부업종 래퍼) — 이 단위로 wrap, 펼쳐진 그룹만 전폭 차지 */
 .scr-toprow .scr-groups { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px; }

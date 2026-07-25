@@ -1653,6 +1653,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v146", "2026-07-25", "점검 근거 상세화 + 밸류체인 전폭", "포트폴리오 점검에 판정 스코어카드 표(감점·통과·제외 전 항목 근거) + 리스크 매트릭스(종목×항목)·점검 점수 막대 도표. 산업 선택 시 밸류체인 카드 전폭 확장."],
   ["v138", "2026-07-24", "종목조회 고정헤더+검색 · 아마존 · 주식찾기 재배치", "종목조회 상단 sticky 헤더(종목명·현재가+검색, 스크롤 고정) / 트렌드에 아마존 미국 베스트셀러(쿠팡은 봇차단 불가) / 투자자 매매동향 왼쪽 분할·금액표시·일간7일 / 주식찾기 산업·밸류체인·테마를 시장선택 아래 전체폭, 우측은 시총+지표만."],
   ["v136", "2026-07-24", "투자자 동향·외국인 랭킹·시장분석 개편", "홈에 투자자 매매동향 그래프(개인/외국인/기관 일간·주간·월간, 네이버 KR) / 실시간 랭킹에 외국인 순매수·순매도 추가 / 금주 실적발표 KR·US 토글 / 홈 좌우 분할 상하단 정렬 / 앱명 '시장분석'으로 변경."],
   ["v134", "2026-07-24", "홈 개편·Snapshot 카드·다수 개선", "홈: 실시간랭킹=movers(30분,지연해소)+금주 실적/경제지표 우측 / Snapshot(구 실적추이): 연결·별도 토글·재무안정성 확대·현금흐름 FCF·뷰별 표 / 등락색(상승빨강·하락파랑) / 보조지표 ⓘ툴팁 / 공시1년·뉴스3개월 / 오늘의신호 종가=차트 일치 / 개발일지 관리자 아이콘."],
@@ -4436,15 +4437,26 @@ function drawRotation() {
   const rot = MPRO.rotation[mk];
   if (!rot) return;
   const m = rot.market;
+  // 섹터별 시가총액 합(히트맵 유니버스) → 큰 순 정렬 + 시총 열 표시
+  const mcapBySec = {};
+  (MARKET?.heatmap || []).filter((t) => t.m === mk).forEach((t) => {
+    if (t.sector && t.mcap) mcapBySec[t.sector] = (mcapBySec[t.sector] || 0) + t.mcap;
+  });
+  const totMcap = Object.values(mcapBySec).reduce((a, b) => a + b, 0);
+  const sorted = rot.sectors.slice().sort((a, b) => (mcapBySec[b.sector] || 0) - (mcapBySec[a.sector] || 0));
   $("#rot-table").innerHTML =
-    `<tr><th>섹터 (종목수)</th><th>1주</th><th>1개월</th><th>3개월</th>
+    `<tr><th>섹터 (종목수)</th><th class="scr-r">시가총액</th><th class="scr-r">비중</th><th>1주</th><th>1개월</th><th>3개월</th>
        <th>RS 1주</th><th>RS 1개월</th><th>RS 3개월</th><th>오늘 상승</th><th>20일선 위</th><th>52주 신고</th></tr>
-     <tr style="font-weight:700"><td>시장 전체</td>${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>` +
-    rot.sectors.map((s) => {
+     <tr style="font-weight:700"><td>시장 전체</td><td class="scr-r">${totMcap ? fmtMcap(totMcap, mk) : "-"}</td><td class="scr-r">100%</td>
+       ${rsCell(m.w1)}${rsCell(m.m1)}${rsCell(m.m3)}<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>` +
+    sorted.map((s) => {
       const part = (v, warnLow) => v == null ? "<td>-</td>" :
         `<td class="${v >= 60 ? "pos" : v < (warnLow ?? 30) ? "neg" : ""}">${v}%</td>`;
+      const mc = mcapBySec[s.sector];
       return `<tr class="rot-row" data-sector="${s.sector}" title="클릭 = 소속 종목·최신 기사 보기">
       <td>▸ ${s.sector} <span class="sub-note">(${s.n})</span></td>
+      <td class="scr-r">${mc ? fmtMcap(mc, mk) : "-"}</td>
+      <td class="scr-r sub-note">${mc && totMcap ? (mc / totMcap * 100).toFixed(1) + "%" : "-"}</td>
       ${rsCell(s.w1)}${rsCell(s.m1)}${rsCell(s.m3)}${rsCell(s.rs_w1)}${rsCell(s.rs_m1)}${rsCell(s.rs_m3)}
       ${part(s.up)}${part(s.ma20)}<td>${s.hi52 ?? "-"}</td>
     </tr>`;}).join("");
@@ -4466,7 +4478,7 @@ function toggleRotMembers(tr, sector, mk) {
     .sort((a, b) => b.mcap - a.mcap);
   const row = document.createElement("tr");
   row.className = "rot-members";
-  row.innerHTML = `<td colspan="7"><div class="rot-mem-grid">${
+  row.innerHTML = `<td colspan="12"><div class="rot-mem-grid">${   // 시총·비중 열 추가로 12열
     members.length ? members.map((t) => `
       <a href="#" class="rot-mem" data-key="${t.m}_${t.t}">
         <span class="rot-mem-name">${t.name}</span>
