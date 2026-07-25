@@ -2565,6 +2565,10 @@ function scrSyncFilterVisibility() {
   const chainCard = $("#scr-chain-card"), secRow = $("#scr-sector-row");
   if (chainCard) chainCard.style.display = (c === "us") ? "none" : "";
   if (secRow) secRow.style.display = (c === "kr") ? "none" : "";
+  // ⚠하단 전폭 세부 행은 두 시장이 공유 → 전환 시 상대 시장 잔상 제거
+  const flow = $("#scr-chain-flow"), subHost = $("#scr-sub-host");
+  if (c === "us" && flow) flow.innerHTML = "";          // 미국인데 국내 밸류체인 단계가 남는 문제
+  if (c === "kr" && subHost) subHost.innerHTML = "";    // 국내인데 미국 세부업종이 남는 문제
 }
 
 function buildScrTiers() {
@@ -3377,63 +3381,74 @@ function renderMacroTab() {
   renderWorld();       // 세계 지도 — 증시/기준금리 토글 (중앙은행 금리는 MARKET.cbanks)
 }
 
-// 국고채 금리 커브 — 만기별 수익률 막대 + 장단기 스프레드. TOSSM 없으면 섹션 자체를 숨김.
+// 국채 금리 커브 — 한국(토스)/미국(야후) 토글 + 주요국 비교. 데이터 없으면 섹션 숨김.
+let curveMk = "kr";
 function renderBondCurve() {
   const wrap = $("#bond-curve-wrap");
-  const b = TOSSM?.bonds;
-  if (!wrap || !b || !b.curve?.length) { if (wrap) wrap.style.display = "none"; return; }
+  if (!wrap) return;
+  const hasKr = !!TOSSM?.bonds?.curve?.length;
+  if (!hasKr) curveMk = "us";
   wrap.style.display = "";
-  $("#bond-curve-note").textContent = `(${TOSSM.generated} 기준 · 만기별 수익률)`;
-
-  const sp = b.spreads || {};
-  $("#bond-spreads").innerHTML = Object.entries(sp).map(([k, v]) => {
-    const neg = v < 0;
-    return `<span class="bond-sp ${neg ? "neg" : ""}">${k} <b>${v >= 0 ? "+" : ""}${v.toFixed(3)}%p</b>${neg ? " 역전" : ""}</span>`;
-  }).join("") + (b.inverted
-    ? `<span class="bond-warn">⚠ 장단기 금리 역전 — 경기침체 신호</span>`
-    : `<span class="sub-note">정상 우상향 커브</span>`);
-
-  const ys = b.curve.map((c) => c.yield);
-  const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(0.001, hi - lo);
-  $("#bond-curve").innerHTML = b.curve.map((c) => {
-    const h = 24 + ((c.yield - lo) / span) * 76;  // 24~100%
-    return `<div class="bond-bar"><span class="bond-val">${c.yield.toFixed(3)}</span>
-      <div class="bond-fill" style="height:${h}%"></div>
-      <span class="bond-lbl">${c.label}</span></div>`;
-  }).join("");
-
-  renderGlobalRates();   // 미국 만기별 커브 + 주요국 비교(sector_metrics lazy)
+  $("#curve-mk").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.m === curveMk);
+    b.onclick = () => { curveMk = b.dataset.m; drawCurve(); };
+  });
+  drawCurve();
+  renderGlobalRates();   // 주요국 비교(sector_metrics lazy)
 }
 
-// 글로벌 금리 — 🇺🇸 만기별 커브(야후 실시간) + 🌏 주요국 장·단기(ECOS 월간)
-function renderGlobalRates() {
-  const wrap = $("#global-rates-wrap");
-  if (!wrap) return;
-  loadSecMet().then((d) => {
-    const us = d?.us_curve || [], gl = d?.global_rates || [];
-    if (!us.length && !gl.length) { wrap.style.display = "none"; return; }
-    wrap.style.display = "";
-    // 미국 커브(막대) — 국고채와 동일한 시각 언어
-    if (us.length) {
-      $("#us-curve-note").textContent = `(${d.generated} 기준 · 야후 실시간)`;
-      const ys = us.map((c) => c.yield);
-      const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(0.001, hi - lo);
-      $("#us-curve").innerHTML = us.map((c) => {
-        const h = 24 + ((c.yield - lo) / span) * 76;
-        return `<div class="bond-bar"><span class="bond-val">${c.yield.toFixed(3)}</span>
-          <div class="bond-fill" style="height:${h}%"></div>
-          <span class="bond-lbl">${c.label}</span></div>`;
-      }).join("");
-      const y10 = us.find((c) => c.years === 10)?.yield, y3m = us.find((c) => c.years === 0.25)?.yield;
-      const y30 = us.find((c) => c.years === 30)?.yield;
-      const chips = [];
-      if (y10 != null && y3m != null) chips.push(["10Y−3M", +(y10 - y3m).toFixed(3)]);
-      if (y30 != null && y10 != null) chips.push(["30Y−10Y", +(y30 - y10).toFixed(3)]);
-      $("#us-curve-spread").innerHTML = chips.map(([k, v]) =>
-        `<span class="bond-sp ${v < 0 ? "neg" : ""}">${k} <b>${v >= 0 ? "+" : ""}${v.toFixed(3)}%p</b>${v < 0 ? " 역전" : ""}</span>`).join("")
-        + (chips.some(([, v]) => v < 0) ? `<span class="bond-warn">⚠ 역전 — 침체 신호</span>` : `<span class="sub-note">정상 우상향</span>`);
+// 만기별 수익률 막대 + 스프레드 — 선택 시장(kr/us) 기준
+function drawCurve() {
+  const isKr = curveMk === "kr";
+  const done = (curve, spreads, inverted, note, src) => {
+    if (!curve?.length) {
+      $("#bond-curve").innerHTML = `<p class="mini-note">데이터 없음</p>`;
+      $("#bond-spreads").innerHTML = ""; $("#bond-curve-note").textContent = "";
+      return;
     }
-    // 주요국 비교(장기·단기 가로 막대 + 스프레드)
+    $("#bond-curve-note").textContent = note;
+    $("#bond-curve-src").innerHTML = src;
+    $("#bond-spreads").innerHTML = Object.entries(spreads).map(([k, v]) =>
+      `<span class="bond-sp ${v < 0 ? "neg" : ""}">${k} <b>${v >= 0 ? "+" : ""}${v.toFixed(3)}%p</b>${v < 0 ? " 역전" : ""}</span>`).join("")
+      + (inverted ? `<span class="bond-warn">⚠ 장단기 금리 역전 — 경기침체 신호</span>`
+                  : `<span class="sub-note">정상 우상향 커브</span>`);
+    const ys = curve.map((c) => c.yield);
+    const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(0.001, hi - lo);
+    $("#bond-curve").innerHTML = curve.map((c) => {
+      const h = 24 + ((c.yield - lo) / span) * 76;
+      return `<div class="bond-bar"><span class="bond-val">${c.yield.toFixed(3)}</span>
+        <div class="bond-fill" style="height:${h}%"></div>
+        <span class="bond-lbl">${c.label}</span></div>`;
+    }).join("");
+  };
+  if (isKr) {
+    const b = TOSSM?.bonds || {};
+    done(b.curve, b.spreads || {}, b.inverted,
+      `(${TOSSM?.generated} 기준 · 만기별 수익률)`,
+      `출처: 토스증권 Open API · 장단기 스프레드가 <b>마이너스(역전)</b>면 경기침체 신호로 해석됩니다`);
+  } else {
+    loadSecMet().then((d) => {
+      if (curveMk !== "us") return;
+      const us = d?.us_curve || [];
+      const y = (n) => us.find((c) => c.years === n)?.yield;
+      const sp = {};
+      if (y(10) != null && y(0.25) != null) sp["10Y−3M"] = +(y(10) - y(0.25)).toFixed(3);
+      if (y(30) != null && y(10) != null) sp["30Y−10Y"] = +(y(30) - y(10)).toFixed(3);
+      done(us, sp, Object.values(sp).some((v) => v < 0),
+        `(${d?.generated} 기준 · 실시간 시장금리)`,
+        `출처: 야후 파이낸스(실시간) · 아래 <b>주요국 비교</b>는 ECOS <b>월평균</b>이라 값이 다를 수 있습니다`);
+    });
+  }
+}
+
+// 🌏 주요국 장·단기 금리 비교(ECOS 월평균 — 기준 월 명시)
+function renderGlobalRates() {
+  loadSecMet().then((d) => {
+    const gl = d?.global_rates || [];
+    // 기준 월: 시계열 마지막 라벨(예: 2026-06) — 실시간 커브와 값이 다른 이유를 명확히
+    const asof = gl.find((r) => r.long_series?.length)?.long_series?.slice(-1)[0]?.[0];
+    const noteEl = $("#global-rates-note");
+    if (noteEl) noteEl.textContent = `(${asof ? asof + " 월평균" : "월간"} · 한국은행 ECOS · 장기−단기)`;
     if (gl.length) {
       const maxR = Math.max(...gl.flatMap((r) => [r.long || 0, r.short || 0]), 1);
       $("#global-rates").innerHTML = gl.map((r) => {
@@ -4026,6 +4041,33 @@ function trSpark(weekly, d30, w, h) {
     <circle cx="${xs(pts.length - 1)}" cy="${ys(pts[pts.length - 1])}" r="2.5" fill="#f5445a"/></svg>`;
 }
 
+// 1·3개월 트렌드 변동 AI 큐레이션 — 헤드라인 + 부상/위축 테마 + 워치포인트
+function renderTrCuration(t) {
+  const host = $("#tr-curation");
+  const c = t?.curation;
+  if (!host) return;
+  if (!c || (!c.headline && !c.rising?.length)) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  const st = c.stats || {};
+  const card = (r, kind) => `<div class="trc-item ${kind}">
+    <div class="trc-theme">${kind === "up" ? "▲" : "▼"} ${esc(r.theme)}</div>
+    <div class="trc-why">${esc(r.why)}</div>
+    ${r.stocks ? `<div class="trc-stocks">관련: ${esc(r.stocks)}</div>` : ""}</div>`;
+  host.innerHTML = `<div class="card-flat trc-wrap">
+    <div class="trc-head"><b>🤖 이번 달 트렌드 큐레이션</b>
+      <span class="sub-note">1·3개월 검색·쇼핑 변동을 AI가 요약 · ${c.generated || t.generated}
+        ${st.arch_days ? ` · 누적 ${st.arch_days}일` : ""}</span></div>
+    ${c.headline ? `<p class="trc-headline">${esc(c.headline)}</p>` : ""}
+    <div class="trc-grid">
+      ${(c.rising || []).map((r) => card(r, "up")).join("")}
+      ${(c.fading || []).map((r) => card(r, "dn")).join("")}
+    </div>
+    ${c.watch ? `<p class="trc-watch">🔎 <b>주목</b> — ${esc(c.watch)}</p>` : ""}
+    <p class="sub-note" style="margin:6px 0 0">배율=최근 30일 ÷ 직전 구간 평균 · AI 요약은 참고용(투자 권유 아님)</p>
+  </div>`;
+}
+
 let trSrc = "naver", trBucket = "all";
 let trSetWlTs = () => {};   // 워치리스트 갱신시각 표기(소스 토글 시 네이버↔위키 전환)
 // 급등 구간(모집단=워치리스트 전체, r7 기준)
@@ -4086,6 +4128,9 @@ function renderTrends() {
       $("#tr-context").textContent = "trends.json 없음 — python analysis\\trend_radar.py 실행 필요";
       return;
     }
+    // 1·3개월 트렌드 변동 AI 큐레이션
+    renderTrCuration(t);
+
     // 섹션별 갱신 시점(소스별 실제 수집 시각) — 없으면 파일 생성시각 폴백
     const tsOf = (k) => t.ts?.[k] || t.generated;
     const tsTxt = (k) => { const v = tsOf(k); return v ? `${relTime(v)} 갱신 · ${v}` : ""; };

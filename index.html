@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=159">
-<script src="firebase-config.js?v=159"></script>
-<script src="js/auth.js?v=159"></script>
+<link rel="stylesheet" href="css/style.css?v=161">
+<script src="firebase-config.js?v=161"></script>
+<script src="js/auth.js?v=161"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -122,6 +122,8 @@
 
   <section id="tab-trends" class="panel">
     <div class="criteria" id="tr-context"></div>
+    <!-- 1·3개월 트렌드 변동 AI 큐레이션 (trends.json curation) -->
+    <div id="tr-curation" style="display:none"></div>
     <h2>🔥 오늘의 급상승 검색어 <span class="sub-note">(구글 트렌드 일간 · 관련주는 AI 추정 참고용)</span>
       <span class="tr-ts" id="tr-ts-google"></span>
       <span class="mk-toggle" style="margin-left:12px" id="tr-geo">
@@ -473,24 +475,22 @@
     <p class="sub-note" id="macro-context" style="margin:8px 0 0"></p>
 
     <div id="bond-curve-wrap" style="display:none;margin-top:28px">
-      <h2>📉 국고채 금리 커브 <span class="sub-note" id="bond-curve-note"></span></h2>
-      <div class="card-flat" style="padding:14px 16px">
-        <div id="bond-spreads" class="bond-spreads"></div>
-        <div id="bond-curve" class="bond-curve"></div>
-        <p class="sub-note" style="margin-top:8px">출처: 토스증권 Open API · 장단기 스프레드가 <b>마이너스(역전)</b>면 경기침체 신호로 해석됩니다</p>
-      </div>
-      <!-- 글로벌: 미국 만기별 커브 + 주요국 장단기 비교 (sector_metrics.json) -->
-      <div id="global-rates-wrap" style="display:none;margin-top:18px">
-        <div class="hld-agrid">
-          <div class="card-flat">
-            <h3 class="lk-h3">🇺🇸 미국 국채 커브 <span class="sub-note" id="us-curve-note"></span></h3>
-            <div id="us-curve" class="bond-curve"></div>
-            <div id="us-curve-spread" class="bond-spreads" style="margin-top:8px"></div>
-          </div>
-          <div class="card-flat">
-            <h3 class="lk-h3">🌏 주요국 금리 비교 <span class="sub-note">(장기−단기 · 한국은행 ECOS 월간)</span></h3>
-            <div id="global-rates"></div>
-          </div>
+      <div class="hld-agrid">
+        <!-- 국채 금리 커브 — 한국/미국 토글(한 영역) -->
+        <div class="card-flat">
+          <h3 class="lk-h3">📉 국채 금리 커브 <span class="sub-note" id="bond-curve-note"></span>
+            <span style="flex:1"></span>
+            <span class="mk-toggle" id="curve-mk">
+              <button data-m="kr" class="active">🇰🇷 한국</button>
+              <button data-m="us">🇺🇸 미국</button>
+            </span></h3>
+          <div id="bond-spreads" class="bond-spreads"></div>
+          <div id="bond-curve" class="bond-curve"></div>
+          <p class="sub-note" id="bond-curve-src" style="margin-top:8px"></p>
+        </div>
+        <div class="card-flat">
+          <h3 class="lk-h3">🌏 주요국 금리 비교 <span class="sub-note" id="global-rates-note"></span></h3>
+          <div id="global-rates"></div>
         </div>
       </div>
     </div>
@@ -846,6 +846,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=159"></script>
+<script src="js/app.js?v=161"></script>
 </body>
 </html>
