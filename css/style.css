@@ -21,6 +21,8 @@ body {
 header h1 { font-size: 1.5rem; }
 header .sub { font-size: 1rem; font-weight: 400; color: var(--muted); }
 .meta { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+/* 최하단으로 옮긴 데이터 출처·기준일 — footer 본문 크기에 맞추고 경고문과 띄움 */
+footer .meta { font-size: inherit; margin: 0 0 8px; line-height: 1.7; }
 
 /* 중분류(그룹) 토글 */
 .groups { display: flex; gap: 8px; margin-top: 16px; }
