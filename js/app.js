@@ -82,12 +82,12 @@ const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatma
 /* ---------- 소탭(통합 페이지) — nav에는 부모탭만, 자식은 섹션 상단 pill로 전환 ----------
    기존 섹션(id=tab-X)·렌더·딥링크는 그대로 두고 표시만 부모탭으로 묶는다. */
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
-  internals: [["internals", "시장 진단"], ["rotation", "섹터 로테이션"]],
+  // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
 };
-const PILL_PARENT = { rotation: "internals", calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings" };
+const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
 function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
@@ -106,7 +106,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 }
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
-const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "섹터 로테이션", news: "뉴스·딜",
+const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };

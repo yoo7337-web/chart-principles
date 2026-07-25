@@ -542,6 +542,19 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
    선택(.open) 시 폭이 변하면 칩이 줄바꿈으로 튄다(구 `:has(.open){flex:1 0 100%}` 제거) */
 .scr-toprow .scr-group { flex: 0 0 auto; }
 @media (max-width: 1000px) { .scr-toprow { grid-template-columns: 1fr; } }
+/* 트렌드 AI 큐레이션 */
+.trc-wrap { padding: 14px 16px; margin-bottom: 16px; border-left: 3px solid var(--accent); }
+.trc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.trc-headline { font-size: 1.02rem; font-weight: 700; margin: 8px 0 12px; line-height: 1.45; }
+.trc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.trc-item { border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; background: var(--card); }
+.trc-item.up { border-left: 3px solid #f5445a; } .trc-item.dn { border-left: 3px solid #4391ff; }
+.trc-theme { font-size: .88rem; font-weight: 700; margin-bottom: 3px; }
+.trc-item.up .trc-theme { color: #ff8c9a; } .trc-item.dn .trc-theme { color: #6ba7ff; }
+.trc-why { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+.trc-stocks { font-size: .76rem; margin-top: 4px; color: var(--ink); }
+.trc-watch { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: .84rem; line-height: 1.55; }
+
 /* 트렌드 섹션별 갱신 시각(작게) */
 .tr-ts { font-size: .72rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
 
