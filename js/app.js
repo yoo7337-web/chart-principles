@@ -6714,6 +6714,7 @@ async function pfRender() {
   pfMarketRender();  // 수급 컨텍스트는 보유 여부와 무관(토스 스냅샷 존재 시)
   if (!arr.length) {
     statsEl.style.display = "none";
+    const mx = $("#pf-matrix"); if (mx) mx.style.display = "none";
     listEl.innerHTML = `<div class="card-flat" style="text-align:center;padding:36px;color:var(--muted)">
       <b>보유 포트폴리오</b> 탭에서 종목을 입력하면 뉴스·수급·섹터 흐름·원칙 신호를 종합 점검합니다.<br>
       <span class="sub-note">파일 가져오기(토스 동기화)로 한 번에 불러올 수도 있습니다.</span></div>`;
@@ -6728,6 +6729,7 @@ async function pfRender() {
       .then((j) => pfStockCache.set(key, j));
   }));
   pfRenderStats(arr);
+  pfRenderMatrix(arr);   // 판정 근거 도표(매트릭스·점수 막대)
   pfRenderList(arr);
 }
 
@@ -6806,22 +6808,74 @@ function pfCheck(h) {
 
   let score = 0;
   const reasons = [];
-  if (recentSell.length) { score -= 2; reasons.push(`검증된 매도신호 ${recentSell.length}건(30일)`); }
-  if (rs && rs.rs_w1 < 0 && rs.rs_m1 < 0 && rs.rs_m3 < 0) { score -= 1; reasons.push("섹터가 전 기간 시장 대비 약세"); }
-  if (sup && sup.frgn_20 != null && sup.inst_20 != null && sup.frgn_20 < 0 && sup.inst_20 < 0) {
-    score -= 1; reasons.push("외국인·기관 20일 동반 순매도");
+  // checks: 감점된 항목뿐 아니라 **통과·제외 항목까지** 기록 → 판정 근거 전모를 스코어카드로 표시
+  const checks = [];
+  const eok = (v) => `${v > 0 ? "+" : ""}${Math.round(v).toLocaleString()}억`;
+
+  // ① 원칙 매도신호(30일, 현 국면 유효)
+  if (recentSell.length) {
+    score -= 2; reasons.push(`검증된 매도신호 ${recentSell.length}건(30일)`);
+    checks.push({ key: "sell", icon: "📉", name: "원칙 매도신호", pts: -2, ok: false,
+      detail: `30일 내 ${recentSell.length}건 (${[...new Set(recentSell.map((m) => RULE_ABBR[m.rule_id] || m.rule_id))].join("·")})` });
+  } else {
+    checks.push({ key: "sell", icon: "📉", name: "원칙 매도신호", pts: 0, ok: true, detail: "30일 내 없음" });
   }
-  if (p.rel_m1 != null && p.rel_m1 < -0.10) { score -= 1; reasons.push(`1개월 시장 대비 ${pct(p.rel_m1, 0)} 뒤처짐`); }
+  // ② 섹터 상대강도(RS)
+  if (!rs) {
+    checks.push({ key: "rs", icon: "🏭", name: "섹터 상대강도", pts: 0, na: true, detail: `${sector || "섹터"} 데이터 없음 — 판정 제외` });
+  } else if (rs.rs_w1 < 0 && rs.rs_m1 < 0 && rs.rs_m3 < 0) {
+    score -= 1; reasons.push("섹터가 전 기간 시장 대비 약세");
+    checks.push({ key: "rs", icon: "🏭", name: "섹터 상대강도", pts: -1, ok: false,
+      detail: `${sector} 1주 ${pct(rs.rs_w1, 1)}·1M ${pct(rs.rs_m1, 1)}·3M ${pct(rs.rs_m3, 1)} — 전 기간 약세` });
+  } else {
+    checks.push({ key: "rs", icon: "🏭", name: "섹터 상대강도", pts: 0, ok: true,
+      detail: `${sector} 1주 ${pct(rs.rs_w1, 1)}·1M ${pct(rs.rs_m1, 1)}·3M ${pct(rs.rs_m3, 1)}` });
+  }
+  // ③ 수급(외국인·기관 20일 누적) — 국내만
+  if (!sup || sup.frgn_20 == null || sup.inst_20 == null) {
+    checks.push({ key: "sup", icon: "💧", name: "수급(외인·기관)", pts: 0, na: true,
+      detail: h.mk === "us" ? "미국 종목 미지원 — 판정 제외" : "데이터 없음 — 판정 제외" });
+  } else if (sup.frgn_20 < 0 && sup.inst_20 < 0) {
+    score -= 1; reasons.push("외국인·기관 20일 동반 순매도");
+    checks.push({ key: "sup", icon: "💧", name: "수급(외인·기관)", pts: -1, ok: false,
+      detail: `20일 외국인 ${eok(sup.frgn_20)}·기관 ${eok(sup.inst_20)} — 동반 순매도` });
+  } else {
+    checks.push({ key: "sup", icon: "💧", name: "수급(외인·기관)", pts: 0, ok: true,
+      detail: `20일 외국인 ${eok(sup.frgn_20)}·기관 ${eok(sup.inst_20)}` });
+  }
+  // ④ 시장 대비 1개월 성과
+  if (p.rel_m1 == null) {
+    checks.push({ key: "rel", icon: "📊", name: "시장 대비(1M)", pts: 0, na: true, detail: "데이터 없음 — 판정 제외" });
+  } else if (p.rel_m1 < -0.10) {
+    score -= 1; reasons.push(`1개월 시장 대비 ${pct(p.rel_m1, 0)} 뒤처짐`);
+    checks.push({ key: "rel", icon: "📊", name: "시장 대비(1M)", pts: -1, ok: false,
+      detail: `${pct(p.rel_m1, 1)} 뒤처짐 (기준 -10%p)` });
+  } else {
+    checks.push({ key: "rel", icon: "📊", name: "시장 대비(1M)", pts: 0, ok: true, detail: `${pct(p.rel_m1, 1)}` });
+  }
+  // ⑤ 거래소 경고(정리매매·투자위험 -2 / 투자경고·단기과열 -1)
   const warns = tossActiveWarns(h.ticker);
+  let warnPts = 0;
+  const warnTxt = [];
   warns.forEach((w) => {
     const [label, , pen] = TOSS_WARN[w.type];
-    if (pen) { score += pen; reasons.push(`거래소 ${label} 지정${w.end ? `(~${w.end.slice(5)})` : ""}`); }
+    if (pen) {
+      score += pen; warnPts += pen;
+      reasons.push(`거래소 ${label} 지정${w.end ? `(~${w.end.slice(5)})` : ""}`);
+      warnTxt.push(`${label}${w.end ? `(~${w.end.slice(5)})` : ""}`);
+    }
   });
+  checks.push({ key: "warn", icon: "🚨", name: "거래소 경고", pts: warnPts, ok: warnPts === 0,
+    detail: warnPts ? warnTxt.join(" · ") : "지정 없음" });
+  // ⑥ 원칙 매수신호(참고 — 가점 없음)
+  checks.push({ key: "buy", icon: "📈", name: "원칙 매수신호", pts: 0, ok: true, info: true,
+    detail: recentBuy.length ? `30일 내 ${recentBuy.length}건 — 원칙상 우호적` : "30일 내 없음" });
+
   const toss = rich ? h : null;  // rich 항목이면 오늘손익·수수료 등을 그대로 사용
   const grade = score <= -3 ? "bad" : score < 0 ? "warn" : "good";
   const gradeTxt = grade === "bad" ? "🔴 논거 재점검" : grade === "warn" ? "🟡 점검 필요" : "🟢 흐름 양호";
   if (!reasons.length) reasons.push(recentBuy.length ? `매수신호 ${recentBuy.length}건(30일) — 원칙상 우호적` : "감점 요인 없음");
-  return { st, cur, nativeCur, rich, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons, warns, toss };
+  return { st, cur, nativeCur, rich, sector, rs, p, sup, cons, recentSell, recentBuy, grade, gradeTxt, reasons, checks, score, warns, toss };
 }
 
 function pfRenderStats(arr) {
@@ -6870,6 +6924,69 @@ function pfRenderStats(arr) {
     <div class="idx-card"><div class="sub-note">점검 결과</div>
       <div class="lk-name">${nBad ? `🔴 ${nBad}` : ""} ${nWarn ? `🟡 ${nWarn}` : ""} 🟢 ${arr.length - nBad - nWarn}</div>
       <div class="sub-note">${nBad ? "빨간 종목의 보유 논거부터 재점검" : nWarn ? "노란 종목 사유 확인" : "전 종목 흐름 양호"}</div></div>`;
+}
+
+// 판정 스코어카드 — 감점·통과·제외 항목을 전부 표로(근거 상세)
+function pfChecksTable(c) {
+  const rows = c.checks.map((k) => {
+    const res = k.na ? `<span class="pf-chk na">⚪ 제외</span>`
+      : k.info ? `<span class="pf-chk info">참고</span>`
+      : k.pts < 0 ? `<span class="pf-chk bad">🔴 감점</span>` : `<span class="pf-chk ok">🟢 통과</span>`;
+    return `<tr><td>${k.icon} ${k.name}</td><td>${res}</td><td class="pf-chk-d">${k.detail}</td>
+      <td class="pf-chk-p ${k.pts < 0 ? "neg" : ""}">${k.pts < 0 ? k.pts : "0"}</td></tr>`;
+  }).join("");
+  const rule = c.score <= -3 ? "-3점 이하 → 🔴" : c.score < 0 ? "-1~-2점 → 🟡" : "0점 → 🟢";
+  return `<div class="pf-checks"><table>
+    <thead><tr><th>판정 항목</th><th>결과</th><th>근거</th><th class="pf-chk-p">점수</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="2"><b>합계</b></td><td class="sub-note">${rule}</td>
+      <td class="pf-chk-p ${c.score < 0 ? "neg" : ""}"><b>${c.score}</b></td></tr></tfoot>
+  </table></div>`;
+}
+
+// 포트폴리오 레벨 도표 — 리스크 매트릭스(종목×항목) + 종목별 점검 점수 막대
+function pfRenderMatrix(arr) {
+  const el = $("#pf-matrix");
+  if (!el) return;
+  const rows = arr.map((h) => ({ h, c: pfCheck(h) }));
+  if (!rows.length) { el.style.display = "none"; return; }
+  el.style.display = "";
+  const cols = rows[0].c.checks.filter((k) => !k.info);   // 참고(매수신호) 열 제외
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  // 항목별 감점 종목 수(리스크 쏠림 파악)
+  const colBad = cols.map((_, ci) => rows.filter((r) => (r.c.checks.filter((k) => !k.info)[ci]?.pts || 0) < 0).length);
+
+  const head = `<tr><th class="pf-mx-name">종목</th>${cols.map((k) => `<th title="${esc(k.name)}">${k.icon}<br><span class="sub-note">${esc(k.name)}</span></th>`).join("")}<th>점수</th></tr>`;
+  const body = rows.map(({ h, c }) => {
+    const cells = c.checks.filter((k) => !k.info).map((k) =>
+      `<td class="${k.na ? "na" : k.pts < 0 ? "bad" : "ok"}" title="${esc(k.detail)}">${k.na ? "⚪" : k.pts < 0 ? `🔴${k.pts}` : "🟢"}</td>`).join("");
+    return `<tr data-key="${h.mk}_${h.ticker}"><td class="pf-mx-name"><b>${esc(h.name)}</b></td>${cells}
+      <td class="pf-chk-p ${c.score < 0 ? "neg" : ""}"><b>${c.score}</b></td></tr>`;
+  }).join("");
+  const foot = `<tr><td class="pf-mx-name sub-note">감점 종목 수</td>${colBad.map((n) =>
+    `<td class="sub-note">${n ? `<b class="neg">${n}</b>` : "0"}</td>`).join("")}<td></td></tr>`;
+
+  const sorted = rows.slice().sort((a, b) => a.c.score - b.c.score);
+  const bars = sorted.map(({ h, c }) => {
+    const w = Math.min(100, Math.abs(c.score) / 6 * 100);
+    const col = c.grade === "bad" ? "#f5445a" : c.grade === "warn" ? "#f0b34c" : "#22c07a";
+    return `<div class="pf-bar" data-key="${h.mk}_${h.ticker}">
+      <span class="pf-bar-n">${esc(h.name)}</span>
+      <div class="pf-bar-t"><span style="width:${w || 3}%;background:${col}"></span></div>
+      <b style="color:${col}">${c.score}</b></div>`;
+  }).join("");
+
+  el.innerHTML = `<div class="hld-agrid">
+    <div class="card-flat"><h3 class="lk-h3">🧭 리스크 매트릭스 <span class="sub-note">(종목 × 판정 항목 · 셀에 커서=근거)</span></h3>
+      <div class="fin-wrap"><table class="pf-matrix">${`<thead>${head}</thead>`}<tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div></div>
+    <div class="card-flat"><h3 class="lk-h3">📉 종목별 점검 점수 <span class="sub-note">(0=양호 · 낮을수록 재점검)</span></h3>
+      <div class="pf-bars">${bars}</div></div>
+  </div>`;
+  el.querySelectorAll(".pf-bar, .pf-matrix tbody tr").forEach((r) => r.onclick = () => {
+    const card = [...document.querySelectorAll("#pf-list .pf-card")]
+      .find((d) => d.querySelector(".pf-goto")?.dataset.key === r.dataset.key);
+    if (card) { card.open = true; card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  });
 }
 
 function pfRenderList(arr) {
@@ -6934,6 +7051,7 @@ function pfRenderList(arr) {
         <span class="pf-grade ${c.grade}">${c.gradeTxt}</span>
       </summary>
       <p class="pf-reason">${c.grade === "good" ? "✅" : "⚠"} ${c.reasons.join(" · ")}</p>
+      ${pfChecksTable(c)}
       ${rowsHtml}${feedHtml}
       <div style="margin-top:10px;display:flex;gap:14px">
         <a href="#" class="goto-lookup pf-goto" data-key="${key}">종목 조회에서 상세 분석 →</a>
