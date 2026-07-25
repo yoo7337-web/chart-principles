@@ -2511,25 +2511,37 @@ function buildScrSectors() {
     const selN = subs.filter(([nm]) => selHas(nm)).length;
     const cls = selN === 0 ? "" : (selN === subs.length ? "all" : "some");
     const open = scrOpenGroup === k;
-    const chips = subs.map(([nm, n]) =>
-      `<button class="scr-sub ${selHas(nm) ? "on" : ""}" data-sec="${nm.replace(/"/g, "&quot;")}">${nm}<span class="scr-subn"> ${n}</span></button>`).join("");
+    // 세부업종 칩은 그룹 안이 아니라 하단 전폭 행(#scr-sub-host)에 — 국내 밸류체인 단계와 동일한 UX
     return `<div class="scr-group">
-      <button class="scr-gchip ${cls} ${open ? "open" : ""}" data-gk="${k}"><span class="scr-gi">${g.icon}</span>${g.name}<span class="scr-gc">${grp.total}</span>${selN ? `<span class="scr-gsel">${selN}</span>` : ""} <span class="scr-gcaret">${open ? "▲" : "▾"}</span></button>
-      <div class="scr-subs" style="display:${open ? "flex" : "none"}">
-        <button class="scr-sub-all" data-gk="${k}">${selN === subs.length && selN > 0 ? "그룹 해제" : "그룹 전체"}</button>${chips}
-      </div></div>`;
+      <button class="scr-gchip ${cls} ${open ? "open" : ""}" data-gk="${k}"><span class="scr-gi">${g.icon}</span>${g.name}${selN ? `<span class="scr-gsel">${selN}</span>` : ""}</button>
+      </div>`;
   }).join("");
+
+  // ── 하단 전폭: 선택된 그룹의 세부업종 ──
+  const subHost = $("#scr-sub-host");
+  if (subHost) {
+    const g = metaMap[scrOpenGroup], grp = byG[scrOpenGroup];
+    subHost.innerHTML = (g && grp)
+      ? `<div class="scr-subs-wide">
+          <div class="scr-subs-head"><b>${g.icon} ${g.name}</b> <span class="sub-note">세부업종</span>
+            <button class="scr-sub-all" data-gk="${scrOpenGroup}">${grp.subs.every(([nm]) => selHas(nm)) && grp.subs.length ? "그룹 해제" : "그룹 전체"}</button></div>
+          <div class="scr-subs">${grp.subs.sort((a, b) => b[1] - a[1]).map(([nm, n]) =>
+            `<button class="scr-sub ${selHas(nm) ? "on" : ""}" data-sec="${nm.replace(/"/g, "&quot;")}">${nm}<span class="scr-subn"> ${n}</span></button>`).join("")}</div>
+        </div>`
+      : `<p class="mini-note">위에서 업종을 선택하면 세부업종이 표시됩니다.</p>`;
+  }
   host.querySelectorAll(".scr-gchip").forEach((b) => b.onclick = () => {
     scrOpenGroup = scrOpenGroup === b.dataset.gk ? null : b.dataset.gk; buildScrSectors();
   });
-  host.querySelectorAll(".scr-sub").forEach((b) => b.onclick = () => {
+  // 세부업종 칩은 하단 전폭 행에 있으므로 document 기준으로 바인딩
+  document.querySelectorAll("#scr-sub-host .scr-sub").forEach((b) => b.onclick = () => {
     const nm = b.dataset.sec;
     if (!scrState.sectors) scrState.sectors = new Set();
     if (scrState.sectors.has(nm)) scrState.sectors.delete(nm); else scrState.sectors.add(nm);
     if (!scrState.sectors.size) scrState.sectors = null;
     buildScrSectors(); renderScreener();
   });
-  host.querySelectorAll(".scr-sub-all").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("#scr-sub-host .scr-sub-all").forEach((b) => b.onclick = () => {
     const grp = byG[b.dataset.gk];
     if (!scrState.sectors) scrState.sectors = new Set();
     const all = grp.subs.every(([nm]) => scrState.sectors.has(nm));
@@ -3336,9 +3348,8 @@ function renderMacro() {
   if (!MARKET) { $("#macro-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   macroRendered = true;
   $("#macro-context").innerHTML =
-    `기준 시각 <b>${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신(클라우드 30분 주기) ·
-     카드 아래 줄 = 트레이더 관점 한 줄 · 카드 클릭 = 5년 차트 ·
-     <b>홈 상단 전광판은 실시간(TradingView)</b>이라 최대 30분 시차가 있을 수 있습니다`;
+    `${MARKET.generated} 기준 · ${relTime(MARKET.generated)} 갱신(30분 주기) · 카드 클릭 = 5년 차트 ·
+     홈 전광판은 실시간이라 최대 30분 시차`;
   const items = MARKET.macro.filter((m) => !MACRO_HIDE.has(m.id));
   $("#macro-cards").innerHTML = items.map((m) => {
     const up = m.chg >= 0;

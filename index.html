@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=156">
-<script src="firebase-config.js?v=156"></script>
-<script src="js/auth.js?v=156"></script>
+<link rel="stylesheet" href="css/style.css?v=157">
+<script src="firebase-config.js?v=157"></script>
+<script src="js/auth.js?v=157"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -271,7 +271,7 @@
         <button data-c="us">🇺🇸 미국</button>
       </span>
     </div>
-    <!-- 시장 선택 아래: 산업(업종·밸류체인)·테마 (전체폭) -->
+    <!-- 시장 선택 아래: [산업 선택 | 테마] 2열 → 그 아래 전폭으로 세부 항목(밸류체인 단계·미국 세부업종) -->
     <div class="card-flat scr-toprow">
       <div class="scr-frow scr-frow-top" id="scr-sector-row">
         <span class="scr-label">미국 업종</span>
@@ -290,11 +290,15 @@
           <span style="flex:1"></span>
           <button class="today-chart-btn" id="scr-chain-clear" style="display:none">해제</button></div>
         <div class="scr-chain-inds" id="scr-chain-inds"></div>
-        <div class="scr-chain-flow" id="scr-chain-flow"></div>
       </div>
       <div class="scr-themes-wrap">
         <div class="scr-themes-head">⭐ 테마 <span class="sub-note" id="scr-theme-desc"></span></div>
         <div class="scr-themes" id="scr-themes"></div>
+      </div>
+      <!-- 선택한 산업/업종의 세부 항목 — 항상 마지막 행 전폭(테마가 밀려나지 않게) -->
+      <div class="scr-detail-row" id="scr-detail-row">
+        <div class="scr-chain-flow" id="scr-chain-flow"></div>
+        <div id="scr-sub-host"></div>
       </div>
     </div>
 
@@ -464,9 +468,9 @@
   </section>
 
   <section id="tab-macro" class="panel">
-    <h2>🌐 매크로·지표 <span class="sub-note">(반도체·VIX·금리·환율·원자재·IPO — 60일 스파크 · 카드 클릭 = 5년 차트)</span></h2>
-    <div class="criteria" id="macro-context"></div>
+    <!-- 제목·안내 제거 — 바로 지표 카드(갱신 시각은 카드 아래 한 줄로) -->
     <div id="macro-cards" class="cards macro"></div>
+    <p class="sub-note" id="macro-context" style="margin:8px 0 0"></p>
 
     <div id="bond-curve-wrap" style="display:none;margin-top:28px">
       <h2>📉 국고채 금리 커브 <span class="sub-note" id="bond-curve-note"></span></h2>
@@ -842,6 +846,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=156"></script>
+<script src="js/app.js?v=157"></script>
 </body>
 </html>

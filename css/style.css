@@ -519,10 +519,17 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-toprow .scr-chain-head, .scr-toprow .scr-themes-head, .scr-toprow .scr-sec-actions {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: 0 0 10px; min-height: 26px; font-size: .92rem; }
-/* 산업을 선택해 단계(.scr-stage)가 펼쳐지면 밸류체인 카드가 전폭 사용(단계가 좌측 절반에 갇히지 않게).
-   :has()로 단계 존재를 감지 — 미선택 시엔 테마와 나란히 2열 유지. */
-.scr-toprow .scr-chain:has(.scr-stage) { grid-column: 1 / -1; }
-.scr-toprow .scr-chain:has(.scr-stage) .scr-chain-flow { justify-content: flex-start; }
+/* 선택한 산업/업종의 세부 항목 — 항상 마지막 행 전폭(테마 위치가 흔들리지 않음) */
+.scr-detail-row { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 2px; }
+.scr-detail-row:empty, .scr-detail-row > :empty { display: none; }
+.scr-subs-wide { margin-top: 4px; }
+.scr-subs-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .9rem; }
+/* 미국 업종 칩 = 국내 밸류체인 산업 칩과 동일 디자인(숫자 배지 없이 깔끔하게) */
+.scr-toprow .scr-gchip { font-size: .86rem; font-weight: 600; padding: 7px 13px; gap: 5px;
+  border-radius: 999px; background: var(--bg); }
+.scr-toprow .scr-gchip .scr-gi { font-size: 1rem; }
+.scr-toprow .scr-gchip .scr-gc, .scr-toprow .scr-gchip .scr-gcaret { display: none; }
+.scr-toprow .scr-gchip.open, .scr-toprow .scr-gchip.all { background: #e7e7ec; border-color: #e7e7ec; color: #17171c; }
 
 /* 업종 그룹: 우측 좁은 레일 시절의 세로 스택(flex-direction:column)을 상단 넓은 영역에선 가로 흐름으로.
    실제 자식은 .scr-group(칩+세부업종 래퍼) — 이 단위로 wrap, 펼쳐진 그룹만 전폭 차지 */
