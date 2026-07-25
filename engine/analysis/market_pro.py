@@ -249,17 +249,59 @@ def sector_rotation(data: dict) -> dict:
         last, prev = C.iloc[-1], C.iloc[-2]
         ma20_last = C.rolling(20).mean().iloc[-1]
         hi52_max = C.iloc[-252:].max()
-        by_sec = {}
+        # ⚠분류 기준은 **주식찾기와 동일한 12산업군**(industry_map). 원천 업종은 그 안의 세부로만 쓴다.
+        #   (예전엔 산업 진단만 원천 업종 77개를 써서 주식찾기와 산업이 어긋났다)
+        from industry_map import group_of, name as gname
+        comp_ind = {}
+        try:
+            cj = json.loads((APP_DATA / "company.json").read_text(encoding="utf-8"))
+            cm = cj.get("map") or cj
+            comp_ind = {k: (v or {}).get("industry") for k, v in cm.items()}
+        except Exception:
+            pass
+        by_sec, by_grp, grp_sec = {}, {}, {}
         for tk in C.columns:
             sec = smap.get(f"{mk}_{tk}", {}).get("sector", "기타")
             if mk == "us":
                 sec = US_KO.get(sec, sec)
             by_sec.setdefault(sec, []).append(tk)
+            g = group_of(mk, sec, comp_ind.get(f"{mk}_{tk}"), tk)
+            by_grp.setdefault(g, []).append(tk)
+            grp_sec.setdefault(g, {}).setdefault(sec, 0)
+            grp_sec[g][sec] += 1
+
+        def metrics(tks: list) -> dict:
+            rec = {"n": len(tks)}
+            w = pd.Series({t: weights.get(t, 0) for t in tks})
+            if w.sum() <= 0:
+                w[:] = 1
+            for label, nd in (("w1", 5), ("m1", 21), ("m3", 63)):
+                r = (C[tks].iloc[-1] / C[tks].iloc[-1 - nd] - 1).fillna(0)
+                sr = float((r * w).sum() / w.sum())
+                rec[label] = round(sr, 4)
+                rec[f"rs_{label}"] = round(sr - mkt_ret[label], 4)
+            rec["up"] = round(float((last[tks] > prev[tks]).mean() * 100))
+            rec["ma20"] = round(float((last[tks] > ma20_last[tks]).mean() * 100))
+            rec["hi52"] = int((last[tks] >= hi52_max[tks] * 0.999).sum())
+            rec["mcap"] = float(sum(weights.get(t, 0) for t in tks))
+            return rec
+
+        groups = []
+        for g, tks in by_grp.items():
+            if len(tks) < 2:
+                continue
+            subs = sorted(grp_sec[g].items(), key=lambda x: -x[1])
+            groups.append({"grp": g, "name": gname(g) if g != "etc" else "기타",
+                           "subs": [s for s, _ in subs[:8]], **metrics(tks)})
+        groups.sort(key=lambda x: -x["mcap"])
+
         recs = []
         for sec, tks in by_sec.items():
             if len(tks) < 2:
                 continue
-            rec = {"sector": sec, "n": len(tks)}
+            rec = {"sector": sec, "n": len(tks),
+                   "grp": group_of(mk, sec, None, None) if mk == "kr"
+                          else group_of(mk, sec, comp_ind.get(f"{mk}_{tks[0]}"), tks[0])}
             w = pd.Series({t: weights.get(t, 0) for t in tks})
             if w.sum() <= 0:
                 w[:] = 1
@@ -274,7 +316,8 @@ def sector_rotation(data: dict) -> dict:
             rec["hi52"] = int((last[tks] >= hi52_max[tks] * 0.999).sum())
             recs.append(rec)
         recs.sort(key=lambda x: -x["rs_m1"])
-        out[mk] = {"sectors": recs, "market": {k: round(v, 4) for k, v in mkt_ret.items()}}
+        out[mk] = {"groups": groups, "sectors": recs,
+                   "market": {k: round(v, 4) for k, v in mkt_ret.items()}}
     return out
 
 
