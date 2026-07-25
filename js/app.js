@@ -1653,6 +1653,8 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v169", "2026-07-25", "실적 vs 주가 괴리 테마 2종", "💎실적↑주가↓(저평가 후보)·🎈실적↓주가↑(고평가 경계) 신설. 실적=최근 분기 vs 전년 동분기 매출·영업이익 + TTM FCF마진 변화, 주가=6·12개월 절대+시장대비 4종 백분위. 백분위는 시장별로 산출(통합 시 KR/US 지수 등락차가 선별을 지배). 연간재무 10년 검증(4,019관측): 저평가는 12개월 뒤 중앙값 +5.8%·승률 58%, 고평가는 −6.5%·43.7%로 방향은 맞으나 표본(134·142<300)·유의성 부족 → '부분 검증' 표기. 소액매출·적자기업 오탐 차단 게이트 추가."],
+  ["v166", "2026-07-25", "테마 말풍선 + 트렌드 탭 이동", "기술적 테마에 마우스를 올리면 패턴의 의미·판정 기준·10년 검증 수치(한국/미국 각각)·탈락 사유를 말풍선으로 표시. 🔥트렌드를 종목 찾기 → 시장 보기로 이동."],
   ["v164", "2026-07-25", "기술적 테마 8종(10년 검증) + 산업지표 팝업", "차트 패턴 8개를 원칙과 같은 잣대로 10년 검증(1,249종목·23.5만 이벤트) 후 주식찾기 테마로 추가 — 칩에 20일 초과수익·표본 병기. 통과 4종(플래그 +2.38%p·V반등 +1.36%p·신고가눌림 +0.80%p·추세선돌파 +0.26%p) / 미통과 4종(신고가·삼각수렴·컵핸들·박스저항)은 ⚠ 표시와 각주로 '근거 약함' 명시. 산업지표 %를 3개월 전 대비로 통일하고 카드 클릭 시 의미·5년 차트 팝업."],
   ["v158", "2026-07-25", "종목 프로파일 그래프 재설계", "기간 수익률을 한 줄 통합(막대=절대·점=시장대비), 베타·변동성 게이지, 수급 좌우 대비 막대 — 좁은 레일에서 직관적으로."],
   ["v156", "2026-07-25", "글로벌 금리커브", "미국 국채 만기별 커브(3M·5Y·10Y·30Y 실시간) + 주요국 6개국 장·단기 금리 비교(ECOS). 매크로 탭 하단."],
@@ -2643,7 +2645,7 @@ function techTipHtml(p, n) {
 
 function renderScrTech() {
   const host = $("#scr-tech"); if (!host) return;
-  loadTechPat().then((d) => {
+  Promise.all([loadTechPat(), loadGap()]).then(([d]) => {
     const pats = d?.patterns || [], cur = d?.current || {};
     if (!pats.length) { host.innerHTML = ""; return; }
     // 스캔 대상은 화면 유니버스·선택 국가보다 넓음 — 실제로 표에 뜰 종목 수만 배지에 표시
@@ -2658,12 +2660,28 @@ function renderScrTech() {
         <span class="tech-n">${n}</span>${weak ? `<span class="tech-warn">⚠</span>` : ""}</button>`;
     };
     const passed = pats.filter((p) => p.passed), failed = pats.filter((p) => !p.passed);
+    // 💰 실적 vs 주가 괴리 — 별도 데이터(valuation_gap.json), 없으면 구획 자체를 숨김
+    const gapChip = (id) => {
+      const D = GAP_DEF[id];
+      const n = ((id === "gap_under" ? GAPD.undervalued : GAPD.overvalued) || [])
+        .filter((k) => k.startsWith(scrState.country + "_")).length;
+      const b = GAPD.backtest?.[D.side] || {};
+      const med = b.med == null ? "-" : `${b.med >= 0 ? "+" : ""}${(b.med * 100).toFixed(1)}%`;
+      return `<button class="scr-theme tech weak ${scrTechActive === id ? "on" : ""} ${n ? "" : "none"}"
+        data-id="${id}">${D.icon} ${D.name}
+        <span class="tech-edge">${med}</span><span class="tech-n">${n}</span><span class="tech-warn">⚠</span></button>`;
+    };
+    const gapHtml = GAPD ? `<div class="scr-themes-head" style="margin-top:10px">💰 실적 vs 주가
+        <span class="sub-note">분기 실적(전년 동기 대비)과 주가의 괴리 · 12개월 뒤 성적은 중앙값</span></div>
+      <div class="scr-themes">${["gap_under", "gap_over"].map(gapChip).join("")}</div>` : "";
     host.innerHTML = `<div class="scr-themes-head">📊 기술적 테마
         <span class="sub-note">최근 5일 발생 · 10년 검증(초과수익=20일 시장 대비)</span></div>
       <div class="scr-themes">${passed.map(chip).join("")}</div>
-      ${failed.length ? `<div class="scr-themes" style="margin-top:5px">${failed.map(chip).join("")}</div>
-        <p class="sub-note tech-foot">⚠ 표시 = <b>검증 미통과</b>(초과수익이 음수이거나 한·미 방향 불일치·통계 유의성 부족).
-          널리 쓰이는 패턴이라 제공하지만 <b>근거가 약하니 참고만</b> 하세요.</p>` : ""}`;
+      ${failed.length ? `<div class="scr-themes" style="margin-top:5px">${failed.map(chip).join("")}</div>` : ""}
+      ${gapHtml}
+      <p class="sub-note tech-foot">⚠ 표시 = <b>검증 미통과·부분 검증</b>(초과수익 음수 / 한·미 방향 불일치 /
+        표본·통계 유의성 부족). 널리 쓰이는 기준이라 제공하지만 <b>근거가 약하니 참고만</b> 하세요.
+        각 항목에 마우스를 올리면 의미와 검증 수치가 나옵니다.</p>`;
     const byId = Object.fromEntries(pats.map((p) => [p.id, p]));
     let tip = $("#tech-tip");
     if (!tip) { tip = document.createElement("div"); tip.id = "tech-tip"; document.body.appendChild(tip); }
@@ -2676,8 +2694,15 @@ function renderScrTech() {
       };
       // 말풍선: 패턴의 의미 + 판정 기준 + 10년 검증 수치(통과/탈락 사유)
       b.onmouseenter = () => {
-        const p = byId[b.dataset.id]; if (!p) return;
-        tip.innerHTML = techTipHtml(p, (cur[p.id] || []).filter((k) => pool.has(k)).length);
+        const id = b.dataset.id;
+        if (id.startsWith("gap_")) {
+          const n = ((id === "gap_under" ? GAPD.undervalued : GAPD.overvalued) || [])
+            .filter((k) => k.startsWith(scrState.country + "_")).length;
+          tip.innerHTML = gapTipHtml(id, n);
+        } else {
+          const p = byId[id]; if (!p) return;
+          tip.innerHTML = techTipHtml(p, (cur[p.id] || []).filter((k) => pool.has(k)).length);
+        }
         tip.style.display = "block";
         const r = b.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
         tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - tw - 12)) + "px";
@@ -2688,11 +2713,53 @@ function renderScrTech() {
     });
   });
 }
-// 기술 패턴 필터 통과 여부(선택 없으면 전부 통과)
+// 기술 패턴 / 괴리 테마 필터 통과 여부(선택 없으면 전부 통과)
 function scrTechPass(t) {
   if (!scrTechActive) return true;
-  const list = TECHPAT?.current?.[scrTechActive] || [];
-  return list.includes(`${t.m}_${t.t}`);
+  const key = `${t.m}_${t.t}`;
+  if (scrTechActive.startsWith("gap_")) {
+    const list = (scrTechActive === "gap_under" ? GAPD?.undervalued : GAPD?.overvalued) || [];
+    return list.includes(key);
+  }
+  return (TECHPAT?.current?.[scrTechActive] || []).includes(key);
+}
+
+/* ── 💰 실적 vs 주가 괴리 테마 (valuation_gap.json) ── */
+let GAPD = null, gapLoading = null;
+function loadGap() {
+  if (GAPD) return Promise.resolve(GAPD);
+  if (gapLoading) return gapLoading;
+  gapLoading = fetch("data/valuation_gap.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { GAPD = j; return j; }).catch(() => null);
+  return gapLoading;
+}
+const GAP_DEF = {
+  gap_under: { icon: "💎", name: "실적↑ 주가↓", side: "under",
+    mean: "매출·영업이익이 <b>전년 동기보다 늘고</b> FCF 마진까지 좋아졌는데, 주가는 오히려 뒤처진 종목. 시장이 아직 실적 개선을 반영하지 않았다면 기회지만, <b>시장이 이미 아는 악재</b>(수주 절벽·규제·업황 꺾임)를 선반영 중일 수도 있어 '왜 안 오르는지'를 반드시 따로 확인해야 합니다.",
+    cond: "펀더멘털 상위 30% · 주가 하위 30% · 괴리 40p↑ · TTM 영업흑자" },
+  gap_over: { icon: "🎈", name: "실적↓ 주가↑", side: "over",
+    mean: "매출·영업이익이 <b>전년 동기보다 줄었는데</b> 주가는 크게 오른 종목. 미래 기대(신사업·업황 반등)를 선반영한 것일 수도, 실적이 못 따라오는 과열일 수도 있습니다. <b>보유 중이라면 기대가 실적으로 확인되는지</b> 점검하는 용도로 보세요.",
+    cond: "펀더멘털 하위 30% · 주가 상위 30% · 괴리 −40p↓" },
+};
+function gapTipHtml(id, n) {
+  const D = GAP_DEF[id], b = GAPD?.backtest?.[D.side] || {};
+  const pct = (v) => (v == null ? "-" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%");
+  const fail = [!b.pass_n && `표본 부족(${b.n}건 < 300)`, !b.pass_halves && "전·후반 기간 불안정",
+                !b.pass_markets && "한·미 방향 불일치", !b.pass_p && "통계 유의성 부족"].filter(Boolean).join(" · ");
+  return `<div class="tt-h">${D.icon} ${D.name}<span class="tt-bad">⚠ 부분 검증</span></div>
+    <p class="tt-mean">${D.mean}</p>
+    <div class="tt-cond"><b>선정 기준</b> ${D.cond}<br>
+      실적 = 최근 분기 vs <b>전년 동분기</b>(매출·영업이익) + TTM FCF 마진 변화 ·
+      주가 = 6개월·12개월 <b>절대 + 시장 대비</b> 4종 백분위 평균</div>
+    <table class="tt-tb"><tr><td>이후 12개월</td><td class="${b.med >= 0 ? "tt-p" : "tt-n"}">${pct(b.med)}</td>
+        <td>승률</td><td>${b.win == null ? "-" : (b.win * 100).toFixed(1) + "%"}</td></tr>
+      <tr><td>전반 / 후반</td><td colspan="3">${pct(b.h1)} / ${pct(b.h2)}</td></tr>
+      <tr><td>한국 / 미국</td><td colspan="3">${pct(b.kr)} / ${pct(b.us)}</td></tr>
+      <tr><td>표본</td><td>${(b.n || 0).toLocaleString()}건</td>
+        <td>부호검정</td><td>p=${(b.p ?? 0).toFixed(3)}</td></tr></table>
+    <div class="tt-foot"><b>한계: ${fail || "-"}</b> — 방향은 10년 데이터에서 맞았지만
+      (연간 재무 2017~2024년 기준) 표본이 적어 <b>확정 근거로 보기엔 약합니다</b>. 현재 ${n}종목.
+      <br>수치는 <b>중앙값</b> 기준 — 12개월 수익률은 꼬리가 두꺼워 평균은 소수 급등주에 좌우됩니다.</div>`;
 }
 
 // 세부 지표 필터 UI (카테고리별 접이식 · 버킷 칩)
