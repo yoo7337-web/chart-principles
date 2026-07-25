@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=148">
-<script src="firebase-config.js?v=148"></script>
-<script src="js/auth.js?v=148"></script>
+<link rel="stylesheet" href="css/style.css?v=151">
+<script src="firebase-config.js?v=151"></script>
+<script src="js/auth.js?v=151"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -21,8 +21,9 @@
   <button class="group" data-group="discover">🔍 종목 찾기</button>
   <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
+  <!-- 관리자 전용(yoo7337@gmail.com) — 그룹 메뉴 라인 오른쪽 끝 -->
+  <button class="group admin-group" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠 개발일지</button>
 </nav>
-<button class="admin-icon" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠</button>
 
 <nav class="tabs" data-group-tabs="research" style="display:none">
   <button class="tab" data-tab="rank">원칙</button>
@@ -362,7 +363,8 @@
       </div>
     </div>
     <!-- 자체 데이터 기반 지수 티커 (TV 로딩 실패 시 폴백, 30분 갱신) -->
-    <div id="macro-ticker" class="macro-ticker"></div>
+    <!-- TV 티커 실패 시에만 노출되는 폴백(기본 숨김 — 로딩 중 잠깐 보이던 중복 티커 방지) -->
+    <div id="macro-ticker" class="macro-ticker" style="display:none"></div>
 
     <div class="home-topbar">
       <div class="mk-toggle" id="home-mk">
@@ -823,6 +825,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=148"></script>
+<script src="js/app.js?v=151"></script>
 </body>
 </html>

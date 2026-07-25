@@ -420,20 +420,28 @@ function ruleTable(rows, withReason) {
   return head + body;
 }
 
-function renderRank() {
-  rankRendered = true;
-  if (!regimeRendered) renderRegime();  // 국면별 원칙(흡수 섹션)
+/* 데이터 출처·기준일 — 최하단 footer(#meta). 특정 탭이 아니라 사이트 전역 정보라
+   부팅 시 1회 채운다(예전엔 헤더에 있고 원칙 탭 렌더 때만 채워졌음). */
+function renderMetaFooter() {
+  const el = $("#meta");
+  if (!el || !DATA?.meta) return;
   const m = DATA.meta;
   const nextRevalidate = (() => {
     const d = new Date(DATA.generated);
     d.setDate(d.getDate() + 90);
     return d.toISOString().slice(0, 10);
   })();
-  $("#meta").innerHTML =
+  el.innerHTML =
     `한국 ${m.n_kr}종목 + 미국 ${m.n_us}종목 · ${m.period} 일봉 · 신호 표본 ${m.n_events.toLocaleString()}건<br>
      원칙 기준일 <b>${DATA.generated}</b> · 다음 재검증 가능일 <b>${nextRevalidate}</b>
      <span title="재검증(update_rules.py)은 90일 텀 — 잦은 재검증은 과최적화. 재검증 시 사례차트·2026적용·국면별원칙 탭도 함께 갱신됨">ⓘ 90일 텀</span>
      · 오늘의 신호는 매일 07:40 자동 갱신`;
+}
+
+function renderRank() {
+  rankRendered = true;
+  if (!regimeRendered) renderRegime();  // 국면별 원칙(흡수 섹션)
+  const m = DATA.meta;
   $("#criteria").innerHTML =
     `<b>edge(우위)</b> = 신호 후 20영업일 수익률이 같은 시장·기간 '아무 날' 평균 대비 유리한 정도
      (매도원칙은 '팔았더니 평균보다 더 빠졌다'가 성공) · <b>생존 조건</b>: ${m.criteria}`;
@@ -2819,11 +2827,11 @@ function relTime(genStr) {
 function watchTvTicker() {
   const tv = $("#tv-ticker");
   if (!tv) return;
+  // 폴백 티커는 기본 숨김(HTML) — TV가 실패했을 때만 켠다(반대로 하면 로딩 6초간 둘 다 보임)
   setTimeout(() => {
     const frame = tv.querySelector("iframe");
     const ok = frame && frame.clientHeight > 10;
-    if (ok) { $("#macro-ticker").style.display = "none"; }
-    else tv.style.display = "none";
+    if (!ok) { tv.style.display = "none"; $("#macro-ticker").style.display = ""; }
   }, 6000);
 }
 
@@ -3039,10 +3047,10 @@ function renderInvestor() {
       const yv = yS(v), up = v >= 0;
       bars += `<rect x="${x}" y="${Math.min(yv, y0)}" width="${bw}" height="${Math.max(1, Math.abs(yv - y0))}" fill="${c}" rx="1.5"/>`
         // 금액 라벨(막대 끝) — 순매수=위, 순매도=아래
-        + `<text x="${x + bw / 2}" y="${up ? yv - 3 : yv + 9}" font-size="7.5" text-anchor="middle" fill="${c}">${fmtEok(v)}</text>`;
+        + `<text x="${x + bw / 2}" y="${up ? yv - 5 : yv + 13}" font-size="11" font-weight="600" text-anchor="middle" fill="${c}">${fmtEok(v)}</text>`;
     });
     const lab = invPeriod === "month" ? r.d.slice(2) : r.d.slice(5);
-    labels += `<text x="${cx}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${lab}</text>`;
+    labels += `<text x="${cx}" y="${H - 8}" font-size="12.5" text-anchor="middle" fill="#8b8b93">${lab}</text>`;
   });
   const zero = `<line x1="${padL}" y1="${y0}" x2="${W - padR}" y2="${y0}" stroke="#3a3a44"/>`;
   const legend = keys.map(([, lab, c]) => `<span style="color:${c}">■</span> ${lab}`).join("  ");
@@ -3117,7 +3125,7 @@ function rankRows(cat) {
     return g?.rows ? { src: "toss", rows: g.rows } : null;
   }
   if (cat === "frgn_buy" || cat === "frgn_sell") {
-    if (homeMk !== "kr") return null;  // 외국인 순매수 랭킹은 국내만(네이버)
+    if (homeMk !== "kr") return null;  // 외국인 순매수 랭킹은 국내만(자체 수급 집계)
     const arr = INVESTOR?.rank?.[cat === "frgn_buy" ? "foreign_buy" : "foreign_sell"];
     return arr?.length ? { src: "investor", rows: arr.map((r, i) => ({
       t: r.code, name: r.name, last: r.last, chg: null, rank: i + 1,
@@ -3144,7 +3152,7 @@ function renderRankings() {
   if (g.src === "movers") {
     $("#rank-note").innerHTML = `(거래소 30분 갱신 · ${relTime(MARKET.generated)})`;
   } else if (g.src === "investor") {
-    $("#rank-note").innerHTML = `(네이버 · 외국인 ${rankCat === "frgn_buy" ? "순매수" : "순매도"} 상위 · ${INVESTOR.generated ? relTime(INVESTOR.generated) : ""})`;
+    $("#rank-note").innerHTML = `(외국인 20일 누적 ${rankCat === "frgn_buy" ? "순매수" : "순매도"} 상위 · 억원 · ${INVESTOR.generated ? relTime(INVESTOR.generated) : ""})`;
   } else {
     const ageH = TOSSM.generated
       ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
@@ -3162,7 +3170,10 @@ function renderRankings() {
   $("#rank-list").innerHTML = g.rows.map((r) => {
     const up = (r.chg ?? 0) >= 0;
     const sub = r.dir
-      ? `외국인 ${r.dir === "buy" ? "순매수" : "순매도"}${r.netbuy != null ? " " + fmtMcap(Math.abs(r.netbuy) * 1e6, "kr") : ""}`
+      // netbuy 단위=억원(자체 수급 집계). 1조 이상만 '조' 표기 — fmtMcap(원 단위)에 넣으면 자릿수가 어긋남
+      ? `외국인 ${r.dir === "buy" ? "순매수" : "순매도"}${r.netbuy != null
+          ? " " + (Math.abs(r.netbuy) >= 10000 ? (Math.abs(r.netbuy) / 10000).toFixed(1) + "조원"
+                                               : Math.round(Math.abs(r.netbuy)).toLocaleString() + "억원") : ""}`
       : rankCat === "volume"
       ? `거래량 ${(r.volume || 0).toLocaleString()}주`
       : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
@@ -4464,6 +4475,96 @@ function drawRotation() {
     tr.addEventListener("click", () => toggleRotMembers(tr, tr.dataset.sector, mk)));
 }
 
+/* ---------- 섹터 산업지표 (sector_metrics.json — ECOS·야후 프록시·재무집계) ---------- */
+let SECMET = null, secMetLoading = null;
+function loadSecMet() {
+  if (SECMET) return Promise.resolve(SECMET);
+  if (secMetLoading) return secMetLoading;
+  secMetLoading = fetch("data/sector_metrics.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { SECMET = j; return j; }).catch(() => null);
+  return secMetLoading;
+}
+
+// 미니 라인차트(시계열 [[label,value],...]) — 최근값·기간변화 배지 포함
+function secSpark(series, name, unit, src) {
+  if (!series || series.length < 4) return "";
+  const vals = series.map((d) => d[1]);
+  const W = 300, H = 74, padT = 16, padB = 14;
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const xS = (i) => (i / (vals.length - 1)) * W;
+  const yS = (v) => padT + (max - v) / (max - min || 1) * (H - padT - padB);
+  const last = vals[vals.length - 1], first = vals[0];
+  const chg = first ? (last / first - 1) * 100 : 0;
+  const line = vals.map((v, i) => `${xS(i).toFixed(1)},${yS(v).toFixed(1)}`).join(" ");
+  const area = `${line} ${W},${H} 0,${H}`;
+  const col = chg >= 0 ? "#f5445a" : "#4391ff";
+  const fmt = (v) => v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(v >= 100 ? 0 : 2);
+  return `<div class="sm-card">
+    <div class="sm-head"><b>${name}</b><span class="sm-last">${fmt(last)}${unit}</span></div>
+    <div class="sm-sub"><span class="${chg >= 0 ? "pos" : "neg"}">${chg >= 0 ? "+" : ""}${chg.toFixed(1)}%</span>
+      <span class="sub-note">${series[0][0]} → ${series[series.length - 1][0]} · ${src}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" class="sm-svg" preserveAspectRatio="none">
+      <polygon points="${area}" fill="${col}" opacity=".10"/>
+      <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.8"/>
+      <circle cx="${xS(vals.length - 1)}" cy="${yS(last)}" r="2.6" fill="${col}"/></svg></div>`;
+}
+
+// 섹터 펀더멘털(합산 CAPEX·매출·영업이익률) 막대+라인
+function secFundChart(rows) {
+  if (!rows || rows.length < 2) return `<p class="mini-note">이 산업군의 재무 집계 데이터가 없습니다.</p>`;
+  const W = 620, H = 190, padL = 8, padR = 8, padT = 26, padB = 26;
+  const n = rows.length, gw = (W - padL - padR) / n, plot = H - padT - padB;
+  const maxV = Math.max(...rows.flatMap((r) => [r.rev, r.capex]), 1);
+  const yS = (v) => padT + (1 - v / maxV) * plot;
+  const eok = (v) => v >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString();
+  let bars = "", labels = "";
+  rows.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(26, gw / 3);
+    [[r.rev, "#4391ff", -0.55], [r.capex, "#f0b34c", 0.55]].forEach(([v, c, off]) => {
+      if (!v) return;
+      const y = yS(v);
+      bars += `<rect x="${cx + off * bw - bw / 2}" y="${y}" width="${bw}" height="${Math.max(1, H - padB - y)}" fill="${c}" rx="1.5"/>`;
+    });
+    bars += `<text x="${cx}" y="${yS(r.rev) - 4}" font-size="8.5" text-anchor="middle" fill="#4391ff">${eok(r.rev)}</text>`;
+    labels += `<text x="${cx}" y="${H - 8}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.y}</text>`;
+  });
+  // 영업이익률 라인(우축 개념 — 상단 40% 영역)
+  const oms = rows.map((r) => r.opm).filter((v) => v != null);
+  let lineSvg = "";
+  if (oms.length > 1) {
+    const oMax = Math.max(...oms, 1), oMin = Math.min(...oms, 0);
+    const yO = (v) => padT + (oMax - v) / (oMax - oMin || 1) * plot * 0.45;
+    const pts = rows.map((r, i) => r.opm == null ? null : [padL + gw * i + gw / 2, yO(r.opm), r.opm]).filter(Boolean);
+    lineSvg = `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
+      fill="none" stroke="#22c07a" stroke-width="1.8"/>` +
+      pts.map((p) => `<text x="${p[0]}" y="${p[1] - 5}" font-size="8" text-anchor="middle" fill="#22c07a">${p[2].toFixed(1)}%</text>`).join("");
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${lineSvg}${labels}</svg>
+    <p class="legend"><span style="color:#4391ff">■</span> 합산 매출 <span style="color:#f0b34c">■</span> 합산 CAPEX
+      <span style="color:#22c07a">─</span> 영업이익률 <span class="sub-note">· 단위 억원 · 우리 DART 집계(${rows[rows.length - 1].n}개사)</span></p>`;
+}
+
+function secMetricsHtml(sector) {
+  if (!SECMET) return "";
+  const gk = SECMET.map?.[sector];
+  if (!gk) return `<p class="mini-note" style="margin-top:8px">이 업종은 산업군 매핑이 없어 지표를 표시하지 않습니다.</p>`;
+  const gname = SECMET.groups[gk], spec = SECMET.spec[gk] || { yf: [], ecos: [] };
+  const cards = [...spec.ecos, ...spec.yf].map((k) => {
+    const s = SECMET.series[k], m = SECMET.meta[k];
+    return s && m ? secSpark(s, m.name, m.unit, m.src) : "";
+  }).join("");
+  return `<div class="sm-wrap">
+    <div class="sm-block">
+      <div class="perf-h">🏭 ${gname} 산업지표 <span class="sub-note">(수출·전방지표·원자재 — 하루 1회)</span></div>
+      <div class="sm-grid">${cards || `<p class="mini-note">지표 없음</p>`}</div>
+    </div>
+    <div class="sm-block">
+      <div class="perf-h">💰 ${gname} 펀더멘털 <span class="sub-note">(소속 상장사 합산 · 연간)</span></div>
+      ${secFundChart(SECMET.fund?.[gk])}
+    </div>
+  </div>`;
+}
+
 // 섹터 행 클릭 → 소속 종목(히트맵 유니버스, 시총순) 펼침
 function toggleRotMembers(tr, sector, mk) {
   const open = tr.nextElementSibling?.classList.contains("rot-members");
@@ -4495,8 +4596,15 @@ function toggleRotMembers(tr, sector, mk) {
         <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
         ${n.src ? `<span class="sub-note">${n.src}</span>` : ""}</div>`).join("");
   })()}
+  <div class="sm-host"></div>
   <p class="sub-note" style="margin:6px 0 2px">시총순 · 등락=당일 · 클릭 = 종목 조회로 이동 (분석 유니버스 내 종목만 표시)</p></td>`;
   tr.after(row);
+  // 산업지표(ECOS·프록시·재무집계) — lazy 로드 후 삽입
+  if (mk === "kr") {
+    const host = row.querySelector(".sm-host");
+    host.innerHTML = `<p class="mini-note" style="margin-top:8px">산업지표 불러오는 중…</p>`;
+    loadSecMet().then(() => { host.innerHTML = secMetricsHtml(sector); });
+  }
   row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
     gotoTabFull("lookup");
@@ -7116,13 +7224,18 @@ function renderGurus() {
       const cx = padL + gw * i + gw / 2, bw = Math.min(30, gw / 2);
       const y = yBar(r.cash);
       bars += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${H - padB - y}" fill="#93c5fd" rx="2"/>
-        <text x="${cx}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#4b5563">$${r.cash}B</text>`;
-      pts.push([cx, yR(r.ratio), r.ratio]);
-      labels += `<text x="${cx}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.d.slice(2, 7).replace("-", ".")}</text>`;
+        <text x="${cx}" y="${y - 4}" font-size="7.5" text-anchor="middle" fill="#9aa4b2">$${r.cash}B</text>`;
+      pts.push([cx, yR(r.ratio), r.ratio, y]);   // y=막대 상단(라벨 충돌 판정용)
+      labels += `<text x="${cx}" y="${H - 12}" font-size="8.5" text-anchor="middle" fill="#8b8b93">${r.d.slice(2, 7).replace("-", ".")}</text>`;
     });
+    // ⚠라인 %라벨이 막대 $라벨과 같은 x에서 겹침 → 폰트 축소 + 막대 상단 근처면 위로 더 띄움
     const line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#f5445a" stroke-width="2"/>` +
-      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#f5445a"/>` +
-        (i === pts.length - 1 || i % 2 === 0 ? `<text x="${p[0]}" y="${p[1] - 6}" font-size="9" text-anchor="middle" fill="#b91c1c">${p[2]}%</text>` : "")).join("");
+      pts.map((p, i) => {
+        const dot = `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#f5445a"/>`;
+        if (!(i === pts.length - 1 || i % 2 === 0)) return dot;
+        const near = Math.abs(p[1] - p[3]) < 16;   // 막대 상단 라벨과 근접
+        return dot + `<text x="${p[0]}" y="${p[1] - (near ? 14 : 7)}" font-size="7.5" text-anchor="middle" fill="#ff8c9a">${p[2]}%</text>`;
+      }).join("");
     return `<div class="guru-cash"><b>💰 현금성 자산 추이</b>
         <span class="sub-note">(막대=현금·현금성+채권 $B · <span style="color:#f5445a">라인=현금비중</span>
         =현금성/(현금성+주식포트) · SEC 10-Q, 단기 T-bill 별도태그 미포함)</span>
@@ -7438,6 +7551,7 @@ Promise.all([
     NEWS_BRIEFS = nb; DEALS_BRIEFS = db; NEWS_ARCH = na; DEALS_ARCH = da; CAL = cal; SECNEWS = sn;
     TOSSM = tm; INVESTOR = iv;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
+    renderMetaFooter();   // 최하단 데이터 출처(탭 무관 전역)
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
       if (!prev) return;
