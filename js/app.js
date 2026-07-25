@@ -2597,9 +2597,61 @@ function renderScrThemes() {
   const setDesc = () => { const d = $("#scr-theme-desc"); if (d) d.textContent = scrThemeActive ? SCR_THEMES.find((x) => x.id === scrThemeActive).desc : ""; };
   host.querySelectorAll(".scr-theme").forEach((b) => b.onclick = () => {
     scrThemeActive = (scrThemeActive === b.dataset.id) ? null : b.dataset.id;
-    renderScrThemes(); renderScreener();
+    scrTechActive = null;              // 재무 테마와 기술 패턴은 상호배타
+    renderScrThemes(); renderScrTech(); renderScreener();
   });
   setDesc();
+  renderScrTech();
+}
+
+/* ── 기술적 테마(차트 패턴) — tech_patterns.json 사전 검증 결과 + 현재 신호 종목 ── */
+let TECHPAT = null, techLoading = null, scrTechActive = null;
+function loadTechPat() {
+  if (TECHPAT) return Promise.resolve(TECHPAT);
+  if (techLoading) return techLoading;
+  techLoading = fetch("data/tech_patterns.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { TECHPAT = j; return j; }).catch(() => null);
+  return techLoading;
+}
+const TECH_ICON = { flag: "🚩", v_rebound: "✅", high_pullback: "📈", trend_break: "📐",
+                    new_high: "🏔", triangle: "🔺", cup_handle: "☕", box_resist: "📦" };
+
+function renderScrTech() {
+  const host = $("#scr-tech"); if (!host) return;
+  loadTechPat().then((d) => {
+    const pats = d?.patterns || [], cur = d?.current || {};
+    if (!pats.length) { host.innerHTML = ""; return; }
+    const chip = (p) => {
+      const n = (cur[p.id] || []).length;
+      const weak = !p.passed;
+      const edge = p.edge20 != null ? `${p.edge20 >= 0 ? "+" : ""}${(p.edge20 * 100).toFixed(2)}%p` : "-";
+      const tip = weak
+        ? `⚠ 검증 미통과 — 20일 초과수익 ${edge}(표본 ${p.n?.toLocaleString()}) · ${!p.pass_markets ? "한·미 방향 불일치" : ""}${!p.pass_halves ? " 기간 불안정" : ""}${!p.pass_p ? " 통계 유의성 부족" : ""} · 참고용`
+        : `✅ 검증 통과 — 20일 초과수익 ${edge} · 승률 ${(p.win20 * 100).toFixed(1)}% · 표본 ${p.n?.toLocaleString()} · p<0.01`;
+      return `<button class="scr-theme tech ${scrTechActive === p.id ? "on" : ""} ${weak ? "weak" : ""}"
+        data-id="${p.id}" title="${tip}">${TECH_ICON[p.id] || "📊"} ${p.name}
+        <span class="tech-edge ${weak ? "" : "ok"}">${edge}</span>
+        <span class="tech-n">${n}</span>${weak ? `<span class="tech-warn">⚠</span>` : ""}</button>`;
+    };
+    const passed = pats.filter((p) => p.passed), failed = pats.filter((p) => !p.passed);
+    host.innerHTML = `<div class="scr-themes-head">📊 기술적 테마
+        <span class="sub-note">최근 5일 발생 · 10년 검증(초과수익=20일 시장 대비)</span></div>
+      <div class="scr-themes">${passed.map(chip).join("")}</div>
+      ${failed.length ? `<div class="scr-themes" style="margin-top:5px">${failed.map(chip).join("")}</div>
+        <p class="sub-note tech-foot">⚠ 표시 = <b>검증 미통과</b>(초과수익이 음수이거나 한·미 방향 불일치·통계 유의성 부족).
+          널리 쓰이는 패턴이라 제공하지만 <b>근거가 약하니 참고만</b> 하세요.</p>` : ""}`;
+    host.querySelectorAll(".scr-theme.tech").forEach((b) => b.onclick = () => {
+      scrTechActive = (scrTechActive === b.dataset.id) ? null : b.dataset.id;
+      scrThemeActive = null;           // 재무 테마 해제(상호배타)
+      renderScrThemes(); renderScreener();
+    });
+  });
+}
+// 기술 패턴 필터 통과 여부(선택 없으면 전부 통과)
+function scrTechPass(t) {
+  if (!scrTechActive) return true;
+  const list = TECHPAT?.current?.[scrTechActive] || [];
+  return list.includes(`${t.m}_${t.t}`);
 }
 
 // 세부 지표 필터 UI (카테고리별 접이식 · 버킷 칩)
@@ -4594,28 +4646,91 @@ function loadSecMet() {
   return secMetLoading;
 }
 
-// 미니 라인차트(시계열 [[label,value],...]) — 최근값·기간변화 배지 포함
-function secSpark(series, name, unit, src) {
+// 지표별 "무슨 뜻인가" — 팝업 설명(투자 관점)
+const SM_MEANING = {
+  exp_semi: "한국 반도체 수출액 지수. 반도체 업황(가격×물량)의 가장 빠른 실물 확인 지표 — 상승=메모리 사이클 개선, 삼성전자·SK하이닉스 실적 선행.",
+  exp_semieq: "반도체 장비 수출 지수. 팹 투자(CAPEX) 사이클을 반영 — 상승=국내 장비사(주성엔지니어링·원익IPS 등) 수주 환경 개선.",
+  exp_disp: "디스플레이 수출 지수. 패널 가격·출하 사이클 — LG디스플레이·소재 업체 업황과 연동.",
+  exp_auto: "자동차 수출 지수. 완성차 물량·단가 — 현대차·기아 실적의 직접 선행 지표.",
+  exp_autoparts: "자동차 부품 수출 지수. 완성차보다 후행하지만 부품사(현대모비스 등) 매출과 직결.",
+  exp_chem: "화학제품 수출 지수. 유가·중국 수요에 민감 — 롯데케미칼·LG화학 스프레드 환경.",
+  exp_steel: "철강 수출 지수. 건설·조선·자동차 전방 수요의 합 — POSCO홀딩스·현대제철.",
+  exp_ship: "운송장비(선박 포함) 수출 지수. 조선 인도량·단가 — HD현대중공업·한화오션.",
+  exp_mach: "기계·장비 수출 지수. 설비투자 사이클 — 두산에너빌리티·기계주 전반.",
+  exp_med: "의약품 수출 지수. 바이오시밀러·CDMO 수출 — 셀트리온·삼성바이오로직스.",
+  exp_total: "전체 수출금액지수. 한국 경기·기업 이익의 큰 흐름 — 코스피 이익 추정의 기본 축.",
+  bsi_mfg: "제조업 업황 BSI(실적). 100 초과=좋다는 기업이 더 많음 — 경기 국면 판단의 체감 지표.",
+  csi_now: "현재 경기판단 소비자심리지수. 100 초과=낙관 — 내수·소비재·유통 수요의 선행 신호.",
+  construct_order: "국내 건설수주액. 건설사 향후 매출의 선행 — 착공·분양 사이클 판단.",
+  sox: "필라델피아 반도체지수. 글로벌 반도체 주가의 벤치마크 — 국내 반도체주와 높은 동행성.",
+  mu: "마이크론 주가. 메모리 3사 중 실적을 가장 먼저 발표해 D램 사이클의 대리 지표로 쓰임.",
+  krw: "원/달러 환율. 상승=수출 채산성 개선(반도체·자동차)이지만 외국인 자금 이탈 압력.",
+  lit: "리튬·배터리 ETF. 리튬 가격과 2차전지 밸류체인 투자심리 — 양극재·셀 업체 선행.",
+  copper: "구리 선물. '닥터 코퍼' — 글로벌 제조업·건설 경기의 실물 바로미터.",
+  wti: "WTI 유가. 정유·화학 스프레드, 항공·해운 비용, 인플레이션 경로에 직접 영향.",
+  sea: "해운 ETF. 컨테이너·벌크 운임 대리 — HMM·팬오션 실적과 연동.",
+  hsi: "항셍지수. 중국 수요·정책 기대의 대리 — 화학·철강·소비재 수출에 영향.",
+  tnx: "미국 10년물 금리. 성장주 할인율 — 급등 시 바이오·플랫폼 밸류에이션 압박.",
+  vnq: "미국 리츠 ETF. 금리와 부동산 심리 — 국내 건설·리츠 투자심리와 방향 유사.",
+  ita: "미국 방산·우주 ETF. 글로벌 국방예산 사이클 — 한화에어로스페이스·현대로템 수출 환경.",
+  ura: "우라늄 ETF. 원전 확대 사이클 — 두산에너빌리티 등 원전 밸류체인.",
+  ndx: "나스닥100. 글로벌 성장주 위험선호 — 국내 인터넷·게임·플랫폼과 동행.",
+  ibb: "나스닥 바이오 ETF. 바이오 섹터 투자심리·자금 유입.",
+  gold: "금. 안전자산 선호 — 위험자산(주식)과 역상관 경향.",
+};
+
+// 미니 라인차트(시계열 [[label,value],...]) — 기간 명시 + 클릭 시 큰 팝업
+function secSpark(series, name, unit, src, key) {
   if (!series || series.length < 4) return "";
   const vals = series.map((d) => d[1]);
   const W = 300, H = 74, padT = 16, padB = 14;
   const max = Math.max(...vals), min = Math.min(...vals);
   const xS = (i) => (i / (vals.length - 1)) * W;
   const yS = (v) => padT + (max - v) / (max - min || 1) * (H - padT - padB);
-  const last = vals[vals.length - 1], first = vals[0];
-  const chg = first ? (last / first - 1) * 100 : 0;
+  const last = vals[vals.length - 1];
+  // ⚠구버전은 전 구간(2년) 시작점 대비라 "+741%"처럼 오해 소지 → 최근 3개월 기준으로 통일하고 라벨 명시
+  const isMonthly = /^\d{4}-\d{2}$/.test(series[0][0]);   // ECOS=월간, 야후=주간
+  const back = isMonthly ? 3 : 13;                        // 3개월분
+  const baseIdx = Math.max(0, vals.length - 1 - back);
+  const base = vals[baseIdx];
+  const chg = base ? (last / base - 1) * 100 : 0;
   const line = vals.map((v, i) => `${xS(i).toFixed(1)},${yS(v).toFixed(1)}`).join(" ");
   const area = `${line} ${W},${H} 0,${H}`;
   const col = chg >= 0 ? "#f5445a" : "#4391ff";
   const fmt = (v) => v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(v >= 100 ? 0 : 2);
-  return `<div class="sm-card">
+  return `<div class="sm-card clickable" data-k="${key}" title="클릭 = 크게 보기·설명">
     <div class="sm-head"><b>${name}</b><span class="sm-last">${fmt(last)}${unit}</span></div>
     <div class="sm-sub"><span class="${chg >= 0 ? "pos" : "neg"}">${chg >= 0 ? "+" : ""}${chg.toFixed(1)}%</span>
-      <span class="sub-note">${series[0][0]} → ${series[series.length - 1][0]} · ${src}</span></div>
+      <span class="sub-note">3개월 전 대비 · ${src}</span></div>
     <svg viewBox="0 0 ${W} ${H}" class="sm-svg" preserveAspectRatio="none">
       <polygon points="${area}" fill="${col}" opacity=".10"/>
       <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.8"/>
       <circle cx="${xS(vals.length - 1)}" cy="${yS(last)}" r="2.6" fill="${col}"/></svg></div>`;
+}
+
+// 산업지표 카드 클릭 → 큰 차트 + 지표 의미 + 기간별 변화
+function openSecMetDialog(key) {
+  const s = SECMET?.series?.[key], m = SECMET?.meta?.[key];
+  if (!s?.length || !m) return;
+  const vals = s.map((d) => d[1]);
+  const isMonthly = /^\d{4}-\d{2}$/.test(s[0][0]);
+  const last = vals[vals.length - 1];
+  const chgOf = (back) => {
+    const i = vals.length - 1 - back;
+    return i >= 0 && vals[i] ? (last / vals[i] - 1) * 100 : null;
+  };
+  const P = isMonthly ? [["1개월", 1], ["3개월", 3], ["1년", 12]] : [["1개월", 4], ["3개월", 13], ["1년", 52]];
+  const fmt = (v) => v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(v >= 100 ? 0 : 2);
+  const hi = Math.max(...vals), lo = Math.min(...vals);
+  const stats = `현재 <b>${fmt(last)}${m.unit || ""}</b> · `
+    + P.map(([lab, b]) => { const c = chgOf(b); return c == null ? "" :
+        `${lab} <b class="${c >= 0 ? "pos" : "neg"}">${c >= 0 ? "+" : ""}${c.toFixed(1)}%</b>`; }).filter(Boolean).join(" · ")
+    + `<br><span class="sub-note">구간 최고 ${fmt(hi)} · 최저 ${fmt(lo)} · 출처 ${m.src}${m.ticker ? ` (${m.ticker})` : ""}
+        · 기간 ${s[0][0]} ~ ${s[s.length - 1][0]}</span>`
+    + (SM_MEANING[key] ? `<br><span class="sm-mean">📌 ${SM_MEANING[key]}</span>` : "");
+  // 월간(YYYY-MM)은 차트 라이브러리용으로 일자 보정
+  const dates = s.map((d) => isMonthly ? `${d[0]}-01` : `20${d[0]}`);
+  openChartDialog(m.name, stats, dates, vals);
 }
 
 // 섹터 펀더멘털(합산 CAPEX·매출·영업이익률) 막대+라인
@@ -4660,7 +4775,7 @@ function secMetricsHtml(sector) {
   const gname = SECMET.groups[gk], spec = SECMET.spec[gk] || { yf: [], ecos: [] };
   const cards = [...spec.ecos, ...spec.yf].map((k) => {
     const s = SECMET.series[k], m = SECMET.meta[k];
-    return s && m ? secSpark(s, m.name, m.unit, m.src) : "";
+    return s && m ? secSpark(s, m.name, m.unit, m.src, k) : "";
   }).join("");
   return `<div class="sm-wrap">
     <div class="sm-block">
@@ -4712,7 +4827,11 @@ function toggleRotMembers(tr, sector, mk) {
   if (mk === "kr") {
     const host = row.querySelector(".sm-host");
     host.innerHTML = `<p class="mini-note" style="margin-top:8px">산업지표 불러오는 중…</p>`;
-    loadSecMet().then(() => { host.innerHTML = secMetricsHtml(sector); });
+    loadSecMet().then(() => {
+      host.innerHTML = secMetricsHtml(sector);
+      host.querySelectorAll(".sm-card.clickable").forEach((c) =>
+        c.onclick = () => openSecMetDialog(c.dataset.k));   // 클릭 = 큰 차트+의미 팝업
+    });
   }
   row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
