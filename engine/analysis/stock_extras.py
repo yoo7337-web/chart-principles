@@ -8,6 +8,7 @@ r"""종목조회 심화 데이터 → app\data\company.json(주1) + feed.json(�
 사용법: python analysis\stock_extras.py [--force] [--company-only|--feed-only] [--quick]
 """
 import argparse
+import collections
 import html as html_mod
 import json
 import re
@@ -583,6 +584,7 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
     names = kr_codes()
     codes = list(names)[:20] if quick else list(names)
     tickers = US_TICKERS[:5] if quick else US_TICKERS
+    prev = prev or {}
     cmap = {}
     for code, d in _kr_parallel(codes, kr_company, "KR company").items():
         d.setdefault("logo", f"https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock{code}.svg")
@@ -594,6 +596,29 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
         if i % 25 == 0:
             print(f"  [US company] {i}/{len(tickers)}")
         time.sleep(0.2)
+
+    # ⚠소스별 실패는 이전 값으로 메운다 — 덮어쓰기 금지.
+    # wisereport(기업개요·매출구성)는 **해외 IP에서 대량 차단**돼 클라우드 재빌드가 이 필드들을 통째로
+    # 날린 실사고가 있었다(2026-07-24 클라우드 런: overview 1,196→353). 네이버 API 필드는 멀쩡했는데
+    # 스크래핑 필드 3종만 정확히 같은 수로 빠진 게 근거. 수집 실패를 `except: pass`로 삼키므로
+    # 보존하지 않으면 조용히 유실된다.
+    STICKY = ("overview", "biz_lines", "sales_mix")
+    kept = collections.Counter()
+    for k, old in prev.items():
+        if k not in cmap:
+            continue
+        for f in STICKY:
+            if not cmap[k].get(f) and old.get(f):
+                cmap[k][f] = old[f]
+                kept[f] += 1
+    if kept:
+        print(f"  이전 값 보존(수집 실패분): " + " · ".join(f"{f} {n}" for f, n in kept.items()))
+    for f in STICKY:
+        n = sum(1 for k in cmap if k.startswith("kr_") and cmap[k].get(f))
+        krn = sum(1 for k in cmap if k.startswith("kr_"))
+        if krn and n < krn * 0.6:
+            print(f"  ⚠ {f} 보유 {n}/{krn} — wisereport 차단 의심(해외 IP). 노트북에서 재수집 필요",
+                  file=sys.stderr)
 
     # DART 실적 보강 — 반드시 순차·저속(병렬 시 IP 차단 실사고). 기존 DART 데이터는 재사용.
     if _DART[0]:
