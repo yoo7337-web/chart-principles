@@ -295,6 +295,122 @@ def gemini_stocks(terms: list) -> dict:
         return {}
 
 
+ARCH = APP_DATA / "trends_archive.json"
+ARCH_KEEP_DAYS = 120
+
+
+def archive_snapshot(payload: dict) -> dict:
+    """일자별 누적 아카이브 — 구글 급상승·아마존은 스냅샷뿐이라 소급 불가 → 오늘부터 매일 적재.
+    (워치리스트·쇼핑은 네이버가 시계열을 주므로 아카이브 없이도 1년/6개월 소급 가능)
+    구조: {days: {YYYY-MM-DD: {google_kr:[검색어...], google_us:[...], amazon:{cat:[상품...]}}}}
+    120일 보관(용량 관리)."""
+    try:
+        arch = json.loads(ARCH.read_text(encoding="utf-8")) if ARCH.exists() else {}
+    except Exception:
+        arch = {}
+    days = arch.get("days") or {}
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    days[today] = {
+        "google_kr": [g["q"] for g in payload.get("google", {}).get("kr", [])],
+        "google_us": [g["q"] for g in payload.get("google", {}).get("us", [])],
+        "amazon": {c["cat"]: [it["title"] for it in c.get("items", [])[:5]]
+                   for c in payload.get("amazon", [])},
+        "shop_top": {s["cat"]: (s.get("top") or [])[:5] for s in payload.get("shopping", [])},
+    }
+    cut = (date.today() - timedelta(days=ARCH_KEEP_DAYS)).isoformat()
+    days = {d: v for d, v in days.items() if d >= cut}
+    out = {"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "days": days}
+    ARCH.write_text(json.dumps(out, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+    print(f"  아카이브 {len(days)}일치 누적")
+    return out
+
+
+def _win_avg(series: list, days: int, offset: int = 0) -> float | None:
+    """[[label,value],...]의 최근 구간 평균(offset일 전부터 days일)."""
+    if not series:
+        return None
+    end = len(series) - offset
+    seg = series[max(0, end - days):end]
+    vals = [v for _, v in seg if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def build_curation(payload: dict, arch: dict) -> dict:
+    """1·3개월 트렌드 변동 → Gemini 큐레이션.
+    입력 근거: ①워치리스트 1개월/3개월 변화율(네이버 1년 시계열) ②쇼핑 카테고리 추세
+    ③구글 급상승 신규/반복 검색어(아카이브 있을 때). 실패 시 빈 dict(섹션 자동 숨김)."""
+    # ── 계산: 워치리스트 1M/3M 변화 ──
+    moves = []
+    for w in payload.get("watchlist", []):
+        d30, wk = w.get("d30") or [], w.get("w") or []
+        recent = _win_avg(d30, 30)                      # 최근 30일 평균(일간)
+        m1_base = _win_avg(wk, 4)                       # 직전 4주(=1개월 전 구간)
+        m3_base = _win_avg(wk, 13)                      # 직전 13주(=3개월)
+        if recent and m1_base:
+            moves.append({"kw": w["kw"], "stocks": [s["name"] for s in w.get("stocks", [])],
+                          "m1": round(recent / m1_base, 2),
+                          "m3": round(recent / m3_base, 2) if m3_base else None})
+    moves.sort(key=lambda x: -(x["m1"] or 0))
+    top_up = moves[:8]
+    top_dn = [m for m in moves if (m["m1"] or 9) < 0.8][-5:]
+    # ── 쇼핑 카테고리 추세 ──
+    shop = [{"cat": s["cat"], "r4": s.get("r4"),
+             "top": (s.get("top") or [])[:5]} for s in payload.get("shopping", [])]
+    shop_hot = sorted([s for s in shop if s["r4"] is not None], key=lambda s: -s["r4"])[:5]
+    # ── 구글 급상승: 최근 7일 반복 등장 검색어(아카이브 필요) ──
+    days = (arch or {}).get("days") or {}
+    recent_days = sorted(days)[-7:]
+    freq = {}
+    for d in recent_days:
+        for q in days[d].get("google_kr", []):
+            freq[q] = freq.get(q, 0) + 1
+    repeat = sorted([(q, n) for q, n in freq.items() if n >= 2], key=lambda x: -x[1])[:8]
+
+    stats = {"watch_up": top_up, "watch_down": top_dn, "shop_hot": shop_hot,
+             "google_repeat": [{"q": q, "days": n} for q, n in repeat],
+             "arch_days": len(days)}
+    if not top_up and not shop_hot:
+        return {}
+    # ── Gemini 요약 ──
+    try:
+        from gemini_util import generate
+    except Exception:
+        return {"stats": stats}
+    fmt = lambda m: f"{m['kw']}(1M ×{m['m1']}{', 3M ×' + str(m['m3']) if m.get('m3') else ''}{', 관련주 ' + '·'.join(m['stocks'][:2]) if m.get('stocks') else ''})"
+    prompt = f"""너는 소비 트렌드를 주식 투자 관점에서 해석하는 애널리스트다. 아래는 실제 검색·쇼핑 데이터의 최근 변동이다.
+
+[검색 급등 키워드(1M=최근 30일÷직전 4주, 3M=÷직전 13주)]
+{chr(10).join('- ' + fmt(m) for m in top_up) or '- 없음'}
+
+[검색 위축 키워드]
+{chr(10).join('- ' + fmt(m) for m in top_dn) or '- 없음'}
+
+[쇼핑 카테고리 수요(최근 4주÷이전 평균)와 인기검색어]
+{chr(10).join(f"- {s['cat']} ×{s['r4']} : {', '.join(s['top'][:4])}" for s in shop_hot) or '- 없음'}
+
+[구글 급상승 반복 등장(최근 7일)]
+{', '.join(f"{r['q']}({r['days']}일)" for r in stats['google_repeat']) or '없음'}
+
+다음 형식의 JSON만 출력(각 항목 한국어, 과장 금지, 데이터에 없는 사실 추측 금지):
+{{"headline": "이번 달 소비 트렌드를 한 문장으로",
+  "rising": [{{"theme":"테마명","why":"근거(수치 포함)","stocks":"관련 상장사(있으면)"}}],
+  "fading": [{{"theme":"테마명","why":"근거"}}],
+  "watch": "투자자가 다음 1개월 주목할 포인트 1~2문장"}}"""
+    try:
+        raw = generate(prompt, max_tokens=1400)
+        if not raw:
+            return {"stats": stats}
+        m = re.search(r"\{.*\}", raw, re.S)
+        parsed = json.loads(m.group(0)) if m else {}
+        parsed["stats"] = stats
+        parsed["generated"] = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
+        print(f"  AI 큐레이션 생성(급등 {len(top_up)}·쇼핑 {len(shop_hot)}·아카이브 {len(days)}일)")
+        return parsed
+    except Exception as e:
+        print(f"  큐레이션 실패({e})", file=sys.stderr)
+        return {"stats": stats}
+
+
 def _fresh(stamp) -> bool:
     if not stamp:
         return False
@@ -320,18 +436,25 @@ def main():
             pass
 
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
+    # ts = 소스별 실제 수집 시각(각 fetch 성공 시점) — 화면에 섹션별 갱신 시점 표기용.
+    # 한 소스가 실패해도 다른 소스 표기가 오염되지 않도록 개별 기록.
     payload = {"generated": now, "watchlist": [], "watchlist_g": [], "shopping": [],
-               "amazon": [], "google": {}, "naver_ok": False}
+               "amazon": [], "google": {}, "naver_ok": False, "ts": {}}
+    stamp = lambda: datetime.now(KST).strftime("%Y-%m-%d %H:%M")
 
     # 아마존 미국 베스트셀러(무키 스크랩)
     try:
         payload["amazon"] = fetch_amazon()
+        if payload["amazon"]:
+            payload["ts"]["amazon"] = stamp()
     except Exception as e:
         print(f"  아마존 실패({e})", file=sys.stderr)
 
     # 글로벌(위키 페이지뷰) 워치리스트 — 네이버·구글과 독립
     try:
         payload["watchlist_g"] = fetch_wiki_watchlist()
+        if payload["watchlist_g"]:
+            payload["ts"]["wiki"] = stamp()
     except Exception as e:
         print(f"  위키 워치리스트 실패({e})", file=sys.stderr)
 
@@ -342,6 +465,8 @@ def main():
         except Exception as e:
             print(f"  구글 RSS({geo}) 실패({e})", file=sys.stderr)
             payload["google"][geo.lower()] = []
+    if payload["google"].get("kr") or payload["google"].get("us"):
+        payload["ts"]["google"] = stamp()
 
     # Gemini 관련주 추정(한국 급상승어만)
     if not args.no_gemini and payload["google"].get("kr"):
@@ -355,12 +480,21 @@ def main():
     if cid and sec:
         try:
             payload["watchlist"] = fetch_watchlist(cid, sec)
+            if payload["watchlist"]:
+                payload["ts"]["watchlist"] = stamp()
             payload["shopping"] = fetch_shopping(cid, sec)
+            if payload["shopping"]:
+                payload["ts"]["shopping"] = stamp()
             payload["naver_ok"] = bool(payload["watchlist"])
         except Exception as e:
             print(f"  네이버 데이터랩 생략({e})", file=sys.stderr)
     else:
         print("  네이버 키 없음 — 데이터랩 생략")
+
+    # 일자별 아카이브 누적(구글·아마존은 소급 불가 → 오늘부터) + 1·3개월 AI 큐레이션
+    arch = archive_snapshot(payload)
+    if not args.no_gemini:
+        payload["curation"] = build_curation(payload, arch)
 
     OUT.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     print(f"완료: trends.json (워치리스트 {len(payload['watchlist'])} · 쇼핑 {len(payload['shopping'])} · "

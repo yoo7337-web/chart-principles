@@ -156,6 +156,60 @@ def fetch_ecos(key: str, stat: str, item: str, months: int = 36) -> list:
     return [[t, dedup[t]] for t in sorted(dedup)]
 
 
+# ── 글로벌 금리커브 ────────────────────────────────────────────────────────
+# 미국: 야후 실시간 만기별(13주·5년·10년·30년) / 주요국: ECOS 902Y023 장·단기(월간)
+US_CURVE = [("^IRX", "3개월", 0.25), ("^FVX", "5년", 5), ("^TNX", "10년", 10), ("^TYX", "30년", 30)]
+ECOS_RATE_COUNTRIES = [("USA", "🇺🇸 미국"), ("KOR", "🇰🇷 한국"), ("DEU", "🇩🇪 독일"),
+                       ("JPN", "🇯🇵 일본"), ("CHN", "🇨🇳 중국"), ("IND", "🇮🇳 인도")]
+
+
+def fetch_us_curve() -> list:
+    """미국 국채 만기별 수익률(야후 실시간) → [{label, years, yield}]."""
+    out = []
+    for tk, label, yrs in US_CURVE:
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{tk}?range=5d&interval=1d"
+            meta = _getj(url)["chart"]["result"][0]["meta"]
+            v = meta.get("regularMarketPrice")
+            if v is not None:
+                out.append({"label": label, "years": yrs, "yield": round(float(v), 3)})
+        except Exception:
+            pass
+        time.sleep(0.2)
+    out.sort(key=lambda c: c["years"])
+    print(f"  미국 국채 커브 {len(out)}구간")
+    return out
+
+
+def fetch_global_rates(key: str) -> list:
+    """주요국 장기(10년물 성격)·단기 금리 — ECOS 902Y023(월간). 최근값 + 12개월 시계열."""
+    end = date.today()
+    start = end - timedelta(days=400)
+    s, e = start.strftime("%Y%m"), end.strftime("%Y%m")
+    out = []
+    for code, name in ECOS_RATE_COUNTRIES:
+        row = {"country": name}
+        for item1, k in (("IRLT", "long"), ("IR3TIB", "short")):
+            try:
+                url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{key}/json/kr/1/24/"
+                       f"902Y023/M/{s}/{e}/{item1}/{code}")
+                d = _getj(url).get("StatisticSearch", {})
+                pts = [[r["TIME"][:4] + "-" + r["TIME"][4:6], round(float(r["DATA_VALUE"]), 2)]
+                       for r in d.get("row", []) if r.get("DATA_VALUE") not in (None, "")]
+                if pts:
+                    row[k] = pts[-1][1]
+                    row[k + "_series"] = pts[-12:]
+            except Exception:
+                pass
+            time.sleep(0.25)
+        if row.get("long") is not None or row.get("short") is not None:
+            if row.get("long") is not None and row.get("short") is not None:
+                row["spread"] = round(row["long"] - row["short"], 2)   # 장단기차(+정상 / −역전)
+            out.append(row)
+    print(f"  주요국 금리 {len(out)}개국")
+    return out
+
+
 def sector_fundamentals() -> dict:
     """financials(KR) 섹터 합산 — CAPEX·매출·영업이익률(연간, 최근 6년)."""
     try:
@@ -264,6 +318,17 @@ def main():
         print(f"  ECOS {len([k for k in used_ec if k in payload['series']])}/{len(used_ec)}")
     else:
         print("  ECOS 키 없음 — 생략")
+
+    # 글로벌 금리커브(미국 만기별 실시간 + 주요국 장·단기)
+    try:
+        payload["us_curve"] = fetch_us_curve()
+    except Exception as e:
+        print(f"  미국 커브 실패({e})", file=sys.stderr)
+    if key:
+        try:
+            payload["global_rates"] = fetch_global_rates(key)
+        except Exception as e:
+            print(f"  주요국 금리 실패({e})", file=sys.stderr)
 
     payload["fund"] = sector_fundamentals()
     OUT.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
