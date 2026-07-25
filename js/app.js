@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v184", "2026-07-26", "산업 필터 중복 제거 — 밸류체인을 산업군에 종속", "주식찾기 왼쪽 '산업(12산업군)'과 오른쪽 '산업 밸류체인(12산업)'이 이름·키까지 겹쳐(10/12 동일) 중복이었음. 밸류체인의 산업 선택 칩을 없애고 **산업군 선택을 그대로 따라가도록** 통합(디스플레이→반도체·IT 흡수). 이제 산업군 클릭 한 번으로 세부업종 + 밸류체인 단계가 함께 펼쳐지고, 밸류체인은 '공정 단계' 축만 담당. 크립토 상관 표는 하단으로 이동."],
   ["v182", "2026-07-26", "자산시장에 환율·금 추가", "💱환율: 원화 대비 8개 통화(ECOS 매매기준율 2000~) 지수화 + 달러인덱스·유로/달러 + 원화 강약(주요 통화 평균, 실효환율 근사). 🥇금·귀금속: 금·은 추이와 증시 관계 — 금은 코스피와 동행(+0.18)이라 '주식 빠지면 금 오른다'가 항상 성립하지 않고, 금이 국고채 3년을 2개월·비트코인을 3개월 선행. 로테이션 분석에 환율 3종·은·유로달러 추가로 코스피 관련 변수 27→32건."],
   ["v181", "2026-07-26", "코인↔증시 상관 + 그래프 값 라벨", "크립토 탭에 코인별×지수별(코스피·코스닥·S&P500·나스닥·반도체) 일간 수익률 상관 히트맵 신설. 핵심 발견: BTC와 코스피는 같은 날 상관 +0.00으로 무관이지만 코인을 하루 앞세우면 +0.15(최근 1년 +0.23, p=0.003) — 코스피가 미국 마감 뒤 열리는 세션 구조 때문. 코인은 코스피보다 나스닥과 훨씬 강하게 동행(ETH +0.41). Snapshot 실적·현금흐름 막대에 값 라벨 추가하고 '만' 축약을 없애 표 값과 일치시킴."],
   ["v180", "2026-07-26", "산업 진단을 주식찾기 12산업군으로 통합 + 코스피 변수 분석", "산업 진단이 원천 업종 77개를 쓰던 것을 주식찾기와 같은 12산업군으로 교체(산업군 클릭=세부 업종 펼침→종목). 이제 두 화면의 산업이 완전히 일치. 자산시장 로테이션에 글로벌 변수 9종(반도체지수·나스닥·VIX·미국10년물·달러인덱스·유가·구리·금·상해·닛케이) 추가하고, 코스피를 종속변수로 고정한 뷰 신설 — 주가는 선행 변수가 4개뿐이고 대부분 동행이라 선행/동행/후행을 구분해 표기."],
@@ -2216,6 +2217,11 @@ const IND_GROUPS = [
   { key: "energy", icon: "⛽", name: "에너지·유틸리티" },
 ];
 const IND_BY_KEY = Object.fromEntries(IND_GROUPS.map((g) => [g.key, g]));
+/* 산업군 → 밸류체인(CHAINS) 매핑. 12개 중 10개는 키가 같고 디스플레이는 반도체·IT에 흡수,
+   건설은 이름만 다르다. **밸류체인은 별도 산업 선택 없이 산업군을 따라간다**(중복 제거). */
+const GRP2CHAIN = { semi: ["semi", "display"], battery: ["battery"], auto: ["auto"], bio: ["bio"],
+  defense: ["defense"], ship: ["ship"], chem: ["chem"], construct: ["construction"],
+  internet: ["internet"], finance: ["finance"], consumer: ["consumer"], energy: [] };
 const indName = (k) => (IND_BY_KEY[k] || SCR_GROUP_ETC).name;
 const indLabel = (k) => { const g = IND_BY_KEY[k] || SCR_GROUP_ETC; return `${g.icon} ${g.name}`; };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
@@ -2594,26 +2600,20 @@ function scrChainKeys() {
 }
 function renderScrChain() {
   const indHost = $("#scr-chain-inds"), flowHost = $("#scr-chain-flow");
-  if (!indHost || !flowHost) return;
+  if (!flowHost) return;
   const uni = new Set(((MARKET && MARKET.heatmap) || []).map((t) => t.m + "_" + t.t));
-  // 산업 선택 칩
-  indHost.innerHTML = CHAIN_ORDER.map((k) => {
-    const c = CHAINS[k];
-    return `<button class="scr-cind ${scrChainIndustry === k ? "on" : ""}" data-ind="${k}"><span>${c.icon}</span>${c.name}</button>`;
-  }).join("");
-  indHost.querySelectorAll(".scr-cind").forEach((b) => b.onclick = () => {
-    const k = b.dataset.ind;
-    scrChainSel.clear();
-    scrChainIndustry = (scrChainIndustry === k) ? null : k;
-    renderScrChain(); renderScreener();
-  });
+  /* ⚠밸류체인의 '산업 선택 칩'은 제거했다 — 12개 중 10개가 산업군과 키까지 같아 중복이었다.
+     이제 **왼쪽 산업군 선택을 그대로 따라가고**(GRP2CHAIN), 밸류체인은 '공정 단계' 축만 담당한다. */
+  if (indHost) indHost.innerHTML = "";
   // 단계 플로우
   if (!scrChainIndustry) {
-    flowHost.innerHTML = `<span class="sub-note">위에서 산업을 선택하면 밸류체인 단계가 표시됩니다.</span>`;
+    flowHost.innerHTML = "";
   } else {
     const c = CHAINS[scrChainIndustry];
     const stages = scrChainAllStages(scrChainIndustry);
-    flowHost.innerHTML = stages.map((st, i) => {
+    flowHost.innerHTML = `<div class="scr-chain-head"><b>${c.icon} ${c.name} 밸류체인</b>
+        <span class="sub-note">${c.flow ? "상류 → 하류 공정 순서" : "카테고리"} · 단계 클릭=필터</span></div>` +
+      stages.map((st, i) => {
       const n = st._codes.filter((x) => uni.has("kr_" + x)).length;
       const arrow = (c.flow && i) ? '<span class="scr-arrow">›</span>' : "";
       return `${arrow}<button class="scr-stage ${scrChainSel.has(st.key) ? "on" : ""}" data-k="${st.key}" title="${st.desc || ""}"><span class="scr-si">${st.icon}</span><span class="scr-sn">${st.name}</span><span class="scr-sc">${n}</span></button>`;
@@ -2678,7 +2678,11 @@ function buildScrSectors() {
     if (scrState.groups.has(k)) { scrState.groups.delete(k); scrOpenGroup = null; }
     else { scrState.groups.add(k); scrOpenGroup = k; }
     if (!scrState.groups.size) scrState.groups = null;
-    buildScrSectors(); renderScreener();
+    // 밸류체인은 산업군을 따라간다 — 국내에서 해당 산업에 체인이 있으면 단계 표시
+    scrChainSel.clear();
+    const chains = GRP2CHAIN[scrOpenGroup] || [];
+    scrChainIndustry = (scrState.country !== "us" && chains.length) ? chains[0] : null;
+    buildScrSectors(); renderScrChain(); renderScreener();
   });
   // 세부업종 칩은 하단 전폭 행에 있으므로 document 기준으로 바인딩
   document.querySelectorAll("#scr-sub-host .scr-sub").forEach((b) => b.onclick = () => {
@@ -2711,9 +2715,10 @@ function updateScrSecCount() {
 function scrSyncFilterVisibility() {
   const c = scrState.country;
   // 산업군 필터는 이제 **한·미 공통**이라 항상 표시. 밸류체인(공정 단계)만 국내 전용.
-  const chainCard = $("#scr-chain-card"), secRow = $("#scr-sector-row");
-  if (chainCard) chainCard.style.display = (c === "us") ? "none" : "";
+  const secRow = $("#scr-sector-row");
   if (secRow) secRow.style.display = "";
+  // 밸류체인은 국내 전용 — 미국으로 바꾸면 단계 선택을 해제한다
+  if (c === "us") { scrChainIndustry = null; scrChainSel.clear(); }
   // ⚠하단 전폭 세부 행은 밸류체인 단계와 세부업종이 공유 → 전환 시 잔상 제거
   const flow = $("#scr-chain-flow");
   if (c === "us" && flow) flow.innerHTML = "";          // 미국인데 국내 밸류체인 단계가 남는 문제
