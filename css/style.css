@@ -907,7 +907,12 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-theme:hover { border-color: rgba(67,145,255,.45); }
 .scr-theme.on { background: #9d7bff; border-color: #9d7bff; color: #fff; }
 /* 기술적 테마(차트 패턴) — 검증 결과 병기 */
-#scr-tech { grid-column: 1 / -1; border-bottom: 0; padding-bottom: 4px; }  /* 칩 8개 — 전폭 한 줄 배치 */
+/* 밸류체인·테마 오른쪽 빈 칸(3~4열)을 채움 — 좁아지면 자동으로 아래 줄로 흐름 */
+#scr-tech { grid-column: span 2; border-bottom: 0; padding-bottom: 4px; }
+/* 2열 그리드: 4개짜리 그룹이 2+2로 균일하게 떨어짐(자동 줄바꿈의 3+1 방지) */
+#scr-tech .scr-themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
+#scr-tech .scr-theme.tech { justify-content: flex-start; padding: 5px 10px; font-size: .82rem; }
+#scr-tech .scr-theme.tech .tech-n { margin-left: auto; }
 #scr-tech .scr-themes-head .sub-note { font-weight: 400; margin-left: 6px; }
 .scr-theme.tech { display: inline-flex; align-items: center; gap: 6px; }
 .scr-theme.tech.on { background: #2f7bd8; border-color: #2f7bd8; }
@@ -1057,8 +1062,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 
 /* 개발일지 — 관리자 전용 작은 아이콘(헤더 우측, 로그아웃 아래) */
 /* 관리자 개발일지 — 그룹 nav 라인 오른쪽 끝(고정 아이콘에서 변경) */
-.group.admin-group { margin-left: auto; border-style: dashed; opacity: .8; }
-.group.admin-group:hover { opacity: 1; }
+/* 관리자 전용 개발일지 — 페이지 최하단(로그아웃 버튼 바로 위), 로그아웃과 같은 톤 */
+.admin-foot { text-align: center; margin: 26px 0 0; }
+.admin-foot button { font-size: .76rem; padding: 5px 14px; border: 1px dashed rgba(218,223,233,.18);
+  border-radius: 8px; background: #26262e; color: #8b8b93; cursor: pointer; }
+.admin-foot button:hover { color: var(--ink); border-color: rgba(218,223,233,.34); }
 .admin-icon { position: fixed; top: 46px; right: 16px; z-index: 50; width: 30px; height: 30px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--muted);
   font-size: .9rem; cursor: pointer; line-height: 1; padding: 0; }

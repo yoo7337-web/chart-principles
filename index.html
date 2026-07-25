@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=164">
-<script src="firebase-config.js?v=164"></script>
-<script src="js/auth.js?v=164"></script>
+<link rel="stylesheet" href="css/style.css?v=165">
+<script src="firebase-config.js?v=165"></script>
+<script src="js/auth.js?v=165"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -21,8 +21,6 @@
   <button class="group" data-group="discover">🔍 종목 찾기</button>
   <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
-  <!-- 관리자 전용(yoo7337@gmail.com) — 그룹 메뉴 라인 오른쪽 끝 -->
-  <button class="group admin-group" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠 개발일지</button>
 </nav>
 
 <nav class="tabs" data-group-tabs="research" style="display:none">
@@ -830,6 +828,9 @@
   </section>
 </main>
 
+<!-- 관리자 전용(yoo7337@gmail.com) — 페이지 최하단(로그아웃 버튼 바로 위) -->
+<div class="admin-foot"><button id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠 개발일지</button></div>
+
 <button id="nav-back" class="nav-back" style="display:none">← 뒤로</button>
 
 <!-- 5년 차트 팝업 — body 직속이어야 함(패널 안에 두면 그 탭이 비활성일 때 display:none 상속으로 크기 0) -->
@@ -848,6 +849,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=164"></script>
+<script src="js/app.js?v=165"></script>
 </body>
 </html>

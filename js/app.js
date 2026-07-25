@@ -1644,19 +1644,10 @@ function adminSetup() {
   const btn = document.getElementById("admin-devlog");
   if (!btn) return;
   btn.onclick = () => activateTab("devlog");
-  const place = () => {   // 로그아웃 버튼 바로 아래·같은 우측 정렬
-    const out = document.getElementById("auth-out");
-    if (out) {
-      const r = out.getBoundingClientRect();
-      btn.style.top = (r.bottom + 6) + "px";
-      btn.style.right = Math.max(8, window.innerWidth - r.right) + "px";
-    }
-  };
-  const show = () => { btn.style.display = ""; setTimeout(place, 50); };
+  const show = () => { btn.style.display = ""; };   // 위치는 페이지 최하단(.admin-foot) 고정
   if (["localhost", "127.0.0.1"].includes(location.hostname)) show();
   else if ((window.__userEmail || "") === ADMIN_EMAIL) show();
   window.addEventListener("authuser", (e) => { if (e.detail === ADMIN_EMAIL) show(); });
-  window.addEventListener("resize", place);
 }
 adminSetup();
 
