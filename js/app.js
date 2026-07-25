@@ -1754,6 +1754,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v179", "2026-07-26", "공시 오류 클라우드 반영 + 단위 체계 개편", "⚠공시 버그가 로컬에선 고쳐졌으나 feed.json이 CLOUD_OWNED라 배포되지 않고 클라우드 엔진도 옛 코드였음 → engine 동기화 + 수정본 직접 시딩으로 라이브 반영(두산테스나 7건→15건). Snapshot에 단위 선택(원·백만원·십억원·억원) 추가 + 현금흐름 막대에 값 라벨 표시. 상세 재무제표 단위도 동일 체계로 통일."],
   ["v178", "2026-07-26", "🏙 자산시장 탭 — 부동산·채권 + 로테이션 검증", "주식만 보면 놓치는 '돈의 이동'을 보는 탭 신설. 2000년 이후 월간 데이터로 19개 시장의 교차상관(-12~+12개월)을 전수 계산해 유의한 선행관계 99건을 추출. 핵심 발견: 신용 스프레드가 부동산을 2개월 선행(r=-0.72)으로 압도적 1위, 코스피는 서울 아파트를 2개월 선행, 부동산은 12개월 뒤 코스피와 역상관. 화면=요약 카드 5 + 로테이션 표 + 부동산(가격지수·전년대비·공급) + 채권(금리·스프레드)."],
   ["v177", "2026-07-26", "산업 분류 한·미 통일(12산업군) + 신호 원칙별 정리", "화면마다 달랐던 5개 산업 분류를 산업지표가 붙어 있는 12산업군으로 통일. 수집 단계에서 타일에 grp를 계산해 주식찾기·산업진단·종목조회가 같은 기준을 쓴다. 미국은 GICS 대분류가 12개뿐이라 company.json의 세부 업종을 우선 사용(미분류 38종목은 yfinance로 보강 → 기타 0%). 밸류체인은 복수 소속·공정 순서를 담으므로 대체하지 않고 산업군 하위 축으로 병존. 오늘의 신호에 원칙별 정리 추가."],
   ["v175", "2026-07-26", "'불타기' 추세추종 매수 원칙 5종 채택 + 공시 오류 수정", "기존 채택 매수 원칙이 전부 역추세(BB하단·과매도)라 '오를 때 더 산다'는 원칙이 없었음 → 추세 필터를 얹은 후보 6종을 10년 검증해 5종 통과. 플래그 돌파 +3.45%·신고가+거래량+추세필터 +2.37%가 신규 채택되어 최종 매수 원칙 5개 중 4개가 돌파형으로 바뀜. ⚠공시 치명 오류 수정: DART corp_code 매핑 정규식이 항목 경계를 넘어 짝지어 상장사 63%가 남의 공시를 보고 있었음(실리콘투 1건→15건, 전체 1,153종목 정상화). 신호 요약 대시보드를 회사 로고 타일로 개편."],
@@ -6300,8 +6301,9 @@ function finVal(row, key, prevRow) {
 
 let finMode = "annual", finFsSel = "cfs", finUnitSel = "eok";
 // 단위 배율(저장: KR=억원, US=백만$)
-const FIN_UNITS_KR = { eok: ["억원", 1], mil: ["백만원", 100], won: ["원", 1e8] };
-const FIN_UNITS_US = { musd: ["백만$", 1], kusd: ["천$", 1e3] };
+// 저장 단위는 KR=억원 / US=백만$ — 표시 배율은 그 기준의 환산값
+const FIN_UNITS_KR = { won: ["원", 1e8], mil: ["백만원", 100], bil: ["십억원", 0.1], eok: ["억원", 1] };
+const FIN_UNITS_US = { musd: ["백만$", 1], busd: ["십억$", 1e-3], kusd: ["천$", 1e3] };
 
 function finDataOf(fin) {
   // KR 새 포맷 {cfs, ofs} / 구 포맷·US {annual, quarter} 모두 지원
@@ -6334,6 +6336,9 @@ function renderLookupFinancials(st) {
 /* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
 let ftView = "perf", ftMode = "annual", ftFs = "cfs";
 const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"], ["cash", "현금흐름"]];
+// Snapshot 표시 단위 — 저장값(KR 억원 / US 백만$) 기준 배율. 상세 재무제표와 동일 체계.
+let ftUnitSel = null;
+function ftUnits(mk) { return mk === "kr" ? FIN_UNITS_KR : FIN_UNITS_US; }
 
 function ftRows(st) {
   // financials → 기간 오름차순 [{p, rev, op, np, opm, npm, revG, roe, cfo, cfi, cff, debt, cur, fcf}]
@@ -6370,7 +6375,9 @@ function renderFinTrends(st) {
   const rows = ftRows(st);
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
-  const unit = st.market === "kr" ? "억원" : "백만$";
+  const _u = ftUnits(st.market);
+  if (!ftUnitSel || !_u[ftUnitSel]) ftUnitSel = st.market === "kr" ? "eok" : "musd";
+  const [unit, uMul] = _u[ftUnitSel];
   const bothFs = st.market === "kr" && hasCfs && hasOfs;
   const fsNote = st.market === "kr" ? (ftFs === "cfs" ? "연결" : "별도") + " 기준 · " : "";
   const gLab = ftMode === "annual" ? "매출성장률(YoY)" : "매출성장률(QoQ)";
@@ -6388,22 +6395,39 @@ function renderFinTrends(st) {
       <span class="mk-toggle ft-mode">
         <button data-m="annual" class="${ftMode === "annual" ? "active" : ""}">연간</button>
         <button data-m="quarter" class="${ftMode === "quarter" ? "active" : ""}">분기</button>
-      </span></h3>
+      </span>
+      <select id="ft-unit" title="단위">${Object.entries(_u).map(([k, [lab]]) =>
+        `<option value="${k}"${k === ftUnitSel ? " selected" : ""}>${lab}</option>`).join("")}</select></h3>
     <div id="ft-chart"></div><div id="ft-table"></div>`;
   host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
   host.querySelectorAll(".ft-mode button").forEach((b) => b.onclick = () => { ftMode = b.dataset.m; renderFinTrends(st); });
   host.querySelectorAll(".ft-fs button").forEach((b) => b.onclick = () => { ftFs = b.dataset.f; renderFinTrends(st); });
+  const ftu = document.getElementById("ft-unit");
+  if (ftu) ftu.onchange = () => { ftUnitSel = ftu.value; renderFinTrends(st); };
 
   // 재무안정성은 라인 2개뿐이라 더 크게(사용자 요청) — 뷰별 높이
   const H = ftView === "stability" ? 360 : 300;
   const W = 940, padL = 10, padR = 46, padT = 30, padB = 30;
   const n = rows.length, gw = (W - padL - padR) / n;
   const plotH = H - padT - padB;
-  const nf = (v) => v == null ? "-" : Math.round(v).toLocaleString();
+  // 표시 단위 적용 — 작은 단위(십억원 등)에선 소수 1자리까지 보여줘야 값이 0으로 죽지 않는다
+  const nf = (v) => {
+    if (v == null) return "-";
+    const x = v * uMul;
+    return Math.abs(x) < 100 && x !== 0 ? x.toFixed(1) : Math.round(x).toLocaleString();
+  };
   const pf = (v, d = 1) => v == null ? "-" : (v >= 0 ? "+" : "") + v.toFixed(d) + "%";
+  // 차트 막대 라벨용 — 자릿수를 줄여 겹침 방지(1,234 / 1.2만 형태)
+  const ftNum = (x) => {
+    if (x == null) return "";
+    const a = Math.abs(x);
+    if (a >= 1e4) return (x / 1e4).toFixed(1) + "만";
+    if (a >= 100) return Math.round(x).toLocaleString();
+    return a < 1 ? x.toFixed(2) : x.toFixed(1);
+  };
 
   // ---- 막대+라인 콤보 도우미 ----
-  const barGroup = (keys, colors, labels) => {
+  const barGroup = (keys, colors, labels, withLabel = false) => {
     const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
     if (!vals.length) return "";
     const maxV = Math.max(...vals, 0), minV = Math.min(...vals, 0);
@@ -6419,6 +6443,9 @@ function renderFinTrends(st) {
         const x = cx + (j - (keys.length - 1) / 2) * (bw + 2) - bw / 2;
         const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
         svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
+        // 값 라벨 — 막대가 짧으면 겹치므로 양수는 위, 음수는 아래에 붙인다
+        if (withLabel) svg += `<text x="${x + bw / 2}" y="${v >= 0 ? yS(v) - 3 : yS(v) + 9}" font-size="7.5"
+          text-anchor="middle" fill="${colors[j]}">${ftNum(v * uMul)}</text>`;
       });
       svg += `<text x="${cx}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`;
     });
@@ -6473,7 +6500,7 @@ function renderFinTrends(st) {
   } else {
     // 영업·투자·재무 그룹막대 + FCF(잉여현금흐름) 라인 오버레이(같은 스케일)
     const bg = barGroup(["cfo", "cfi", "cff", "fcf"], ["#22c07a", "#5b8def", "#9aa4b2", "#f0b34c"],
-      ["영업활동", "투자활동", "재무활동", "FCF"]);
+      ["영업활동", "투자활동", "재무활동", "FCF"], true);
     let fcfLine = "";
     if (bg.yS) {
       const pts = rows.map((r, i) => (r.fcf != null ? [padL + gw * i + gw / 2, bg.yS(r.fcf)] : null)).filter(Boolean);
