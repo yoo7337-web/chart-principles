@@ -7102,20 +7102,25 @@ function pfBackfill() {
     .sort((a, b) => String(b.filledAt).localeCompare(String(a.filledAt)));   // 최신 → 과거
   const cur = {}, meta = {};
   pfHoldings().forEach((h) => { cur[h.ticker] = +h.qty || 0; meta[h.ticker] = { mk: h.mk, name: h.name }; });
-  const states = [{ d: pfDay(new Date()), q: { ...cur } }], events = [];
+  const states = [{ d: pfDay(new Date()), q: { ...cur } }], events = [], trades = [];
   const q = { ...cur };
   orders.forEach((o) => {
     const t = String(o.ticker), day = String(o.filledAt).slice(0, 10);
-    const before = q[t] || 0;
-    q[t] = before + (o.side === "BUY" ? -(+o.qty) : +(+o.qty));   // 주문 '직전' 상태로 되감기
+    const after = q[t] || 0;                                     // 되감기 전 = 그 거래 '직후' 수량
+    q[t] = after + (o.side === "BUY" ? -(+o.qty) : +(+o.qty));   // 주문 '직전' 상태로 되감기
     if (q[t] < 1e-9) delete q[t];
+    const before = q[t] || 0;
     if (!meta[t]) meta[t] = { mk: /^\d{6}$/.test(t) ? "kr" : "us", name: t };
     // 편입 = 직전 보유 0에서 매수 / 제외 = 매도 후 보유 0
-    if (o.side === "BUY" && !(q[t] > 0)) events.push({ d: day, t, type: "in", name: meta[t].name });
-    if (o.side === "SELL" && !(before > 0)) events.push({ d: day, t, type: "out", name: meta[t].name });
+    const type = o.side === "BUY" ? (before > 0 ? "add" : "in") : (after > 0 ? "trim" : "out");
+    if (type === "in") events.push({ d: day, t, type: "in", name: meta[t].name });
+    if (type === "out") events.push({ d: day, t, type: "out", name: meta[t].name });
+    trades.push({ d: day, t, name: meta[t].name, mk: meta[t].mk, side: o.side,
+                  qty: +o.qty, price: +o.price || null, before, after, type });
     states.push({ d: day, q: { ...q } });      // 그날 거래 직전 상태
   });
-  return { states, events, meta, from: states[states.length - 1]?.d };
+  trades.sort((a, b) => a.d.localeCompare(b.d));
+  return { states, events, trades, meta, from: states[states.length - 1]?.d };
 }
 // 날짜별 보유 수량 — 스냅샷(정확) 우선, 없으면 역산 상태를 계단식으로 채움
 function pfHistDaily() {
@@ -7128,7 +7133,7 @@ function pfHistDaily() {
     arr.forEach((x) => { if (!bf.meta[x.t]) bf.meta[x.t] = { mk: x.m, name: x.n || x.t }; });
   });
   const days = Object.keys(marks).sort();
-  return { marks, days, meta: bf.meta, events: bf.events, from: days[0] };
+  return { marks, days, meta: bf.meta, events: bf.events, trades: bf.trades, from: days[0] };
 }
 
 // 보유 변경 후: 보유 탭 + (열려 있으면) 점검 탭 동시 갱신
@@ -7276,8 +7281,68 @@ function hldFineSector(h) {
 
 /* 📅 보유 비중 변화 — 100% 누적 영역(종목별/산업별) + 편입▲·제외▼ 마커 */
 let hldTlMode = "stock";
+/* 🧾 종목별 매매 추이 — 계단형 보유 수량 + 매매 마커(편입·증량·감량·전량매도) */
+const HLD_TRADE_KO = { in: ["편입", "#22c07a"], add: ["증량", "#4391ff"],
+                       trim: ["감량", "#f0b34c"], out: ["전량매도", "#f5445a"] };
+function renderHldTrades(host) {
+  const hist = pfHistDaily();
+  const tr = hist.trades || [];
+  if (!tr.length) {
+    host.innerHTML = `<p class="mini-note">체결 이력이 없습니다 — 토스 동기화 파일(체결내역 포함)을 가져오면
+      최근 90일 매매가 종목별로 표시됩니다.</p>`;
+    return;
+  }
+  const start = hist.days[0], end = pfDay(new Date());
+  const dayN = Math.max(1, (new Date(end) - new Date(start)) / 864e5);
+  const X = (d) => (new Date(d) - new Date(start)) / 864e5 / dayN;   // 0~1
+  // 종목별 수량 변화 경로 만들기(거래 시점마다 계단)
+  const byT = {};
+  tr.forEach((t) => (byT[t.t] = byT[t.t] || []).push(t));
+  const cur = {};
+  pfHoldings().forEach((h) => { cur[h.ticker] = +h.qty || 0; });
+  const rows = Object.entries(byT).map(([t, ts]) => {
+    const pts = [{ x: 0, q: ts[0].before }];
+    ts.forEach((x) => { pts.push({ x: X(x.d), q: x.before }); pts.push({ x: X(x.d), q: x.after }); });
+    pts.push({ x: 1, q: cur[t] != null ? cur[t] : ts[ts.length - 1].after });
+    const mx = Math.max(...pts.map((p) => p.q), 1);
+    return { t, ts, pts, mx, meta: hist.meta[t] || { mk: "kr", name: t },
+             now: pts[pts.length - 1].q, first: ts[0].d };
+  }).sort((a, b) => (b.now > 0 ? 1 : 0) - (a.now > 0 ? 1 : 0) || a.first.localeCompare(b.first));
+  const W = 560, H = 34;
+  host.innerHTML = `<div class="hld-tr-head sub-note">${start} ~ ${end} · 선 높이 = 그 종목의 보유 수량
+      · ${Object.entries(HLD_TRADE_KO).map(([k, [ko, c]]) => `<i style="background:${c}"></i>${ko}`).join(" ")}</div>
+    <div class="hld-trs">${rows.map((r) => {
+      const Y = (q) => 4 + (H - 8) * (1 - q / r.mx);
+      const line = r.pts.map((p, i) => `${(p.x * W).toFixed(1)},${Y(p.q).toFixed(1)}`).join(" ");
+      const marks = r.ts.map((x) => {
+        const [ko, c] = HLD_TRADE_KO[x.type];
+        return `<g><circle cx="${(X(x.d) * W).toFixed(1)}" cy="${Y(x.after).toFixed(1)}" r="4" fill="${c}"
+          stroke="var(--card)" stroke-width="1.2"/><title>${x.d} · ${ko} ${x.qty.toLocaleString()}주${
+          x.price ? ` @ ${x.price.toLocaleString()}` : ""} → 보유 ${x.after.toLocaleString()}주</title></g>`;
+      }).join("");
+      const last = r.ts[r.ts.length - 1];
+      return `<button class="hld-tr" data-key="${r.meta.mk}_${r.t}">
+        <img src="${logoUrl(r.meta.mk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <span class="hld-tr-nm">${r.meta.name}</span>
+        <svg viewBox="0 0 ${W} ${H}" class="hld-tr-svg" preserveAspectRatio="none">
+          <line x1="0" y1="${H - 4}" x2="${W}" y2="${H - 4}" stroke="var(--line)"/>
+          <polyline points="${line}" fill="none" stroke="#8b8b93" stroke-width="1.6"/>${marks}</svg>
+        <span class="hld-tr-now ${r.now > 0 ? "" : "gone"}">${r.now > 0
+          ? r.now.toLocaleString() + "주" : "전량매도"}</span>
+        <span class="hld-tr-last sub-note">${last.d.slice(5)} ${HLD_TRADE_KO[last.type][0]}</span>
+      </button>`;
+    }).join("")}</div>
+    <p class="mini-note">⚠ ${start} 이전 매매는 토스가 체결내역을 90일까지만 제공해 복원할 수 없습니다.
+      점에 마우스를 올리면 수량·단가가 나오고, 행을 누르면 종목조회로 이동합니다.</p>`;
+  host.querySelectorAll(".hld-tr").forEach((b) => b.onclick = () => {
+    document.querySelector('[data-tab="lookup"]').click();
+    loadLookup(b.dataset.key);
+  });
+}
+
 function renderHldTimeline(all) {
   const host = $("#hld-timeline"); if (!host) return;
+  if (hldTlMode === "trade") return renderHldTrades(host);
   const hist = pfHistDaily();
   if (hist.days.length < 2) {
     host.innerHTML = `<p class="mini-note">이력이 아직 1개 시점뿐입니다 — 토스 체결내역(최근 90일)이 있는 파일을 가져오면
