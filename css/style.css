@@ -541,6 +541,31 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 트렌드 섹션별 갱신 시각(작게) */
 .tr-ts { font-size: .72rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
 
+/* 종목 프로파일 v2 — 좁은 레일에서도 한눈에 읽히는 그래프 */
+.pf2-wrap { margin: 10px 0 12px; }
+.pf2-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.pf2-key { display: inline-block; margin: 0 3px 0 6px; vertical-align: 1px; }
+.pf2-key.bar { width: 10px; height: 7px; background: #f5445a; border-radius: 2px; }
+.pf2-key.dot { width: 7px; height: 7px; background: #e7e7ec; border-radius: 50%; }
+.pf2-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.pf2-lab { flex: 0 0 42px; font-size: .78rem; color: var(--muted); }
+.pf2-track { flex: 1; position: relative; height: 14px; background: rgba(255,255,255,.05); border-radius: 4px; }
+.pf2-zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.22); }
+.pf2-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.pf2-fill.up { background: #f5445a; } .pf2-fill.dn { background: #4391ff; }
+.pf2-dot { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%; background: #e7e7ec; border: 1px solid #17171c; }
+.pf2-val { flex: 0 0 56px; text-align: right; font-size: .82rem; }
+.pf2-gwrap { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 12px;
+  padding-top: 10px; border-top: 1px solid var(--line); }
+.pf2-g { display: flex; align-items: center; gap: 8px; font-size: .8rem; }
+.pf2-glab { flex: 0 0 42px; color: var(--muted); font-size: .78rem; }
+.pf2-gtrack { flex: 1; height: 8px; background: rgba(255,255,255,.05); border-radius: 4px; overflow: hidden; }
+.pf2-gfill { display: block; height: 100%; background: #4391ff; border-radius: 4px; }
+.pf2-gfill.hot { background: #f5445a; }
+.pf2-g b { flex: 0 0 42px; text-align: right; }
+.pf2-g .sub-note { flex: 0 0 44px; font-size: .7rem; }
+
 /* 주요국 금리 비교 */
 .gr-row { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .gr-row:last-of-type { border-bottom: none; }

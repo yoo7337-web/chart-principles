@@ -4724,32 +4724,64 @@ function renderLookupProfile(st) {
         style="width:${w}%;${up ? "left:50%" : "right:50%"}"></span></span>
       <b class="${up ? "pos" : "neg"}">${pct(v, 1)}</b></div>`;
   };
-  const perfViz =
-    `<div class="perf-two">
-      <div><div class="perf-h">시장 대비 초과성과</div>
-        ${perfBar("1주", p.rel_w1)}${perfBar("1개월", p.rel_m1)}${perfBar("3개월", p.rel_m3)}${perfBar("1년", p.rel_y1)}</div>
-      <div><div class="perf-h">절대 수익률</div>
-        ${perfBar("1개월", p.ret_m1)}${perfBar("3개월", p.ret_m3)}${perfBar("1년", p.ret_y1)}</div>
-    </div>`;
+  // ── 성과: 기간별 절대/상대를 한 줄에(막대=절대, 점=시장대비) — 좁은 레일에서 한눈에 ──
+  const PERIODS = [["1주", p.ret_w1, p.rel_w1], ["1개월", p.ret_m1, p.rel_m1],
+                   ["3개월", p.ret_m3, p.rel_m3], ["1년", p.ret_y1, p.rel_y1]];
+  const shown = PERIODS.filter(([, a, r]) => a != null || r != null);
+  const maxAbs = Math.max(0.05, ...shown.flatMap(([, a, r]) => [Math.abs(a || 0), Math.abs(r || 0)]));
+  const perfViz = shown.length ? `<div class="pf2-wrap">
+    <div class="pf2-head"><span class="perf-h" style="margin:0">기간 수익률</span>
+      <span class="sub-note"><span class="pf2-key bar"></span>절대 <span class="pf2-key dot"></span>시장대비</span></div>
+    ${shown.map(([lab, abs, rel]) => {
+      const w = (v) => Math.min(50, Math.abs(v || 0) / maxAbs * 50);
+      const dotPos = rel == null ? null : 50 + (rel >= 0 ? w(rel) : -w(rel));
+      return `<div class="pf2-row"><span class="pf2-lab">${lab}</span>
+        <span class="pf2-track">
+          <span class="pf2-zero"></span>
+          ${abs == null ? "" : `<span class="pf2-fill ${abs >= 0 ? "up" : "dn"}"
+            style="width:${w(abs)}%;${abs >= 0 ? "left:50%" : `right:50%`}"></span>`}
+          ${dotPos == null ? "" : `<span class="pf2-dot ${rel >= 0 ? "up" : "dn"}" style="left:${dotPos}%"
+            title="시장 대비 ${pct(rel, 1)}"></span>`}
+        </span>
+        <b class="pf2-val ${(abs ?? 0) >= 0 ? "pos" : "neg"}">${abs == null ? "-" : pct(abs, 1)}</b></div>`;
+    }).join("")}
+  </div>` : "";
+
+  // ── 리스크 게이지: 베타·변동성을 막대 한 줄로(문구 대신 위치로 인지) ──
+  const gauge = (label, v, max, fmt, warnAt, note) => {
+    if (v == null) return "";
+    const w = Math.max(2, Math.min(100, v / max * 100));
+    const hot = warnAt != null && v >= warnAt;
+    return `<div class="pf2-g"><span class="pf2-glab">${label}</span>
+      <span class="pf2-gtrack"><span class="pf2-gfill ${hot ? "hot" : ""}" style="width:${w}%"></span></span>
+      <b class="${hot ? "neg" : ""}">${fmt(v)}</b>${note ? `<span class="sub-note">${note}</span>` : ""}</div>`;
+  };
+  const riskViz = `<div class="pf2-gwrap">
+    ${gauge("베타", p.beta, 2, (v) => v.toFixed(2), 1.3, p.beta == null ? "" : (p.beta > 1.3 ? "민감" : p.beta < 0.7 ? "방어적" : "중립"))}
+    ${gauge("변동성", p.vol20, 100, (v) => v + "%", 60, p.vol20 > 60 ? "고변동" : "")}
+  </div>`;
+
+  // ── 수급: 외국인·기관 20일 순매수를 좌우 대비 막대로 ──
+  const sup = st.supply_sum;
+  let supViz = "";
+  if (sup && (sup.frgn_20 != null || sup.inst_20 != null)) {
+    const m = Math.max(1, Math.abs(sup.frgn_20 || 0), Math.abs(sup.inst_20 || 0));
+    const amtTxt = (v) => v == null ? "-" : (v >= 0 ? "+" : "") +
+      (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+    const srow = (label, v) => v == null ? "" : `<div class="pf2-row"><span class="pf2-lab">${label}</span>
+      <span class="pf2-track"><span class="pf2-zero"></span>
+        <span class="pf2-fill ${v >= 0 ? "up" : "dn"}" style="width:${Math.min(50, Math.abs(v) / m * 50)}%;${v >= 0 ? "left:50%" : "right:50%"}"></span></span>
+      <b class="pf2-val ${v >= 0 ? "pos" : "neg"}">${amtTxt(v)}</b></div>`;
+    supViz = `<div class="pf2-wrap">
+      <div class="pf2-head"><span class="perf-h" style="margin:0">수급 (20일 누적)</span>
+        ${sup.frgn_ratio != null ? `<span class="sub-note">외국인 보유율 ${sup.frgn_ratio}%${sup.frgn_ratio_chg != null ? ` (${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}</span>` : ""}</div>
+      ${srow("외국인", sup.frgn_20)}${srow("기관", sup.inst_20)}</div>`;
+  }
+
   const rows = [
-    ["베타 (1년, 시장 대비)", p.beta != null ? `<b>${p.beta}</b> ${p.beta > 1.3 ? "(시장보다 크게 움직임)" : p.beta < 0.7 ? "(방어적)" : ""}` : "-"],
-    ["변동성 (20일, 연율)", p.vol20 != null ? `<b>${p.vol20}%</b> ${p.vol20 > 60 ? "⚠ 고변동" : ""}` : "-"],
     ["거래대금 (20일 평균)", p.val20 != null ? `<b>${st.market === "kr" ? (p.val20 / 1e8).toFixed(0) + "억원" : "$" + (p.val20 / 1e6).toFixed(0) + "M"}</b>` : "-"],
     ["섹터", p.sector ? `${p.sector}${p.sector_rank ? ` <span class="sub-note">(시총 ${p.sector_rank}/${p.sector_n}위)</span>` : ""}` : "-"],
   ];
-  const sup = st.supply_sum;
-  if (sup) {
-    const amt = (v) => {
-      if (v == null) return "-";
-      const s = v >= 0 ? "+" : "";
-      const t = Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${Math.round(v).toLocaleString()}억`;
-      return `<b class="${v >= 0 ? "pos" : "neg"}">${s}${t}</b>`;
-    };
-    const rchg = sup.frgn_ratio_chg;
-    rows.push(["외국인 순매수", `20일 ${amt(sup.frgn_20)} · 5일 ${amt(sup.frgn_5)}` +
-      (sup.frgn_ratio != null ? ` <span class="sub-note">보유율 ${sup.frgn_ratio}%${rchg != null ? ` (20일 ${rchg >= 0 ? "+" : ""}${rchg}%p)` : ""}</span>` : "")]);
-    rows.push(["기관 순매수", `20일 ${amt(sup.inst_20)} · 5일 ${amt(sup.inst_5)}`]);
-  }
   // 참고 내재가치(기본 가정 RIM) — 내재가치 탭 연동
   const rec = VAL?.map?.[`${st.market}_${st.ticker}`];
   let valLine = "";
@@ -4771,8 +4803,8 @@ function renderLookupProfile(st) {
         <a href="#" id="goto-value">가정 조정 →</a></div>`;
     }
   }
-  host.innerHTML = `<div class="fund-head">종목 프로파일 <span class="sub-note">(자체 계산 · 시장=유니버스 동일가중)</span></div>
-    ${perfViz}
+  host.innerHTML = `<div class="fund-head">종목 프로파일 <span class="sub-note">(자체 계산)</span></div>
+    ${perfViz}${riskViz}${supViz}
     <div class="prof-grid wide">${rows.map(([k, v]) => `<div class="prof-row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
     ${valLine}`;
   const gv = document.getElementById("goto-value");
