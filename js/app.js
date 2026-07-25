@@ -3335,8 +3335,9 @@ function renderMacro() {
   if (!MARKET) { $("#macro-context").textContent = "market.json 없음 — python analysis\\market_dash.py 실행 필요"; return; }
   macroRendered = true;
   $("#macro-context").innerHTML =
-    `<b>기준 시각 ${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신 (<b>클라우드 30분 주기</b>) ·
-     카드 아래 줄 = <b>트레이더 관점 한 줄</b> · 카드 클릭 = <b>5년 차트</b>`;
+    `기준 시각 <b>${MARKET.generated}</b> — ${relTime(MARKET.generated)} 갱신(클라우드 30분 주기) ·
+     카드 아래 줄 = 트레이더 관점 한 줄 · 카드 클릭 = 5년 차트 ·
+     <b>홈 상단 전광판은 실시간(TradingView)</b>이라 최대 30분 시차가 있을 수 있습니다`;
   const items = MARKET.macro.filter((m) => !MACRO_HIDE.has(m.id));
   $("#macro-cards").innerHTML = items.map((m) => {
     const up = m.chg >= 0;

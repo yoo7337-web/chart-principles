@@ -63,14 +63,18 @@
         window.__userEmail = email;
         window.dispatchEvent(new CustomEvent("authuser", { detail: email }));
         // 헤더에 로그아웃 버튼 (1회만)
+        // 로그아웃 — 페이지 최하단(헤더에 있으면 상단 메뉴와 겹쳐 보임)
         if (!document.getElementById("auth-out")) {
+          const wrap = document.createElement("div");
+          wrap.style.cssText = "text-align:center;margin:26px 0 34px";
           const btn = document.createElement("button");
           btn.id = "auth-out";
-          btn.textContent = "로그아웃";
-          btn.style.cssText = "float:right;font-size:.75rem;padding:4px 10px;border:1px solid rgba(218,223,233,.14);" +
+          btn.textContent = `로그아웃 (${email})`;
+          btn.style.cssText = "font-size:.76rem;padding:5px 14px;border:1px solid rgba(218,223,233,.14);" +
             "border-radius:8px;background:#26262e;color:#8b8b93;cursor:pointer";
           btn.addEventListener("click", () => firebase.auth().signOut());
-          document.querySelector("header")?.appendChild(btn);
+          wrap.appendChild(btn);
+          document.body.appendChild(wrap);
         }
       });
     } catch (e) {

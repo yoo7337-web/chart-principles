@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=151">
-<script src="firebase-config.js?v=151"></script>
-<script src="js/auth.js?v=151"></script>
+<link rel="stylesheet" href="css/style.css?v=153">
+<script src="firebase-config.js?v=153"></script>
+<script src="js/auth.js?v=153"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -347,11 +347,13 @@
         <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
         {
           "symbols": [
-            {"proName": "FOREXCOM:SPXUSD", "title": "S&P 500 (CFD)"},
-            {"proName": "FOREXCOM:NSXUSD", "title": "나스닥100 (CFD)"},
+            {"proName": "SP:SPX", "title": "S&P 500"},
+            {"proName": "NASDAQ:IXIC", "title": "나스닥"},
+            {"proName": "NASDAQ:SOX", "title": "필라델피아 반도체"},
             {"proName": "FX_IDC:USDKRW", "title": "달러/원"},
-            {"proName": "FX:USOIL", "title": "WTI"},
-            {"proName": "TVC:GOLD", "title": "금"}
+            {"proName": "NYMEX:CL1!", "title": "WTI 유가"},
+            {"proName": "COMEX:GC1!", "title": "금"},
+            {"proName": "TVC:US10Y", "title": "미 10년물"}
           ],
           "showSymbolLogo": false,
           "colorTheme": "dark",
@@ -825,6 +827,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=151"></script>
+<script src="js/app.js?v=153"></script>
 </body>
 </html>
