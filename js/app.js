@@ -6779,8 +6779,11 @@ function renderLookupFinancials(st) {
     if (!has) { host.style.display = "none"; return; }
     FIN_CACHE[key] = fin;
     finMode = "annual";
-    finFsSel = fin.cfs ? "cfs" : "ofs";
+    // 연결(cfs)이 존재해도 연간 데이터가 별도(ofs)보다 짧으면(신규 연결 편입 등) 더 긴 쪽을 기본 선택
+    const cfsN = Object.keys(fin.cfs?.annual || {}).length, ofsN = Object.keys(fin.ofs?.annual || {}).length;
+    finFsSel = ofsN > cfsN ? "ofs" : fin.cfs ? "cfs" : "ofs";
     finUnitSel = st.market === "kr" ? "eok" : "musd";
+    ftFs = null;  // Snapshot의 연결/별도 선택도 종목마다 새로 판단(이전 종목 선택이 남지 않게)
     finDraw(st);
     renderFinTrends(st);  // 실적·재무 추이 통합 카드(같은 financials 데이터)
   }).catch(() => { host.style.display = "none"; $("#lookup-finq").style.display = "none"; });
@@ -6821,10 +6824,13 @@ function ftRows(st) {
 function renderFinTrends(st) {
   const host = $("#lookup-finq");
   const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
-  // 연결/별도 둘 다 데이터 있는지(KR) — 기본은 연결, 선택한 fs에 데이터 없으면 있는 쪽으로
-  const hasCfs = fin?.cfs && Object.keys((ftMode === "quarter" ? fin.cfs.quarter : fin.cfs.annual) || {}).length;
-  const hasOfs = fin?.ofs && Object.keys((ftMode === "quarter" ? fin.ofs.quarter : fin.ofs.annual) || {}).length;
-  if (!fin?.[ftFs] || !(ftFs === "cfs" ? hasCfs : hasOfs)) ftFs = hasCfs ? "cfs" : "ofs";
+  // 연결/별도 둘 다 데이터 있는지(KR) — 추이(그래프)엔 최소 2개 기간이 필요하므로 1개뿐이면 "없음" 취급하고
+  // 다른 쪽(대개 더 긴 이력)으로 자동 전환한다(연결을 신규 편입한 회사가 연결 1개년뿐이라 전체가 숨던 버그 수정).
+  const cfsLen = fin?.cfs ? Object.keys((ftMode === "quarter" ? fin.cfs.quarter : fin.cfs.annual) || {}).length : 0;
+  const ofsLen = fin?.ofs ? Object.keys((ftMode === "quarter" ? fin.ofs.quarter : fin.ofs.annual) || {}).length : 0;
+  const hasCfs = cfsLen >= 2, hasOfs = ofsLen >= 2;
+  if (!fin?.[ftFs] || !(ftFs === "cfs" ? hasCfs : hasOfs))
+    ftFs = hasCfs ? "cfs" : hasOfs ? "ofs" : (cfsLen >= ofsLen ? "cfs" : "ofs");
   const rows = ftRows(st);
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
