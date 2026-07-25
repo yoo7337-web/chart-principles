@@ -95,6 +95,42 @@ def fetch_rank(gubun: str, typ: str) -> list:
     return out
 
 
+def build_rank_from_supply(top: int = 10) -> dict:
+    """외국인·기관 20일 누적 순매수 랭킹 — 우리 stocks/*.json supply_sum 기반(자체 계산).
+
+    ⚠구 fetch_rank(네이버 sise_deal_rank)는 **순매수/순매도가 동일 결과**였다(실사고):
+      · 페이지가 `type` 파라미터를 무시하고 같은 화면 반환
+      · 심지어 본문 랭킹표가 JS 렌더라 우리가 긁던 <table>은 사이드바 위젯("기관순매수상위7"·"인기검색어")
+    → 자체 수급(supply_sum.frgn_20/inst_20, 단위 억원)으로 상·하위를 직접 산출해 정확도 확보.
+    """
+    stocks = APP_DATA / "stocks"
+    rows = []
+    for p in stocks.glob("kr_*.json"):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        ss = d.get("supply_sum") or {}
+        f20, i20 = ss.get("frgn_20"), ss.get("inst_20")
+        if f20 is None and i20 is None:
+            continue
+        last = (d.get("series") or [{}])[-1].get("c")
+        rows.append({"code": d.get("ticker"), "name": d.get("name"), "last": last,
+                     "f20": f20, "i20": i20})
+    out = {}
+    for gk, key in (("foreign", "f20"), ("inst", "i20")):
+        vals = [r for r in rows if r.get(key) is not None]
+        buy = sorted(vals, key=lambda r: -r[key])[:top]
+        sell = sorted(vals, key=lambda r: r[key])[:top]
+        fmt = lambda r: {"code": r["code"], "name": r["name"], "last": r["last"], "net": round(r[key], 1)}
+        out[f"{gk}_buy"] = [fmt(r) for r in buy]
+        out[f"{gk}_sell"] = [fmt(r) for r in sell]
+    print(f"  랭킹(자체 수급 {len(rows)}종목): 외국인 매수 1위 "
+          f"{out['foreign_buy'][0]['name'] if out.get('foreign_buy') else '-'} · 매도 1위 "
+          f"{out['foreign_sell'][0]['name'] if out.get('foreign_sell') else '-'}")
+    return out
+
+
 def _fresh(stamp) -> bool:
     if not stamp:
         return False
@@ -121,11 +157,7 @@ def main():
         payload["trend"][key] = fetch_trend(sosok)
         print(f"  {key} 투자자 동향 {len(payload['trend'][key])}일")
         time.sleep(0.3)
-    for gubun, gk in (("9000", "foreign"), ("3000", "inst")):
-        for typ in ("buy", "sell"):
-            payload["rank"][f"{gk}_{typ}"] = fetch_rank(gubun, typ)
-            time.sleep(0.3)
-    print(f"  랭킹 외국인매수 {len(payload['rank'].get('foreign_buy', []))}·매도 {len(payload['rank'].get('foreign_sell', []))}")
+    payload["rank"] = build_rank_from_supply()
     OUT.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     print(f"완료: investor.json")
 
