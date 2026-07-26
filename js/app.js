@@ -4633,8 +4633,29 @@ document.addEventListener("click", (e) => {
    데이터: disclosure_scan.py → data/disclosures/{날짜}.json (+ index.json).
    날짜별 파일이라 **선택한 날만 lazy 로드**한다(전체를 한 번에 받으면 수 MB). */
 let discRendered = false, discIdx = null, discDate = null, discCat = "", discMk = "", discQ = "";
+let discSort = "time";                            // time=접수순(DART 기본) · mcap=시총 큰 순
 const DISC_CACHE = {};
 const discLink = (rcp) => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${rcp}`;
+
+/* 종목코드 → {시총, 주가, 등락률} — heatmap(시총)과 quotes(30분 시세)를 한 번만 인덱싱.
+   공시는 유니버스(1,200) 밖 소형주도 나오므로 없으면 null(표엔 '-'). */
+let _DISC_MKT = null;
+function discMkt(code) {
+  if (!code) return null;
+  if (!_DISC_MKT) {
+    _DISC_MKT = {};
+    (MARKET?.heatmap || []).forEach((t) => {
+      if (t.m === "kr") _DISC_MKT[t.t] = { mcap: t.mcap };
+    });
+    Object.entries(MARKET?.quotes || {}).forEach(([k, v]) => {
+      if (!k.startsWith("kr_")) return;
+      const c = k.slice(3);
+      (_DISC_MKT[c] = _DISC_MKT[c] || {}).price = v[0];
+      _DISC_MKT[c].chg = v[1];
+    });
+  }
+  return _DISC_MKT[code] || null;
+}
 
 function initDisc() {
   discRendered = true;
@@ -4675,6 +4696,11 @@ function bindDiscUI() {
     $("#dsc-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
     renderDiscTable();
   });
+  $("#dsc-sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    discSort = b.dataset.s;
+    $("#dsc-sort").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    renderDiscTable();
+  });
   const q = $("#dsc-q");
   q.oninput = () => { discQ = q.value.trim(); renderDiscTable(); };
 }
@@ -4710,26 +4736,43 @@ function renderDiscTable() {
   if (!d) return;
   const cats = discIdx.cats;
   const q = discQ.toLowerCase();
-  const rows = d.items.filter((it) =>
+  let rows = d.items.filter((it) =>
     (!discCat || it[6] === discCat) && (!discMk || it[2] === discMk) &&
     (!q || it[0].toLowerCase().includes(q) || it[3].toLowerCase().includes(q)));
+  if (discSort === "mcap") {                       // 시총 없는 종목(유니버스 밖)은 뒤로
+    rows = rows.slice().sort((a, b) => ((discMkt(b[1])?.mcap) || -1) - ((discMkt(a[1])?.mcap) || -1));
+  }
   $("#dsc-table").innerHTML = `<thead><tr>
-      <th>회사</th><th>구분</th><th>공시 내용</th><th>제출인</th><th>원본</th>
+      <th>회사</th><th class="num">시가총액</th><th class="num">주가</th><th class="num">변동</th>
+      <th>구분</th><th>공시 내용</th><th>제출인</th><th>원본</th>
     </tr></thead><tbody>` + (rows.length ? rows.map((it) => {
     const [name, code, mk, nm, rcp, flr, cid, fix] = it;
     const c = cats[cid] || { icon: "📄", name: "기타" };
+    const q2 = discMkt(code);
+    // 변동액 = 현재가 − 전일종가 (전일종가 = 현재가 / (1+등락률))
+    const dAmt = q2?.price != null && q2?.chg != null ? q2.price - q2.price / (1 + q2.chg) : null;
+    const up = (q2?.chg || 0) >= 0;
+    const col = up ? "var(--kup)" : "var(--kdn)";
     return `<tr>
       <td class="hld-name">${code ? `<img class="mv-logo" src="${logoUrl("kr", code)}" onerror="this.style.visibility='hidden'">` : ""}
         <span>${code ? `<b class="dsc-go" data-goto="kr_${code}">${name}</b>` : `<b>${name}</b>`}
         <span class="sub-note">${mk === "Y" ? "코스피" : "코스닥"}</span></span></td>
+      <td class="num">${q2?.mcap != null ? fmtMcap(q2.mcap, "kr") : "-"}</td>
+      <td class="num">${q2?.price != null ? Math.round(q2.price).toLocaleString() : "-"}</td>
+      <td class="num" style="color:${dAmt == null ? "inherit" : col}">${dAmt == null ? "-"
+        : `${up ? "+" : "−"}${Math.abs(Math.round(dAmt)).toLocaleString()}
+           <span class="dsc-pct">${up ? "+" : "−"}${Math.abs(q2.chg * 100).toFixed(2)}%</span>`}</td>
       <td><span class="dsc-badge c-${cid}">${c.icon} ${c.name}</span></td>
       <td class="dsc-title">${fix ? `<span class="dsc-fix">정정</span>` : ""}${nm}</td>
       <td class="sub-note">${flr || "-"}</td>
       <td><a class="dsc-src" href="${discLink(rcp)}" target="_blank" rel="noopener">DART ↗</a></td>
     </tr>`;
-  }).join("") : `<tr><td colspan="5" class="sub-note">조건에 맞는 공시가 없습니다.</td></tr>`) + `</tbody>`;
+  }).join("") : `<tr><td colspan="8" class="sub-note">조건에 맞는 공시가 없습니다.</td></tr>`) + `</tbody>`;
+  const noMkt = rows.filter((it) => !discMkt(it[1])).length;
   $("#dsc-note").innerHTML = `${rows.length.toLocaleString()}건 표시 · 출처 <b>DART 전자공시</b>(코스피·코스닥) ·
-    회사명을 누르면 종목조회로, <b>DART ↗</b>는 공시 원문으로 이동합니다.`;
+    회사명을 누르면 종목조회로, <b>DART ↗</b>는 공시 원문으로 이동합니다.<br>
+    시가총액·주가·변동은 <b>공시일이 아니라 현재 시세</b>(30분 갱신) 기준입니다` +
+    (noMkt ? ` · ${noMkt}건은 수집 유니버스(시총 상위 1,200) 밖이라 시세가 '-'입니다.` : `.`);
   $("#dsc-table").querySelectorAll(".dsc-go").forEach((el) => el.onclick = () => {
     if (!lookupRendered) initLookup();
     gotoTabFull("lookup");

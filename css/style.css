@@ -1595,3 +1595,5 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .dsc-go:hover { color: var(--accent); text-decoration: underline; }
 .dsc-src { color: var(--accent); font-size: .78rem; white-space: nowrap; text-decoration: none; }
 .dsc-src:hover { text-decoration: underline; }
+#dsc-table td.num, #dsc-table th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dsc-pct { display: block; font-size: .7rem; opacity: .8; }
