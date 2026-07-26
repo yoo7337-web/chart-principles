@@ -6068,8 +6068,24 @@ function buildSigChips(st) {
     return `<button class="sig-chip ${on ? "" : "chip-off"}" data-rid="${rid}"
       title="${s?.name || rid}${on ? "" : " (현 국면 꺼짐)"}">${RULE_ABBR[rid] || rid} ${n}</button>`;
   }).join("");
-  $("#lookup-chips").innerHTML = chips;
-  document.querySelectorAll(".sig-chip").forEach((c) => c.addEventListener("click", () => {
+  // 칩은 축약어(이격·BB·R30…)라 뜻을 알 수 없다 → 아래에 **이 종목에 실제로 걸린 원칙만**
+  // 이름 + 판정 기준(results.json desc)으로 풀어 적는다. 채택 원칙(⭐)과 그 외를 구분 표기.
+  const legend = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([rid, n]) => {
+    const meta = (DATA?.rules || []).find((x) => x.rule_id === rid);
+    const s = st.stats.find((x) => x.rule_id === rid);
+    const nm = meta?.name || s?.name || rid;
+    const side = (meta?.side || s?.side) === "buy" ? "buy" : "sell";
+    const on = ruleActive(rid, st.market);
+    return `<li class="rl-item${on ? "" : " off"}" data-rid="${rid}">
+      <span class="rl-ab ${side}">${RULE_ABBR[rid] || "•"}</span>
+      <b>${meta?.selected ? "⭐ " : ""}${nm}</b>
+      ${meta?.desc ? `<span class="rl-desc">${meta.desc}</span>` : ""}
+      <span class="rl-n">${n}회</span>${on ? "" : `<span class="rl-off">현 국면 꺼짐</span>`}</li>`;
+  }).join("");
+  const host = $("#lookup-chips");
+  host.innerHTML = chips + (legend
+    ? `<ul class="rule-legend">${legend}</ul>` : "");
+  host.querySelectorAll(".sig-chip, .rl-item").forEach((c) => c.addEventListener("click", () => {
     const rs = $("#lookup-rule");
     rs.value = rs.value === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
     drawLookupChart();
@@ -6621,7 +6637,10 @@ function drawPeerChartInto(sel, items) {
                self: p.ticker === selfTk };
     }).filter(Boolean);
     if (defs.length < 2) { host.innerHTML = ""; return; }
-    const W = 640, H = 250, P = { l: 40, r: 104, t: 12, b: 22 };
+    // 우측 좁은 레일(360px)에서 넓은 본문(~1,000px)으로 옮기며 SVG가 2배 이상 확대돼 글씨가 커졌다.
+    // .cr-ax/.cr-end는 크립토 탭과 공유하는 클래스라 CSS를 건드리면 그쪽도 줄어든다
+    // → 이 차트의 viewBox만 넓혀(640→1,020) 배율을 낮춘다(글씨 약 40% 작아짐).
+    const W = 1020, H = 300, P = { l: 46, r: 128, t: 14, b: 24 };
     const days = defs[0].t;
     const idx = Object.fromEntries(days.map((d, i) => [d, i]));
     const all = defs.flatMap((d) => d.v);
@@ -6755,7 +6774,7 @@ function finVal(row, key, prevRow) {
   return row[key];
 }
 
-let finMode = "annual", finFsSel = "cfs", finUnitSel = "eok";
+let finMode = "annual", finFsSel = "cfs", finUnitSel = "mil";  // 기본 단위 = 백만원
 // 단위 배율(저장: KR=억원, US=백만$)
 // 저장 단위는 KR=억원 / US=백만$ — 표시 배율은 그 기준의 환산값
 const FIN_UNITS_KR = { won: ["원", 1e8], mil: ["백만원", 100], bil: ["십억원", 0.1], eok: ["억원", 1] };
@@ -6785,7 +6804,7 @@ function renderLookupFinancials(st) {
     // 연결(cfs)이 존재해도 연간 데이터가 별도(ofs)보다 짧으면(신규 연결 편입 등) 더 긴 쪽을 기본 선택
     const cfsN = Object.keys(fin.cfs?.annual || {}).length, ofsN = Object.keys(fin.ofs?.annual || {}).length;
     finFsSel = ofsN > cfsN ? "ofs" : fin.cfs ? "cfs" : "ofs";
-    finUnitSel = st.market === "kr" ? "eok" : "musd";
+    finUnitSel = st.market === "kr" ? "mil" : "musd";   // 한국·미국 모두 '백만' 단위 기본
     ftFs = null;  // Snapshot의 연결/별도 선택도 종목마다 새로 판단(이전 종목 선택이 남지 않게)
     finDraw(st);
     renderFinTrends(st);  // 실적·재무 추이 통합 카드(같은 financials 데이터)
@@ -6838,7 +6857,7 @@ function renderFinTrends(st) {
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
   const _u = ftUnits(st.market);
-  if (!ftUnitSel || !_u[ftUnitSel]) ftUnitSel = st.market === "kr" ? "eok" : "musd";
+  if (!ftUnitSel || !_u[ftUnitSel]) ftUnitSel = st.market === "kr" ? "mil" : "musd";  // 기본 백만원
   const [unit, uMul] = _u[ftUnitSel];
   const bothFs = st.market === "kr" && hasCfs && hasOfs;
   const fsNote = st.market === "kr" ? (ftFs === "cfs" ? "연결" : "별도") + " 기준 · " : "";
@@ -7019,7 +7038,8 @@ function finDraw(st) {
   const fin = FIN_CACHE[key];
   if (!fin) return;
   const units = st.market === "kr" ? FIN_UNITS_KR : FIN_UNITS_US;
-  if (!units[finUnitSel]) finUnitSel = Object.keys(units)[0];
+  // 시장을 옮기면 이전 단위(백만$ 등)가 안 맞는다 → 그 시장의 '백만' 단위로(첫 키 'won'이 아니라)
+  if (!units[finUnitSel]) finUnitSel = st.market === "kr" ? "mil" : "musd";
   const [unitLab, unitMul] = units[finUnitSel];
   const src = st.market === "kr" ? "DART" : "yfinance";
   const { periods, data, mode } = finPeriods(fin, finMode);

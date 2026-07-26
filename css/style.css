@@ -303,6 +303,22 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
   padding: 3px 10px; font-size: .76rem; font-weight: 600; cursor: pointer; color: var(--ink); }
 .sig-chip:hover { border-color: var(--accent); color: var(--accent); }
 .sig-chip.chip-off { opacity: .5; text-decoration: line-through; }
+/* 칩 축약어 해설 — 이 종목에 실제로 신호가 걸린 원칙만 이름+판정기준으로 풀어 적는다 */
+.rule-legend { list-style: none; margin: 8px 0 0; padding: 0; width: 100%;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 3px 14px; }
+.rl-item { display: flex; align-items: baseline; gap: 6px; font-size: .78rem;
+  padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+.rl-item:hover { background: rgba(255, 255, 255, .05); }
+.rl-item.off { opacity: .5; }
+.rl-ab { flex: none; min-width: 30px; text-align: center; border-radius: 4px; padding: 1px 4px;
+  font-size: .68rem; font-weight: 700; }
+.rl-ab.buy { background: rgba(34, 192, 122, .18); color: #22c07a; }
+.rl-ab.sell { background: rgba(245, 68, 90, .18); color: #f5445a; }
+.rl-item b { flex: none; font-weight: 700; }
+.rl-desc { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.rl-n { flex: none; margin-left: auto; color: var(--muted); font-size: .72rem; }
+.rl-off { flex: none; color: #f0b34c; font-size: .7rem; }
 #lookup-filter label { font-size: .84rem; }
 @media (max-width: 760px) { .val-result-row { grid-template-columns: 1fr; }
   .sl-row { grid-template-columns: 1fr; gap: 4px; } .sl-row b { text-align: left; } }
