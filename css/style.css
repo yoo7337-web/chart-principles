@@ -1563,3 +1563,35 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .watch-gh td { background: rgba(255,255,255,.05); font-size: .84rem; padding: 6px 10px; }
 .watch-memo { width: 100%; min-width: 90px; background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; color: var(--ink); font-size: .78rem; padding: 3px 7px; }
+
+/* ---------- 📢 공시 스캐너 ---------- */
+.dsc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.dsc-head #dsc-date { min-width: 190px; }
+.dsc-search { display: inline-flex; align-items: center; gap: 5px; font-size: .84rem; }
+.dsc-search input { width: 200px; padding: 5px 9px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font-size: .82rem; }
+.dsc-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.dsc-cat { border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 999px; padding: 5px 12px; font-size: .8rem; cursor: pointer; }
+.dsc-cat b { margin-left: 3px; color: var(--muted); font-weight: 700; }
+.dsc-cat:hover { border-color: var(--accent); }
+.dsc-cat.active { background: #fff; color: #111; border-color: #fff; font-weight: 700; }
+.dsc-cat.active b { color: #555; }
+#dsc-table { width: 100%; }
+#dsc-table td { padding: 7px 10px; vertical-align: middle; }
+#dsc-table thead th { position: sticky; top: 0; background: var(--card); z-index: 2; }
+.dsc-title { font-size: .86rem; line-height: 1.4; }
+.dsc-fix { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(240, 179, 76, .2); color: #f0b34c; font-size: .68rem; font-weight: 700; }
+.dsc-badge { display: inline-block; white-space: nowrap; padding: 2px 8px; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; background: rgba(255, 255, 255, .07); color: var(--ink); }
+.dsc-badge.c-earnings { background: rgba(67, 145, 255, .18); color: #7cb0ff; }
+.dsc-badge.c-contract { background: rgba(34, 192, 122, .18); color: #3ed492; }
+.dsc-badge.c-alert    { background: rgba(245, 68, 90, .2); color: #ff7c8c; }
+.dsc-badge.c-dividend { background: rgba(240, 179, 76, .18); color: #f0b34c; }
+.dsc-badge.c-treasury { background: rgba(183, 155, 255, .18); color: #b79bff; }
+.dsc-badge.c-ma       { background: rgba(255, 138, 76, .18); color: #ff9a5c; }
+.dsc-go { cursor: pointer; }
+.dsc-go:hover { color: var(--accent); text-decoration: underline; }
+.dsc-src { color: var(--accent); font-size: .78rem; white-space: nowrap; text-decoration: none; }
+.dsc-src:hover { text-decoration: underline; }

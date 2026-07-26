@@ -107,7 +107,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트" };
 let navStack = [];
@@ -171,6 +171,7 @@ function activateTab(tabId) {
   if (tabId === "crypto" && !cryptoRendered) renderCrypto();
   if (tabId === "assets" && !assetsRendered) renderAssets();
   if (tabId === "watch") renderWatch();
+  if (tabId === "disc" && !discRendered) initDisc();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -4627,6 +4628,114 @@ document.addEventListener("click", (e) => {
   e.preventDefault(); e.stopPropagation();
   watchToggle(b.dataset.watch, { name: b.dataset.name });
 });
+
+/* ---------- 📢 공시 스캐너 — 하루치 시장 전체 공시를 날짜별로 ----------
+   데이터: disclosure_scan.py → data/disclosures/{날짜}.json (+ index.json).
+   날짜별 파일이라 **선택한 날만 lazy 로드**한다(전체를 한 번에 받으면 수 MB). */
+let discRendered = false, discIdx = null, discDate = null, discCat = "", discMk = "", discQ = "";
+const DISC_CACHE = {};
+const discLink = (rcp) => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${rcp}`;
+
+function initDisc() {
+  discRendered = true;
+  const tb = $("#dsc-table");
+  tb.innerHTML = `<tbody><tr><td class="sub-note">공시 목록 불러오는 중…</td></tr></tbody>`;
+  fetch("data/disclosures/index.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((idx) => {
+    if (!idx?.days?.length) {
+      tb.innerHTML = `<tbody><tr><td class="sub-note">공시 데이터가 아직 없습니다.</td></tr></tbody>`;
+      return;
+    }
+    discIdx = idx;
+    discDate = idx.days[0].d;                     // 최신 영업일
+    $("#dsc-date").innerHTML = idx.days.map((d) =>
+      `<option value="${d.d}">${d.d} (${discDow(d.d)}) · ${d.n}건</option>`).join("");
+    bindDiscUI();
+    loadDiscDay(discDate);
+  }).catch(() => {
+    tb.innerHTML = `<tbody><tr><td class="sub-note">공시 목록을 불러오지 못했습니다.</td></tr></tbody>`;
+  });
+}
+
+function discDow(ds) { return "일월화수목금토"[new Date(ds + "T00:00:00").getDay()]; }
+
+function bindDiscUI() {
+  $("#dsc-date").onchange = (e) => { discDate = e.target.value; loadDiscDay(discDate); };
+  $("#dsc-nav").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    const days = discIdx.days.map((x) => x.d);     // ⚠최신순 정렬 — 인덱스가 클수록 과거
+    const mv = +b.dataset.mv;                       // -1=이전(과거) · +1=다음(최근)
+    let i = days.indexOf(discDate);
+    if (mv === 0) i = 0;
+    else i = Math.min(days.length - 1, Math.max(0, i - mv));  // 과거로 가려면 인덱스를 키운다
+    discDate = days[i];
+    $("#dsc-date").value = discDate;
+    loadDiscDay(discDate);
+  });
+  $("#dsc-mk").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    discMk = b.dataset.m;
+    $("#dsc-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    renderDiscTable();
+  });
+  const q = $("#dsc-q");
+  q.oninput = () => { discQ = q.value.trim(); renderDiscTable(); };
+}
+
+function loadDiscDay(ds) {
+  const tb = $("#dsc-table");
+  if (DISC_CACHE[ds]) { renderDiscDay(DISC_CACHE[ds]); return; }
+  tb.innerHTML = `<tbody><tr><td class="sub-note">${ds} 공시 불러오는 중…</td></tr></tbody>`;
+  fetch(`data/disclosures/${ds}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    if (!d) { tb.innerHTML = `<tbody><tr><td class="sub-note">그날 공시가 없습니다.</td></tr></tbody>`; return; }
+    DISC_CACHE[ds] = d;
+    renderDiscDay(d);
+  });
+}
+
+function renderDiscDay(d) {
+  discCat = "";                                    // 날짜 바뀌면 카테고리 필터 초기화
+  const cats = discIdx.cats, order = discIdx.order;
+  $("#dsc-summary").innerHTML = `<b>${d.n}건</b> · 갱신 ${d.generated}`;
+  $("#dsc-cats").innerHTML = [`<button class="dsc-cat active" data-c="">전체 <b>${d.n}</b></button>`]
+    .concat(order.filter((c) => d.counts[c]).map((c) =>
+      `<button class="dsc-cat" data-c="${c}">${cats[c].icon} ${cats[c].name} <b>${d.counts[c]}</b></button>`)).join("");
+  $("#dsc-cats").querySelectorAll(".dsc-cat").forEach((b) => b.onclick = () => {
+    discCat = b.dataset.c;
+    $("#dsc-cats").querySelectorAll(".dsc-cat").forEach((x) => x.classList.toggle("active", x === b));
+    renderDiscTable();
+  });
+  renderDiscTable();
+}
+
+function renderDiscTable() {
+  const d = DISC_CACHE[discDate];
+  if (!d) return;
+  const cats = discIdx.cats;
+  const q = discQ.toLowerCase();
+  const rows = d.items.filter((it) =>
+    (!discCat || it[6] === discCat) && (!discMk || it[2] === discMk) &&
+    (!q || it[0].toLowerCase().includes(q) || it[3].toLowerCase().includes(q)));
+  $("#dsc-table").innerHTML = `<thead><tr>
+      <th>회사</th><th>구분</th><th>공시 내용</th><th>제출인</th><th>원본</th>
+    </tr></thead><tbody>` + (rows.length ? rows.map((it) => {
+    const [name, code, mk, nm, rcp, flr, cid, fix] = it;
+    const c = cats[cid] || { icon: "📄", name: "기타" };
+    return `<tr>
+      <td class="hld-name">${code ? `<img class="mv-logo" src="${logoUrl("kr", code)}" onerror="this.style.visibility='hidden'">` : ""}
+        <span>${code ? `<b class="dsc-go" data-goto="kr_${code}">${name}</b>` : `<b>${name}</b>`}
+        <span class="sub-note">${mk === "Y" ? "코스피" : "코스닥"}</span></span></td>
+      <td><span class="dsc-badge c-${cid}">${c.icon} ${c.name}</span></td>
+      <td class="dsc-title">${fix ? `<span class="dsc-fix">정정</span>` : ""}${nm}</td>
+      <td class="sub-note">${flr || "-"}</td>
+      <td><a class="dsc-src" href="${discLink(rcp)}" target="_blank" rel="noopener">DART ↗</a></td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="5" class="sub-note">조건에 맞는 공시가 없습니다.</td></tr>`) + `</tbody>`;
+  $("#dsc-note").innerHTML = `${rows.length.toLocaleString()}건 표시 · 출처 <b>DART 전자공시</b>(코스피·코스닥) ·
+    회사명을 누르면 종목조회로, <b>DART ↗</b>는 공시 원문으로 이동합니다.`;
+  $("#dsc-table").querySelectorAll(".dsc-go").forEach((el) => el.onclick = () => {
+    if (!lookupRendered) initLookup();
+    gotoTabFull("lookup");
+    loadLookup(el.dataset.goto);
+  });
+}
 
 /* ⭐ 관심종목 탭 — 시세·산업·오늘 신호·메모를 한 표로 */
 let watchRendered = false, watchGroup = "none";
