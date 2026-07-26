@@ -228,8 +228,16 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
     if SECTOR_MAP.exists():
         cached = json.loads(SECTOR_MAP.read_text(encoding="utf-8"))
         age = (date.today() - date.fromisoformat(cached.get("generated", "2000-01-01"))).days
-        if age <= SECTOR_MAX_AGE_DAYS:
-            return cached["map"]
+        # ⚠나이만 보면 안 된다 — 시총 스크랩이 부실한 캐시를 30일간 붙들고 있으면 그동안 계속
+        #   '거래대금'이 시총 자리에 들어간다(2026-07-26 실사고: 29% 오염). **커버리지도 검사**해
+        #   유니버스 대비 시총 보유가 모자라면 나이와 무관하게 재생성한다.
+        cm = cached.get("map") or {}
+        kr_have = sum(1 for k, v in cm.items() if k.startswith("kr_") and (v or {}).get("mcap"))
+        need = max(600, int(len(kr_names or {}) * 0.9))
+        if age <= SECTOR_MAX_AGE_DAYS and kr_have >= need:
+            return cm
+        if kr_have < need:
+            print(f"  섹터맵 시총 커버리지 부족({kr_have} < {need}) — 캐시 무시하고 재생성")
 
     print("  섹터맵 재생성(월 1회)...")
     smap = {}
