@@ -1231,7 +1231,18 @@ function loadLookup(key) {
       renderLookupReports(st);
       renderLookupFeed(st);
     });
-    document.querySelectorAll('input[name="sigfilter"]').forEach((r) => { r.onchange = drawLookupChart; });
+    // 라디오·칩을 건드리면 '전체 해제'는 자동 풀린다(숨김 상태가 남아 신호가 안 보이는 혼란 방지)
+    document.querySelectorAll('input[name="sigfilter"]').forEach((r) => {
+      r.onchange = () => { lookupHideSignals = false; drawLookupChart(); };
+    });
+    $("#sig-all").onclick = () => {              // 모든 원칙의 신호를 한 번에
+      lookupHideSignals = false;
+      $("#lookup-rule").value = "";              // 단일 원칙 선택 해제
+      const all = document.querySelector('input[name="sigfilter"][value="all"]');
+      if (all) all.checked = true;
+      drawLookupChart();
+    };
+    $("#sig-none").onclick = () => { lookupHideSignals = true; drawLookupChart(); };
 
     // 원칙 드롭다운: 전체 + 이 종목에 신호가 있는 원칙만
     const present = st.stats.filter((s) => st.markers.some((m) => m.rule_id === s.rule_id));
@@ -1273,6 +1284,7 @@ if (!window._railResizeBound) {   // 리사이즈 시 재정렬(1회 바인딩)
 
 let lookupTf = "d";   // 1m/일/주/월봉
 let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
+let lookupHideSignals = false;   // '전체 해제' — 신호 마커 전부 숨김(캔들만 보기)
 const TF_KO = { "1m": "당일 분봉", d: "일봉", w: "주봉", m: "월봉" };
 
 // 당일 분봉 (intraday/*.json — yfinance 1m, 유동성 상위만 수집) ─────────────
@@ -1433,7 +1445,8 @@ function drawLookupChart() {
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
   const filt = document.querySelector('input[name="sigfilter"]:checked')?.value || "core";
-  const shown = (isMin ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
+  // '전체 해제'(sig-none)면 마커를 전부 숨긴다 — 캔들만 깨끗하게 보고 싶을 때
+  const shown = (isMin || lookupHideSignals ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
     if (selRule && m.rule_id !== selRule) return false;
     if (filt === "core" && !SELECTED_RULES.has(m.rule_id)) return false;  // ⭐ 최종 채택 원칙만(기본)
     const on = ruleActive(m.rule_id, st.market);
@@ -1501,9 +1514,97 @@ function drawLookupChart() {
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유).
   // 메인·지표 패널 시간축·십자선 연동(스크롤/줌·날짜 커서 공유). 가격축 폭은 위에서 동일 고정.
   syncCharts([lookupChart, ...lookupInds]);
-  // 그리기 오버레이 재배치 (줌/스크롤에 연동해 추세선·박스가 봉 위치를 따라감)
-  lookupChart.timeScale().subscribeVisibleLogicalRangeChange(() => redrawDrawings());
-  requestAnimationFrame(() => redrawDrawings());
+  // 그리기 오버레이 + 공시 띠 재배치 (줌/스크롤에 연동해 봉 위치를 따라감)
+  lookupChart.timeScale().subscribeVisibleLogicalRangeChange(() => { redrawDrawings(); drawDiscBand(); });
+  requestAnimationFrame(() => { redrawDrawings(); drawDiscBand(); });
+  // ⚠공시 띠는 timeToCoordinate가 필요한데 차트 레이아웃 **한 프레임 뒤**에야 좌표가 나온다.
+  // 게다가 미리보기 도구는 rAF를 발화시키지 않으므로 setTimeout 폴백을 함께 건다(양쪽 다 멱등).
+  setTimeout(drawDiscBand, 0);
+  setTimeout(drawDiscBand, 180);
+}
+
+/* ---------- 공시 띠 — 차트 x축 아래 공시일 표시 ----------
+   소스: feed.json의 종목별 disc(최근 1년·최대 15건, {d,title,link}).
+   좌표는 차트 timeScale().timeToCoordinate()로 뽑아 **캔들과 같은 x**에 찍는다
+   (SVG 폭 = 차트 폭이라 가격축 영역만큼 오른쪽이 비는 것도 차트와 동일). */
+function discBandItems() {
+  const st = LOOKUP_ST;
+  if (!st) return [];
+  const arr = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`]?.disc || [];
+  const by = {};
+  arr.forEach((x) => {
+    const d = (x.d || "").slice(0, 10);
+    if (!d) return;
+    (by[d] = by[d] || []).push({ title: (x.title || "").replace(/\s+/g, " ").trim(), link: x.link });
+  });
+  return Object.entries(by).map(([d, list]) => ({ d, list })).sort((a, b) => (a.d < b.d ? -1 : 1));
+}
+
+function drawDiscBand() {
+  const host = document.getElementById("lookup-discband");
+  const el = document.getElementById("lookup-chart");
+  if (!host || !el || !lookupChart || !LOOKUP_ST) return;
+  const items = discBandItems();
+  if (!items.length) { host.style.display = "none"; return; }
+  const ts = lookupChart.timeScale();
+  const w = el.clientWidth, H = 30;
+  // 주/월봉은 공시일이 봉 사이에 있어 좌표가 안 나온다 → 그 이상의 첫 봉으로 스냅
+  const bars = (LOOKUP_ST.series || []).map((x) => x.t);
+  const snapTo = (d) => {
+    if (lookupTf === "d") return d;
+    for (const b of bars) if (b >= d) return b;
+    return null;
+  };
+  const dots = [];
+  items.forEach((it) => {
+    const t = snapTo(it.d);
+    if (!t) return;
+    let x = null;
+    try { x = ts.timeToCoordinate(t); } catch (e) { x = null; }
+    if (x == null || x < 0 || x > w) return;      // 화면 밖(줌/스크롤)이면 생략
+    dots.push({ x, ...it });
+  });
+  host.style.display = "";
+  if (!dots.length) {
+    host.innerHTML = `<div class="disc-band-empty">이 구간에 공시 없음 — 좌우로 스크롤하면 공시일이 표시됩니다</div>`;
+    return;
+  }
+  host.innerHTML = `<svg width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" class="disc-band-svg">
+      <line x1="0" y1="${H / 2}" x2="${w}" y2="${H / 2}" stroke="var(--line)"/>
+      ${dots.map((p, i) => {
+        const multi = p.list.length > 1;
+        return `<g class="disc-dot" data-i="${i}" style="cursor:pointer">
+          <circle cx="${p.x.toFixed(1)}" cy="${H / 2}" r="${multi ? 7 : 5}"
+            fill="${multi ? "#f0b34c" : "#4391ff"}" fill-opacity=".85" stroke="var(--bg)" stroke-width="1.5"/>
+          ${multi ? `<text x="${p.x.toFixed(1)}" y="${H / 2 + 3.5}" text-anchor="middle"
+            font-size="9" font-weight="700" fill="#17171c">${p.list.length}</text>` : ""}
+        </g>`;
+      }).join("")}
+    </svg><span class="disc-band-label">📢 공시</span>`;
+  // 말풍선: 마우스를 툴팁 위로 옮겨 링크를 누를 수 있게 pointer-events 유지 + 지연 숨김
+  let tip = document.getElementById("disc-tip");
+  if (!tip) { tip = document.createElement("div"); tip.id = "disc-tip"; document.body.appendChild(tip); }
+  let hideT = null;
+  const keep = () => { if (hideT) { clearTimeout(hideT); hideT = null; } };
+  const hide = () => { hideT = setTimeout(() => { tip.style.display = "none"; }, 260); };
+  tip.onmouseenter = keep;
+  tip.onmouseleave = hide;
+  host.querySelectorAll(".disc-dot").forEach((g) => {
+    const p = dots[+g.dataset.i];
+    g.addEventListener("mouseenter", () => {
+      keep();
+      tip.innerHTML = `<div class="dt-h">${p.d} · 공시 ${p.list.length}건</div>` +
+        p.list.map((x) => `<a class="dt-row" href="${x.link}" target="_blank" rel="noopener">${x.title}<span class="dt-go">DART ↗</span></a>`).join("");
+      tip.style.display = "block";
+      const r = g.getBoundingClientRect();
+      tip.style.left = Math.max(8, Math.min(r.left - 130, window.innerWidth - 340)) + "px";
+      const th = tip.offsetHeight || 120;
+      // 아래 공간이 부족하면 위로 뒤집는다
+      tip.style.top = (r.bottom + th + 12 > window.innerHeight ? r.top - th - 10 : r.bottom + 10) + "px";
+    });
+    g.addEventListener("mouseleave", hide);
+    g.addEventListener("click", () => { if (p.list[0]?.link) window.open(p.list[0].link, "_blank", "noopener"); });
+  });
 }
 
 // 여러 lightweight-charts 인스턴스의 시간축·십자선 연동 (좌우 스크롤/줌·날짜 커서 공유)
@@ -8188,7 +8289,6 @@ function hldFineSector(h) {
 }
 
 /* 📅 보유 비중 변화 — 100% 누적 영역(종목별/산업별) + 편입▲·제외▼ 마커 */
-let hldTlMode = "stock";
 /* 🧾 종목별 매매 추이 — 계단형 보유 수량 + 매매 마커(편입·증량·감량·전량매도) */
 const HLD_TRADE_KO = { in: ["편입", "#22c07a"], add: ["증량", "#4391ff"],
                        trim: ["감량", "#f0b34c"], out: ["전량매도", "#f5445a"] };
@@ -8248,9 +8348,13 @@ function renderHldTrades(host) {
   });
 }
 
-function renderHldTimeline(all) {
-  const host = $("#hld-timeline"); if (!host) return;
-  if (hldTlMode === "trade") return renderHldTrades(host);
+/* 종목/산업 비중을 각각 독립 카드에 그린다(토글 → 3영역 분리, v194).
+   mode: "stock" | "sector" | "trade" · host: 그릴 컨테이너 */
+function renderHldTimeline(all, mode, host) {
+  mode = mode || "stock";
+  host = host || $(mode === "trade" ? "#hld-tl-trade" : `#hld-tl-${mode}`);
+  if (!host) return;
+  if (mode === "trade") return renderHldTrades(host);
   const hist = pfHistDaily();
   if (hist.days.length < 2) {
     host.innerHTML = `<p class="mini-note">이력이 아직 1개 시점뿐입니다 — 토스 체결내역(최근 90일)이 있는 파일을 가져오면
@@ -8299,7 +8403,7 @@ function renderHldTimeline(all) {
       return null;
     };
     // 그룹 키(종목 or 산업)별 일자 비중
-    const groupOf = (t) => hldTlMode === "sector"
+    const groupOf = (t) => mode === "sector"
       ? hldFineSector({ ticker: t, mk: hist.meta[t]?.mk, name: hist.meta[t]?.name })
       : (hist.meta[t]?.name || t);
     const series = {}, totals = [];
@@ -8319,7 +8423,8 @@ function renderHldTimeline(all) {
     });
     const keys = Object.keys(series).sort((a, b) => series[b].at(-1) - series[a].at(-1));
     if (!keys.length) { host.innerHTML = `<p class="mini-note">평가금을 계산할 수 없습니다.</p>`; return; }
-    const W = 900, H = 300, P = { l: 34, r: 132, t: 16, b: 26 };
+    // 좌우 2열(각 ~690px)로 쪼개져 viewBox가 크면 그만큼 축소돼 글씨가 작아진다 → W를 컨테이너에 맞춤
+    const W = 700, H = 300, P = { l: 34, r: 118, t: 16, b: 26 };
     const X = (i) => P.l + (W - P.l - P.r) * (i / (axis.length - 1));
     const Y = (v) => P.t + (H - P.t - P.b) * (1 - v);
     // 누적 영역
@@ -8527,13 +8632,10 @@ function hldRender() {
   $("#hld-analytics").style.display = "";
   $("#hld-table-h").style.display = "";
   renderHldAnalytics(all);   // 상단 분석(수익추이·산업비중·구성) — 비동기(시계열 lazy)
-  renderHldTimeline(all);    // 보유 비중 변화(체결 역산 + 스냅샷 누적)
-  const tl = $("#hld-tl-mode");
-  if (tl) tl.querySelectorAll("button").forEach((b) => b.onclick = () => {
-    hldTlMode = b.dataset.m;
-    tl.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
-    renderHldTimeline(all);
-  });
+  // 종목 비중 · 산업 비중 · 종목별 매매를 각각 독립 영역에 동시 렌더(토글 제거)
+  renderHldTimeline(all, "stock");
+  renderHldTimeline(all, "sector");
+  renderHldTimeline(all, "trade");
   const secs = [["kr", "🇰🇷 국내주식"], ["us", "🇺🇸 해외주식"]];
   let gVal = 0, gCost = 0, gDay = 0, gDayHas = false;
   const secHtml = secs.map(([mk, label]) => {

@@ -1597,3 +1597,23 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .dsc-src:hover { text-decoration: underline; }
 #dsc-table td.num, #dsc-table th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dsc-pct { display: block; font-size: .7rem; opacity: .8; }
+
+/* ---------- 차트 하단 공시 띠 ---------- */
+.sig-allbtn { margin-left: 6px; }
+.disc-band { position: relative; margin-top: 2px; }
+.disc-band-svg { display: block; }
+.disc-band-label { position: absolute; left: 2px; top: 1px; font-size: .68rem; color: var(--muted);
+  pointer-events: none; }
+.disc-band-empty { font-size: .74rem; color: var(--muted); padding: 6px 2px; }
+.disc-dot circle { transition: r .12s ease; }
+.disc-dot:hover circle { r: 9; fill-opacity: 1; }
+#disc-tip { position: fixed; display: none; z-index: 9999; width: 330px; max-height: 300px;
+  overflow-y: auto; background: #26262e; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 11px; box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: .78rem; line-height: 1.45; }
+#disc-tip .dt-h { font-weight: 700; color: var(--accent); margin-bottom: 6px; font-size: .76rem; }
+#disc-tip .dt-row { display: flex; gap: 8px; align-items: baseline; justify-content: space-between;
+  color: var(--ink); text-decoration: none; padding: 4px 5px; border-radius: 6px; }
+#disc-tip .dt-row:hover { background: rgba(255,255,255,.07); }
+#disc-tip .dt-go { flex: none; color: var(--accent); font-size: .68rem; }
+/* 종목 비중 · 산업 비중 좌우 균등(수익추이+산업비중용 1.35fr 비대칭과 구분) */
+.hld-agrid.even, #hld-analytics > .hld-agrid:has(#hld-tl-stock) { grid-template-columns: 1fr 1fr; }

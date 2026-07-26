@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=192">
-<script src="firebase-config.js?v=192"></script>
-<script src="js/auth.js?v=192"></script>
+<link rel="stylesheet" href="css/style.css?v=194">
+<script src="firebase-config.js?v=194"></script>
+<script src="js/auth.js?v=194"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -334,6 +334,10 @@
       <label><input type="radio" name="sigfilter" value="all"> 전체 신호</label>
       <label><input type="radio" name="sigfilter" value="on"> ✅ 현 국면 적용 원칙만</label>
       <label><input type="radio" name="sigfilter" value="off"> ⛔ 미적용 원칙만</label>
+      <span class="mk-toggle sig-allbtn">
+        <button id="sig-all" title="모든 원칙의 신호를 차트에 표시">전체 적용</button>
+        <button id="sig-none" title="차트에서 신호 마커를 모두 숨김">전체 해제</button>
+      </span>
       <span id="lookup-chips" class="sig-chips"></span>
     </div>
     <div class="controls" id="lookup-tfbar" style="display:none">
@@ -371,6 +375,8 @@
       <div id="lookup-chart" class="chart" style="display:none"></div>
       <svg id="lookup-draw" class="draw-overlay"></svg>
     </div>
+    <!-- 공시 띠: 차트 x축과 같은 좌표계에 공시일 동그라미(hover=내용 / click=DART 원문) -->
+    <div id="lookup-discband" class="disc-band" style="display:none"></div>
     <div id="lookup-inds"></div>
     <p class="legend" id="lookup-legend" style="display:none"></p>
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
@@ -834,16 +840,23 @@
           <div id="hld-sector"></div>
         </div>
       </div>
+      <!-- 종목 비중 · 산업 비중을 좌우로, 종목별 매매는 그 아래 전폭 -->
+      <div class="hld-agrid" style="margin-top:14px">
+        <div class="card-flat">
+          <h3 class="lk-h3">📅 종목 비중 변화
+            <span class="sub-note">(체결내역 역산 + 누적 · 편입▲ 제외▼)</span></h3>
+          <div id="hld-tl-stock"></div>
+        </div>
+        <div class="card-flat">
+          <h3 class="lk-h3">🏭 산업 비중 변화
+            <span class="sub-note">(같은 기간 · 산업 기준)</span></h3>
+          <div id="hld-tl-sector"></div>
+        </div>
+      </div>
       <div class="card-flat" style="margin-top:14px">
-        <h3 class="lk-h3">📅 보유 비중 변화
-          <span class="sub-note">(체결내역 역산 + 가져오기 시점 누적 · 편입▲ 제외▼)</span>
-          <span style="flex:1"></span>
-          <span class="mk-toggle" id="hld-tl-mode">
-            <button data-m="stock" class="active">종목 비중</button>
-            <button data-m="sector">산업 비중</button>
-            <button data-m="trade">종목별 매매</button>
-          </span></h3>
-        <div id="hld-timeline"></div>
+        <h3 class="lk-h3">🧾 종목별 매매
+          <span class="sub-note">(계단 = 보유 수량 · 편입·증량·감량·전량매도 시점)</span></h3>
+        <div id="hld-tl-trade"></div>
       </div>
       <div class="hld-agrid3">
         <div class="card-flat"><h3 class="lk-h3">🌍 국가·시장</h3><div id="hld-country"></div></div>
@@ -1016,6 +1029,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=192"></script>
+<script src="js/app.js?v=194"></script>
 </body>
 </html>

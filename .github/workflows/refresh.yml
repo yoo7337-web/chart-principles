@@ -53,6 +53,9 @@ jobs:
         run: |
           mkdir -p engine/app/data
           cp -f data/*.json engine/app/data/ 2>/dev/null || true
+          # 공시는 날짜별 누적 디렉터리 — 시드하지 않으면 index.json이 그날치만 남아 과거가 사라진다
+          mkdir -p engine/app/data/disclosures
+          cp -f data/disclosures/*.json engine/app/data/disclosures/ 2>/dev/null || true
 
       - name: Run core pipeline
         env:
@@ -69,18 +72,22 @@ jobs:
           python analysis/stock_extras.py || echo "stock_extras 실패(무시)"
           python analysis/investor.py || echo "investor 실패(무시)"
           python analysis/sector_news.py || echo "sector_news 실패(무시)"
+          python analysis/disclosure_scan.py || echo "disclosure_scan 실패(무시)"
 
       - name: Copy cloud-owned outputs back to site data
         run: |
           for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings calendar company feed sector_news investor; do
             [ -f "engine/app/data/$f.json" ] && cp -f "engine/app/data/$f.json" "data/$f.json" || true
           done
+          mkdir -p data/disclosures
+          cp -f engine/app/data/disclosures/*.json data/disclosures/ 2>/dev/null || true
 
       - name: Commit refreshed data
         run: |
           git config user.name "chart-cloud-bot"
           git config user.email "actions@github.com"
           git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json data/calendar.json data/company.json data/feed.json data/sector_news.json data/investor.json || true
+          git add -A data/disclosures || true   # 날짜별 신규 파일 + 보관기간 초과 삭제 반영
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"
           else
