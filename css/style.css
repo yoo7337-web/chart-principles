@@ -1617,3 +1617,8 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 #disc-tip .dt-go { flex: none; color: var(--accent); font-size: .68rem; }
 /* 종목 비중 · 산업 비중 좌우 균등(수익추이+산업비중용 1.35fr 비대칭과 구분) */
 .hld-agrid.even, #hld-analytics > .hld-agrid:has(#hld-tl-stock) { grid-template-columns: 1fr 1fr; }
+#dsc-table th.sortable { cursor: pointer; user-select: none; }
+#dsc-table th.sortable:hover { color: var(--accent); }
+#dsc-table th.sortable.on { color: var(--accent); }
+#dsc-table .sort-ar { margin-left: 3px; font-size: .68rem; opacity: .55; }
+#dsc-table th.sortable.on .sort-ar { opacity: 1; }

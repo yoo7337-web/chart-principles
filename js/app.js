@@ -4734,7 +4734,9 @@ document.addEventListener("click", (e) => {
    데이터: disclosure_scan.py → data/disclosures/{날짜}.json (+ index.json).
    날짜별 파일이라 **선택한 날만 lazy 로드**한다(전체를 한 번에 받으면 수 MB). */
 let discRendered = false, discIdx = null, discDate = null, discCat = "", discMk = "", discQ = "";
-let discSort = "time";                            // time=접수순(DART 기본) · mcap=시총 큰 순
+// 정렬: time=접수순(DART 기본) · mcap/price/chg=헤더 클릭 정렬(첫 클릭 내림차순 → 다시 클릭 오름차순)
+let discSortKey = "time", discSortDir = "desc";
+const DISC_SORTABLE = { mcap: "시가총액", price: "주가", chg: "변동" };
 const DISC_CACHE = {};
 const discLink = (rcp) => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${rcp}`;
 
@@ -4797,9 +4799,10 @@ function bindDiscUI() {
     $("#dsc-mk").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
     renderDiscTable();
   });
+  // 토글과 헤더 클릭이 같은 상태를 공유한다(어느 쪽으로 바꿔도 서로 반영)
   $("#dsc-sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    discSort = b.dataset.s;
-    $("#dsc-sort").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    discSortKey = b.dataset.s;
+    discSortDir = "desc";
     renderDiscTable();
   });
   const q = $("#dsc-q");
@@ -4840,11 +4843,31 @@ function renderDiscTable() {
   let rows = d.items.filter((it) =>
     (!discCat || it[6] === discCat) && (!discMk || it[2] === discMk) &&
     (!q || it[0].toLowerCase().includes(q) || it[3].toLowerCase().includes(q)));
-  if (discSort === "mcap") {                       // 시총 없는 종목(유니버스 밖)은 뒤로
-    rows = rows.slice().sort((a, b) => ((discMkt(b[1])?.mcap) || -1) - ((discMkt(a[1])?.mcap) || -1));
+  if (DISC_SORTABLE[discSortKey]) {
+    // 변동은 '변동액'(현재가 − 전일종가) 기준. 값이 없는 종목(유니버스 밖)은 방향과 무관하게 항상 뒤로.
+    const val = (it) => {
+      const m = discMkt(it[1]);
+      if (!m) return null;
+      if (discSortKey === "mcap") return m.mcap ?? null;
+      if (discSortKey === "price") return m.price ?? null;
+      return m.price != null && m.chg != null ? m.price - m.price / (1 + m.chg) : null;
+    };
+    const sgn = discSortDir === "desc" ? -1 : 1;
+    rows = rows.slice().sort((a, b) => {
+      const va = val(a), vb = val(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return (va - vb) * sgn;
+    });
   }
+  const th = (k, label) => {                       // 클릭 = 내림차순 → 다시 클릭하면 오름차순
+    const on = discSortKey === k;
+    return `<th class="num sortable${on ? " on" : ""}" data-k="${k}"
+      title="${label} 기준 정렬">${label}<span class="sort-ar">${on ? (discSortDir === "desc" ? "▼" : "▲") : "↕"}</span></th>`;
+  };
   $("#dsc-table").innerHTML = `<thead><tr>
-      <th>회사</th><th class="num">시가총액</th><th class="num">주가</th><th class="num">변동</th>
+      <th>회사</th>${th("mcap", "시가총액")}${th("price", "주가")}${th("chg", "변동")}
       <th>구분</th><th>공시 내용</th><th>제출인</th><th>원본</th>
     </tr></thead><tbody>` + (rows.length ? rows.map((it) => {
     const [name, code, mk, nm, rcp, flr, cid, fix] = it;
@@ -4879,6 +4902,16 @@ function renderDiscTable() {
     gotoTabFull("lookup");
     loadLookup(el.dataset.goto);
   });
+  // 헤더 클릭 정렬: 같은 열이면 방향만 뒤집고, 다른 열이면 내림차순으로 시작
+  $("#dsc-table").querySelectorAll("th.sortable").forEach((h) => h.onclick = () => {
+    const k = h.dataset.k;
+    if (discSortKey === k) discSortDir = discSortDir === "desc" ? "asc" : "desc";
+    else { discSortKey = k; discSortDir = "desc"; }
+    renderDiscTable();
+  });
+  // 상단 토글도 현재 정렬 상태를 따라간다(헤더로 바꿔도 어긋나지 않게)
+  $("#dsc-sort")?.querySelectorAll("button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.s === discSortKey));
 }
 
 /* ⭐ 관심종목 탭 — 시세·산업·오늘 신호·메모를 한 표로 */
