@@ -254,10 +254,19 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
     except Exception as e:
         print(f"  KR 업종 스크래핑 실패({e}) — '기타' 폴백", file=sys.stderr)
 
-    # --- KR 시총: 네이버 시가총액 페이지 read_html (코스피 1~10p ≈500 + 코스닥 1~6p ≈300) ---
-    for sosok, pages in ((0, 10), (1, 6)):  # sosok=0 코스피 / 1 코스닥
-        try:
-            for page in range(1, pages + 1):
+    # --- KR 시총: 네이버 시가총액 페이지 read_html (50종목/페이지) ---
+    # ⚠유니버스가 800→1,200(코스피 700+코스닥 500)으로 늘었는데 여기가 500+300에 멈춰 있었다.
+    #   못 긁힌 종목은 아래 `mcap<=0` 폴백이 **20일 평균 거래대금을 시총 자리에** 넣어버려
+    #   1,201종목 중 354종목(29%)의 시총이 가짜였다(경방 시총 3.8억원 → 역산 주식수 4.5만주).
+    #   시총 필터·티어·섹터 집계·공시 스캐너가 전부 이 값을 쓰므로 유니버스에 맞춰 페이지를 늘린다.
+    # ⚠try는 **페이지 단위**로 감싼다. 예전엔 페이지 루프 전체를 감싸서 중간 한 페이지만 실패해도
+    #   그 시장의 남은 페이지를 통째로 건너뛰었다(코스피 448위 이후 257종목이 통으로 누락).
+    # ⚠페이지 수는 '유니버스 종목 수 ÷ 50'으로 잡으면 모자란다 — 이 페이지엔 **ETF·리츠가 섞여 있어**
+    #   한 페이지의 실제 일반주가 50개보다 적다(실측 43~50). 코스피 700종목을 덮으려면 넉넉히 잡아야 한다.
+    got = {0: 0, 1: 0}
+    for sosok, pages in ((0, 26), (1, 14)):  # sosok=0 코스피 / 1 코스닥 (ETF 혼입분 감안한 여유)
+        for page in range(1, pages + 1):
+            try:
                 url = f"https://finance.naver.com/sise/sise_market_sum.naver?sosok={sosok}&page={page}"
                 html = get(url)
                 codes = re.findall(r'/item/main\.naver\?code=(\d{6})', html)
@@ -268,11 +277,14 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
                 for code, mc in zip(seen, mcaps):
                     try:
                         smap.setdefault(f"kr_{code}", {})["mcap"] = float(mc) * 1e8  # 억원→원
+                        got[sosok] += 1
                     except Exception:
                         pass
                 time.sleep(0.2)
-        except Exception as e:
-            print(f"  KR 시총 파싱 실패(sosok={sosok}, {e}) — 거래대금 폴백", file=sys.stderr)
+            except Exception as e:
+                print(f"  KR 시총 페이지 실패(sosok={sosok} p{page}, {e}) — 이 페이지만 건너뜀",
+                      file=sys.stderr)
+    print(f"  KR 시총: 코스피 {got[0]} + 코스닥 {got[1]} = {got[0] + got[1]}종목")
 
     # --- US: yfinance info (99종목, 1회성) ---
     import yfinance as yf
@@ -327,8 +339,12 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
         if mk == "us":
             sector = US_SECTOR_KO.get(sector, sector)
         mcap = float(meta.get("mcap") or 0)
-        if mcap <= 0:  # 폴백: 최근 거래대금 규모
+        mcap_est = False
+        if mcap <= 0:
+            # 폴백: 최근 거래대금 규모. **시가총액이 아니다** — 히트맵 타일 크기를 정하려고 쓰는 대용값이라
+            # 화면에 '시총'으로 그대로 보여주면 안 된다(est 플래그로 표시해 UI가 '-'로 처리하게 한다).
             mcap = float((df["close"] * df["volume"]).tail(20).mean())
+            mcap_est = True
         # 모멘텀: c5=5거래일(≈1주) 수익률, up=최근 연속 상승일 수 (주식찾기 테마용)
         c5, up = None, 0
         try:
@@ -346,6 +362,7 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
             "m": mk, "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
             "sector": sector, "mcap": mcap, "chg": round(chg_map.get((mk, tk), 0.0), 4),
             "c5": c5, "up": up,
+            **({"mcap_est": 1} if mcap_est else {}),   # 시총 스크랩 실패 → 거래대금 대용(표시 금지)
             # 한·미 공통 12산업군 — 주식찾기·산업진단·종목조회가 같은 값을 쓰도록 수집 단계에서 1회 계산
             "grp": _group_of(mk, sector, tk),
         })

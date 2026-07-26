@@ -4748,7 +4748,8 @@ function discMkt(code) {
   if (!_DISC_MKT) {
     _DISC_MKT = {};
     (MARKET?.heatmap || []).forEach((t) => {
-      if (t.m === "kr") _DISC_MKT[t.t] = { mcap: t.mcap };
+      // mcap_est=시총 스크랩 실패로 '거래대금'이 들어간 대용값 → 시총으로 보여주면 안 되므로 제외
+      if (t.m === "kr") _DISC_MKT[t.t] = { mcap: t.mcap_est ? null : t.mcap };
     });
     Object.entries(MARKET?.quotes || {}).forEach(([k, v]) => {
       if (!k.startsWith("kr_")) return;
@@ -8457,7 +8458,8 @@ function renderHldTimeline(all, mode, host) {
     const keys = Object.keys(series).sort((a, b) => series[b].at(-1) - series[a].at(-1));
     if (!keys.length) { host.innerHTML = `<p class="mini-note">평가금을 계산할 수 없습니다.</p>`; return; }
     // 좌우 2열(각 ~690px)로 쪼개져 viewBox가 크면 그만큼 축소돼 글씨가 작아진다 → W를 컨테이너에 맞춤
-    const W = 700, H = 300, P = { l: 34, r: 118, t: 16, b: 26 };
+    // 라벨이 띠 안으로 들어가 우측 여백(구 118px)이 필요 없어졌다 → 그만큼 그래프가 넓어진다
+    const W = 700, H = 300, P = { l: 34, r: 14, t: 16, b: 26 };
     const X = (i) => P.l + (W - P.l - P.r) * (i / (axis.length - 1));
     const Y = (v) => P.t + (H - P.t - P.b) * (1 - v);
     // 누적 영역
@@ -8470,14 +8472,16 @@ function renderHldTimeline(all, mode, host) {
       return `<polygon points="${path}" fill="${HLD_COLORS[gi % 8]}" fill-opacity=".78"
         stroke="var(--card)" stroke-width=".6"><title>${g}</title></polygon>`;
     }).join("");
-    // 끝 라벨(비중 3% 이상만) — 겹침 방지
-    let acc2 = 0, prevY = -99;
+    // 라벨을 **자기 색 띠 안**에 적는다(우측에 몰아 쓰면 어느 띠 것인지 알 수 없어 v195에서 이동).
+    //  띠 높이가 글자보다 낮으면 생략 — 억지로 밀어내면 다시 남의 영역을 침범한다.
+    let acc2 = 0;
     const labels = keys.map((g, gi) => {
-      const v = series[g].at(-1); const mid = acc2 + v / 2; acc2 += v;
-      if (v < 0.03) return "";
-      let y = Y(mid); y = Math.max(y, prevY + 12); prevY = y;
-      return `<text x="${W - P.r + 6}" y="${y + 3}" class="cr-end" fill="${HLD_COLORS[gi % 8]}">${
-        String(g).slice(0, 9)} ${(v * 100).toFixed(0)}%</text>`;
+      const v = series[g].at(-1), mid = acc2 + v / 2;
+      acc2 += v;
+      const bandPx = (H - P.t - P.b) * v;            // 이 띠의 실제 높이(px)
+      if (bandPx < 12) return "";
+      return `<text x="${W - P.r - 8}" y="${Y(mid) + 3.5}" text-anchor="end" class="hld-band-lb"
+        >${String(g).slice(0, 11)} ${(v * 100).toFixed(0)}%</text>`;
     }).join("");
     const grid = [0, .25, .5, .75, 1].map((r) =>
       `<line x1="${P.l}" y1="${Y(r)}" x2="${W - P.r}" y2="${Y(r)}" stroke="var(--line)"/>
