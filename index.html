@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=206">
-<script src="firebase-config.js?v=206"></script>
-<script src="js/auth.js?v=206"></script>
+<link rel="stylesheet" href="css/style.css?v=207">
+<script src="firebase-config.js?v=207"></script>
+<script src="js/auth.js?v=207"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=206"></script>
+<script src="js/sync.js?v=207"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -346,17 +346,17 @@
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="1m" id="tf-1m" style="display:none">당일 분봉</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
       </span>
-      <span class="osc-checks" id="lookup-osc">보조지표
+    </div>
+    <div id="lookup-info" class="lk-caption" style="display:none"></div>
+    <div id="lookup-chart-wrap" style="position:relative">
+      <!-- 보조지표 — 차트 안 상단 오버레이(가로 한 줄을 통째로 쓰던 것을 접음) -->
+      <span class="osc-checks osc-rail" id="lookup-osc" style="display:none">
         <label><input type="checkbox" value="rsi"> RSI<span class="osc-i" data-tip="rsi">ⓘ</span></label>
         <label><input type="checkbox" value="macd"> MACD<span class="osc-i" data-tip="macd">ⓘ</span></label>
         <label><input type="checkbox" value="stoch"> 스토캐스틱<span class="osc-i" data-tip="stoch">ⓘ</span></label>
         <label><input type="checkbox" value="obv"> OBV<span class="osc-i" data-tip="obv">ⓘ</span></label>
         <label><input type="checkbox" value="disp"> 이격도<span class="osc-i" data-tip="disp">ⓘ</span></label>
-        <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동 · ⓘ에 커서를 올리면 설명)</span>
       </span>
-    </div>
-    <div id="lookup-info" class="lk-caption" style="display:none"></div>
-    <div id="lookup-chart-wrap" style="position:relative">
       <!-- 그리기 툴바 — 차트 안 왼쪽 세로바(가로 한 줄을 통째로 쓰던 것을 접음) -->
       <div id="draw-tools" class="draw-rail" style="display:none">
         <span class="mk-toggle" id="draw-mode">
@@ -1032,6 +1032,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=206"></script>
+<script src="js/app.js?v=207"></script>
 </body>
 </html>

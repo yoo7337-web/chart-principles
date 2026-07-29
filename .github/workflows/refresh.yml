@@ -73,10 +73,13 @@ jobs:
           python analysis/investor.py || echo "investor 실패(무시)"
           python analysis/sector_news.py || echo "sector_news 실패(무시)"
           python analysis/disclosure_scan.py || echo "disclosure_scan 실패(무시)"
+          # 오늘의 신호 — 노트북 배치에만 있어서 PC가 꺼져 있으면 며칠씩 멈췄다(실측 07-24에 정지).
+          # results/regimes.json은 위 시드 단계가 넣어주고, 가격은 collect --cloud 캐시를 쓴다.
+          python analysis/scan_today.py || echo "scan_today 실패(무시)"
 
       - name: Copy cloud-owned outputs back to site data
         run: |
-          for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings calendar company feed sector_news investor; do
+          for f in market market_pro news news_archive news_briefings deals deals_archive deals_briefings calendar company feed sector_news investor today_signals; do
             [ -f "engine/app/data/$f.json" ] && cp -f "engine/app/data/$f.json" "data/$f.json" || true
           done
           mkdir -p data/disclosures
@@ -86,7 +89,7 @@ jobs:
         run: |
           git config user.name "chart-cloud-bot"
           git config user.email "actions@github.com"
-          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json data/calendar.json data/company.json data/feed.json data/sector_news.json data/investor.json || true
+          git add data/market.json data/market_pro.json data/news.json data/news_archive.json data/news_briefings.json data/deals.json data/deals_archive.json data/deals_briefings.json data/calendar.json data/company.json data/feed.json data/sector_news.json data/investor.json data/today_signals.json || true
           git add -A data/disclosures || true   # 날짜별 신규 파일 + 보관기간 초과 삭제 반영
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"

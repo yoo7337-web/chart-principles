@@ -1189,12 +1189,14 @@ function loadLookup(key) {
         }
         drawLookupChart();
       });
-      // 보조지표 체크박스 — 복수 선택, 변경 시 재그림
-      tfbar.querySelectorAll("#lookup-osc input[type=checkbox]").forEach((cb) => cb.onchange = () => {
-        lookupOscs = [...tfbar.querySelectorAll("#lookup-osc input:checked")].map((x) => x.value);
+      // 보조지표 체크박스 — 복수 선택, 변경 시 재그림 (차트 안 상단 오버레이로 이동해 tfbar 밖에 있다)
+      document.querySelectorAll("#lookup-osc input[type=checkbox]").forEach((cb) => cb.onchange = () => {
+        lookupOscs = [...document.querySelectorAll("#lookup-osc input:checked")].map((x) => x.value);
         drawLookupChart();
       });
     }
+    const oscRail = $("#lookup-osc");
+    if (oscRail) oscRail.style.display = "flex";
     // 당일 분봉 버튼 — 수집된 종목만 노출(유동성 상위). 없으면 일봉으로 되돌림.
     loadIntradayIndex().then((idx) => {
       if (LOOKUP_ST !== st) return;
@@ -6379,10 +6381,13 @@ function renderLookupProfile(st) {
   const maxAbs = Math.max(0.05, ...shown.flatMap(([, a, r]) => [Math.abs(a || 0), Math.abs(r || 0)]));
   const perfViz = shown.length ? `<div class="pf2-wrap">
     <div class="pf2-head"><span class="perf-h" style="margin:0">기간 수익률</span>
-      <span class="sub-note"><span class="pf2-key bar"></span>절대 <span class="pf2-key dot"></span>시장대비</span></div>
+      <span class="sub-note"><span class="pf2-key bar"></span>절대 <span class="pf2-key dot"></span>시장 대비(초과수익)</span></div>
     ${shown.map(([lab, abs, rel]) => {
       const w = (v) => Math.min(50, Math.abs(v || 0) / maxAbs * 50);
       const dotPos = rel == null ? null : 50 + (rel >= 0 ? w(rel) : -w(rel));
+      // 점 위치만으로는 '얼마나 이겼는지'를 못 읽는다 → 초과수익을 %p로 나란히 표기
+      const relTxt = rel == null ? "" :
+        `<b class="pf2-rel ${rel >= 0 ? "pos" : "neg"}" title="같은 기간 시장 지수보다 ${rel >= 0 ? "더" : "덜"} 오른 폭">${rel >= 0 ? "+" : ""}${(rel * 100).toFixed(1)}%p</b>`;
       return `<div class="pf2-row"><span class="pf2-lab">${lab}</span>
         <span class="pf2-track">
           <span class="pf2-zero"></span>
@@ -6391,8 +6396,10 @@ function renderLookupProfile(st) {
           ${dotPos == null ? "" : `<span class="pf2-dot ${rel >= 0 ? "up" : "dn"}" style="left:${dotPos}%"
             title="시장 대비 ${pct(rel, 1)}"></span>`}
         </span>
-        <b class="pf2-val ${(abs ?? 0) >= 0 ? "pos" : "neg"}">${abs == null ? "-" : pct(abs, 1)}</b></div>`;
+        <b class="pf2-val ${(abs ?? 0) >= 0 ? "pos" : "neg"}">${abs == null ? "-" : pct(abs, 1)}</b>
+        ${relTxt}</div>`;
     }).join("")}
+    <p class="sub-note pf2-note">막대는 ±${(maxAbs * 100).toFixed(0)}% 범위로 그려집니다 — 넘는 값은 끝까지 채워지니 숫자를 보세요.</p>
   </div>` : "";
 
   // ── 리스크 게이지: 베타·변동성을 막대 한 줄로(문구 대신 위치로 인지) ──
@@ -6413,7 +6420,7 @@ function renderLookupProfile(st) {
   const sup = st.supply_sum;
   let supViz = "";
   if (sup && (sup.frgn_20 != null || sup.inst_20 != null)) {
-    const m = Math.max(1, Math.abs(sup.frgn_20 || 0), Math.abs(sup.inst_20 || 0));
+    const m = Math.max(1, Math.abs(sup.frgn_20 || 0), Math.abs(sup.inst_20 || 0), Math.abs(sup.indi_20 || 0));
     const amtTxt = (v) => v == null ? "-" : (v >= 0 ? "+" : "") +
       (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
     const srow = (label, v) => v == null ? "" : `<div class="pf2-row"><span class="pf2-lab">${label}</span>
@@ -6423,7 +6430,7 @@ function renderLookupProfile(st) {
     supViz = `<div class="pf2-wrap">
       <div class="pf2-head"><span class="perf-h" style="margin:0">수급 (20일 누적)</span>
         ${sup.frgn_ratio != null ? `<span class="sub-note">외국인 보유율 ${sup.frgn_ratio}%${sup.frgn_ratio_chg != null ? ` (${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}</span>` : ""}</div>
-      ${srow("외국인", sup.frgn_20)}${srow("기관", sup.inst_20)}</div>`;
+      ${srow("외국인", sup.frgn_20)}${srow("기관", sup.inst_20)}${srow("개인", sup.indi_20)}</div>`;
   }
 
   const rows = [
@@ -6485,6 +6492,8 @@ function drawSupply(st) {
   };
   line("fc", "#4391ff");   // 외국인 누적 (좌축)
   line("ic", "#f59e0b");   // 기관 누적 (좌축)
+  const hasIndi = sup.some((x) => x.pc != null);
+  if (hasIndi) line("pc", "#c084fc");   // 개인 누적 (좌축) — 옛 parquet엔 없어 조건부
   const fr = line("fr", "#22c07a", "right");  // 외국인 보유율 (우축)
   lookupSupply.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
   // 0선
@@ -6492,7 +6501,7 @@ function drawSupply(st) {
     .setData(sup.map((x) => ({ time: x.t, value: 0 })));
   lookupSupply.timeScale().fitContent();
   $("#lookup-supply-legend").innerHTML =
-    `─ <span style="color:#4391ff">외국인 누적 순매수</span> · <span style="color:#f59e0b">기관 누적 순매수</span> (좌축, 억원) ·
+    `─ <span style="color:#4391ff">외국인</span> · <span style="color:#f59e0b">기관</span>${hasIndi ? ` · <span style="color:#c084fc">개인</span>` : ""} 누적 순매수 (좌축, 억원) ·
      <span style="color:#22c07a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)`;
 }
 
@@ -7619,6 +7628,45 @@ function renderFinTrends(st) {
       : a < 1 ? x.toFixed(2) : x.toFixed(1);
   };
 
+  /* ---- 값 라벨 겹침 해소 ----
+     막대·라인 라벨을 그리는 자리에서 바로 <text>를 뱉으면 서로 모르는 채 같은 자리에 찍힌다
+     (사용자 제보: 매출 옆 이익률, 인접 막대의 값이 포개짐). → 전부 모아 두고 마지막에
+     자리를 잡아 그린다. 세로로 밀어 피하고, 끝내 못 피하면 그 라벨만 생략(숫자는 아래 표에 있다). */
+  const ftLbl = [];
+  const pushLbl = (x, y, text, fill, size = 10.5, dir = -1, prio = 1) =>
+    ftLbl.push({ x, y, text, fill, size, dir, prio });
+  const placeLabels = () => {
+    // 폭 추정이 실제보다 좁으면 겹침이 남는다 → 0.58 + 좌우 1px 여유(실측 후 조정한 값)
+    const box = (l, x, y) => {
+      const w = String(l.text).length * l.size * 0.58 + 2;
+      return { x1: x - w / 2, x2: x + w / 2, y1: y - l.size + 1, y2: y + 1.5 };
+    };
+    const hit = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+    const placed = [];
+    let svg = "";
+    const emit = (l, x, y) => {
+      placed.push(box(l, x, y));
+      svg += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${l.size}" text-anchor="middle" fill="${l.fill}">${l.text}</text>`;
+    };
+    // 우선순위 높은 것(축 → 막대 값 → 라인 %)부터 자리를 잡고, 나머지가 비켜간다
+    [...ftLbl].sort((a, b) => b.prio - a.prio).forEach((l) => {
+      if (l.fixed) { emit(l, l.x, l.y); return; }   // 축 기간 라벨 — 자리만 선점하고 안 움직임
+      const step = l.size * 0.9;
+      // ①선호 방향으로 멀어지며 ②반대 방향도 시도 ③그래도 없으면 좌우로 조금 밀어본다
+      for (let i = 0; i < 14; i++) {
+        for (const dy of (i === 0 ? [0] : [l.dir * i * step, -l.dir * i * step])) {
+          for (const dx of [0, -7, 7, -14, 14, -21, 21]) {
+            const x = l.x + dx, y = l.y + dy;
+            if (y < 9 || y > H - 21) continue;      // 위: 차트 밖 / 아래: 기간 축 라벨 침범 방지
+            if (!placed.some((p) => hit(p, box(l, x, y)))) { emit(l, x, y); return; }
+          }
+        }
+      }
+      // 끝내 자리가 없을 때만 생략(숫자는 아래 표에 그대로 있다)
+    });
+    return svg;
+  };
+
   // ---- 막대+라인 콤보 도우미 ----
   const barGroup = (keys, colors, labels, withLabel = false) => {
     const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
@@ -7636,11 +7684,11 @@ function renderFinTrends(st) {
         const x = cx + (j - (keys.length - 1) / 2) * (bw + 2) - bw / 2;
         const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
         svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
-        // 값 라벨 — 막대가 짧으면 겹치므로 양수는 위, 음수는 아래에 붙인다
-        if (withLabel) svg += `<text x="${x + bw / 2}" y="${v >= 0 ? yS(v) - 4 : yS(v) + 11}" font-size="10.5"
-          text-anchor="middle" fill="${colors[j]}">${ftNum(v * uMul)}</text>`;
+        // 값 라벨 — 양수는 막대 위, 음수는 아래가 기본. 겹치면 placeLabels가 더 밀어낸다
+        if (withLabel) pushLbl(x + bw / 2, v >= 0 ? yS(v) - 4 : yS(v) + 11,
+          ftNum(v * uMul), colors[j], 10.5, v >= 0 ? -1 : 1, 2);
       });
-      svg += `<text x="${cx}" y="${H - 9}" font-size="11.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`;
+      ftLbl.push({ x: cx, y: H - 9, text: r.p, fill: "#8b8b93", size: 11.5, dir: 0, prio: 9, fixed: true });
     });
     const legend = keys.map((k, j) => `<span style="color:${colors[j]}">■</span> ${labels[j]}`).join("  ");
     return { svg, legend, yS };
@@ -7657,11 +7705,15 @@ function renderFinTrends(st) {
       if (pts.length < 2) return;
       svg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
         fill="none" stroke="${colors[j]}" stroke-width="2"${dash[j] ? ` stroke-dasharray="${dash[j]}"` : ""}/>`
-        + pts.map((p, i2) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${colors[j]}"/>
-          <text x="${p[0]}" y="${p[1] + (j % 2 ? 16 : -8)}" font-size="10.5" text-anchor="middle" fill="${colors[j]}">${p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1)}%</text>`).join("");
+        + pts.map((p) => {
+          pushLbl(p[0], p[1] + (j % 2 ? 16 : -8),
+            p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1) + "%", colors[j], 10.5, j % 2 ? 1 : -1, 1);
+          return `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${colors[j]}"/>`;
+        }).join("");
     });
-    // 기간 라벨(막대 없을 때)
-    svg += rows.map((r, i) => `<text x="${padL + gw * i + gw / 2}" y="${H - 10}" font-size="9.5" text-anchor="middle" fill="#8b8b93">${r.p}</text>`).join("");
+    // 기간 라벨(막대 없을 때) — 값 라벨이 피해가도록 고정 장애물로 등록
+    rows.forEach((r, i) => ftLbl.push({ x: padL + gw * i + gw / 2, y: H - 10, text: r.p,
+      fill: "#8b8b93", size: 9.5, dir: 0, prio: 9, fixed: true }));
     const legend = keys.map((k, j) => `<span style="color:${colors[j]}">●─</span> ${labels[j]}`).join("  ");
     return { svg, legend };
   };
@@ -7678,8 +7730,8 @@ function renderFinTrends(st) {
       [["opm", "#f0b34c"], ["npm", "#ff8c9a"]].forEach(([k, c], j) => {
         const pts = rows.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yM(r[k]), r[k]] : null)).filter(Boolean);
         if (pts.length < 2) return;
-        lineSvg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="${j ? "4 3" : ""}"/>`
-          + pts.map((p) => `<text x="${p[0]}" y="${p[1] - 5}" font-size="8" text-anchor="middle" fill="${c}">${p[2].toFixed(1)}%</text>`).join("");
+        lineSvg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="${j ? "4 3" : ""}"/>`;
+        pts.forEach((p) => pushLbl(p[0], p[1] - 5, p[2].toFixed(1) + "%", c, 9, j ? 1 : -1, 1));
       });
     }
     chartSvg = (bg.svg || "") + lineSvg;
@@ -7703,8 +7755,9 @@ function renderFinTrends(st) {
     chartSvg = (bg.svg || "") + fcfLine;
     legend = `<span style="color:#22c07a">■</span> 영업활동  <span style="color:#5b8def">■</span> 투자활동  <span style="color:#9aa4b2">■</span> 재무활동  <span style="color:#f0b34c">●─</span> FCF(잉여현금흐름)  <span class="sub-note">(${unit})</span>`;
   }
+  // 값 라벨은 도형을 전부 그린 뒤 겹치지 않게 배치해 맨 위에 얹는다
   $("#ft-chart").innerHTML = chartSvg
-    ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}</svg><p class="legend">${legend}</p>`
+    ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}${placeLabels()}</svg><p class="legend">${legend}</p>`
     : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`;
 
   // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----
@@ -7808,15 +7861,19 @@ function finExportXlsx(st, mode) {
   const btn = $("#fin-xlsx");
   btn.textContent = "생성 중…";
   finLoadXlsx().then(() => {
-    const key = `${st.market}_${st.ticker}`, fin = FIN_CACHE[key];
+    const key = `${st.market}_${st.ticker}`, raw = FIN_CACHE[key];
+    // ⚠KR 새 포맷은 {cfs:{annual,quarter}, ofs:{…}} — 화면과 같은 finDataOf를 거쳐야 한다
+    // (여기서 raw.annual을 직접 읽어 undefined가 나면 아래 catch가 '라이브러리 로드 실패'로 오인해 표시했다)
+    const fin = finDataOf(raw), est0 = raw.est || fin.est || {};
     const unit = st.market === "kr" ? "억원" : "백만$";
     let periods, data;
     if (mode === "quarter" && fin.quarter) { periods = Object.keys(fin.quarter).sort(); data = fin.quarter; }
     else {
-      const est = fin.est || {}, act = Object.keys(fin.annual).sort();
-      const ey = Object.keys(est).filter((y) => !fin.annual[y]).sort();
-      periods = [...act, ...ey]; data = { ...fin.annual }; ey.forEach((y) => data[y] = { ...est[y], _est: true });
+      const est = est0, ann = fin.annual || {}, act = Object.keys(ann).sort();
+      const ey = Object.keys(est).filter((y) => !ann[y]).sort();
+      periods = [...act, ...ey]; data = { ...ann }; ey.forEach((y) => data[y] = { ...est[y], _est: true });
     }
+    if (!periods.length) throw new Error("no-periods");
     const wb = XLSX.utils.book_new();
     const sheet = (rowsDef, name) => {
       const aoa = [["지표", ...periods.map((p) => p + (data[p]?._est ? "(E)" : ""))]];
@@ -7839,7 +7896,13 @@ function finExportXlsx(st, mode) {
     const nm = st.market === "kr" ? st.name : st.ticker;
     XLSX.writeFile(wb, `${nm}_재무제표_${mode === "annual" ? "연간" : "분기"}_${unit}.xlsx`);
     btn.textContent = "⬇ 엑셀";
-  }).catch(() => { btn.textContent = "⬇ 엑셀"; alert("엑셀 라이브러리 로드 실패 — 네트워크를 확인해 주세요."); });
+  }).catch((e) => {
+    // ⚠원인을 구분해서 알린다 — 예전엔 표 생성 중 오류까지 '라이브러리 로드 실패'로 표시돼 엉뚱한 데를 봤다
+    btn.textContent = "⬇ 엑셀";
+    if (!window.XLSX) alert("엑셀 라이브러리를 불러오지 못했습니다 — 네트워크를 확인해 주세요.");
+    else if (String(e?.message) === "no-periods") alert("내려받을 재무 데이터가 없습니다.");
+    else { console.error("[xlsx]", e); alert("엑셀 생성 중 오류: " + (e?.message || e)); }
+  });
 }
 
 function finLoadXlsx() {
