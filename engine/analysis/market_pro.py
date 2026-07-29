@@ -73,7 +73,7 @@ def _merge_series(old: list, new: list, cumulative: bool = False) -> list:
 
 # 시계열 키 — nhnl만 누적(원점 보정 필요). frgn20/inst20은 KR 전용(수급 parquet이 로컬에만 있음)
 BREADTH_KEYS = ("adr", "nhnl", "ma50", "ma200", "hi52", "lo52", "mcc", "ddmed",
-                "corr60", "rv20", "ewcw", "conc10", "frgn20", "inst20")
+                "corr60", "rv20", "ewcw", "conc10", "frgn20", "inst20", "indi20")
 CUMULATIVE_KEYS = ("nhnl",)
 
 
@@ -216,11 +216,17 @@ def supply_series(data: dict) -> dict:
     if not frgn and not inst:
         return {}
 
+    # 개인은 수급 parquet에 없다 → **개인 ≈ −(외국인 + 기관)** 으로 유도한다.
+    #  국내 시장은 개인+외국인+기관+기타법인 순매수 합이 0이라, 기타법인만 빠진 근사다.
+    #  실측 오차 1~2%(2026-07-29 코스피: 개인 −19,768 / 외국인 −12,195 / 기관 +31,578 → 잔차 −385).
+    #  investor.json에 실제 개인 값이 있지만 그건 '시장 전체·40일'이라 이 차트(300종목·5년)와 기준이 다르다.
+    indi = {d: -(frgn.get(d, 0.0) + inst.get(d, 0.0)) for d in set(frgn) | set(inst)}
+
     def ser(acc):
         s = pd.Series(acc).sort_index().rolling(20, min_periods=5).sum()
         return [{"t": d.strftime("%Y-%m-%d"), "v": round(float(v), 1)}
                 for d, v in s.dropna().tail(HIST_DAYS).items()]
-    return {"kr": {"frgn20": ser(frgn), "inst20": ser(inst)}}
+    return {"kr": {"frgn20": ser(frgn), "inst20": ser(inst), "indi20": ser(indi)}}
 
 
 def sector_rotation(data: dict) -> dict:
