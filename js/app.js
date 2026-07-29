@@ -1922,7 +1922,101 @@ function devAdd(text, pri) {
   renderDevlog();
 }
 
+/* ---------- 💾 전체 데이터 백업·복원 (기기 이전용) ----------
+   이 사이트의 개인 데이터는 전부 localStorage에 있다. localStorage는 **브라우저+도메인(origin)에 묶여**
+   서버로 가지 않으므로 노트북·브라우저가 바뀌면 빈 상태로 보인다(설계 의도 — 보유·매매 기록을 공개
+   저장소에 올리지 않기 위함). 그래서 기기 이전은 '파일로 내보내고 새 기기에서 넣는' 방식만 가능하다. */
+const BACKUP_KEYS = [
+  ["cp_watch_v1", "⭐ 관심종목"],
+  ["cp_devlog_v1", "🛠 개발일지 아이디어"],
+  ["cp_memo_v1", "📝 종목 메모"],
+  ["cp_journal_v1", "📒 매매일지"],
+  ["cp_portfolio_v2", "💼 보유 포트폴리오"],
+  ["cp_portfolio_v1", "💼 보유(구버전)"],
+  ["cp_toss_v1", "🔗 토스 스냅샷"],
+  ["cp_pf_hist_v1", "📅 보유 비중 이력"],
+  ["cp_draw_v1", "✏️ 차트 그리기"],
+];
+
+function backupCount(raw) {           // 항목 수를 대략 세어 사용자에게 보여준다(빈 백업 오인 방지)
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v)) return v.length;
+    if (v && typeof v === "object") {
+      if (Array.isArray(v.holdings)) return v.holdings.length;
+      if (Array.isArray(v.items)) return v.items.length;
+      if (v.snaps && typeof v.snaps === "object") return Object.keys(v.snaps).length;
+      return Object.keys(v).length;
+    }
+    return v == null ? 0 : 1;
+  } catch (e) { return raw ? 1 : 0; }
+}
+
+function renderBackupStatus() {
+  const host = document.getElementById("backup-status");
+  if (!host) return;
+  const rows = BACKUP_KEYS.map(([k, label]) => {
+    const raw = localStorage.getItem(k);
+    const n = raw ? backupCount(raw) : 0;
+    return `<div class="bk-row${raw ? "" : " empty"}"><span>${label}</span>
+      <b>${raw ? n.toLocaleString() + "건" : "없음"}</b></div>`;
+  }).join("");
+  const total = BACKUP_KEYS.filter(([k]) => localStorage.getItem(k)).length;
+  host.innerHTML = `<div class="bk-grid">${rows}</div>
+    <p class="mini-note" style="margin-top:6px">이 브라우저에 저장된 항목: <b>${total}/${BACKUP_KEYS.length}</b>
+      · 도메인 <b>${location.origin}</b> 기준</p>`;
+}
+
+function bindBackupAll() {
+  const bk = document.getElementById("backup-all");
+  const rs = document.getElementById("restore-all");
+  const f = document.getElementById("restore-all-file");
+  if (!bk || !rs || !f) return;
+  renderBackupStatus();
+
+  bk.onclick = () => {
+    const data = {};
+    BACKUP_KEYS.forEach(([k]) => {
+      const raw = localStorage.getItem(k);
+      if (raw != null) { try { data[k] = JSON.parse(raw); } catch (e) { data[k] = raw; } }
+    });
+    const pack = { app: "chart-principles", kind: "full-backup", ver: 1,
+                   at: new Date().toISOString(), origin: location.origin, data };
+    const blob = new Blob([JSON.stringify(pack, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `시장분석_전체백업_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+
+  rs.onclick = () => f.click();
+  f.onchange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    file.text().then((txt) => {
+      let pack;
+      try { pack = JSON.parse(txt); } catch (err) { alert("JSON을 읽을 수 없습니다."); return; }
+      const d = pack?.data;
+      if (!d || pack.kind !== "full-backup") { alert("이 사이트의 전체 백업 파일이 아닙니다."); return; }
+      const lines = BACKUP_KEYS.filter(([k]) => d[k] != null)
+        .map(([k, label]) => `· ${label}: ${backupCount(JSON.stringify(d[k])).toLocaleString()}건`);
+      if (!lines.length) { alert("백업 파일에 복원할 데이터가 없습니다."); return; }
+      if (!confirm(`아래 데이터를 이 브라우저에 복원합니다.\n같은 항목이 이미 있으면 덮어씁니다.\n\n${
+        lines.join("\n")}\n\n백업 시점: ${(pack.at || "").slice(0, 16).replace("T", " ")}\n계속할까요?`)) return;
+      let n = 0;
+      BACKUP_KEYS.forEach(([k]) => {
+        if (d[k] == null) return;
+        localStorage.setItem(k, typeof d[k] === "string" ? d[k] : JSON.stringify(d[k]));
+        n++;
+      });
+      alert(`${n}개 항목을 복원했습니다. 페이지를 새로고침합니다.`);
+      location.reload();
+    });
+    f.value = "";
+  };
+}
+
 function renderDevlog() {
+  bindBackupAll();
   // 개발 내역(정적)
   const hist = document.getElementById("dev-history-list");
   if (hist) hist.innerHTML = DEV_HISTORY.map(([v, d, title, desc]) =>

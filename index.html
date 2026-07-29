@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=196">
-<script src="firebase-config.js?v=196"></script>
-<script src="js/auth.js?v=196"></script>
+<link rel="stylesheet" href="css/style.css?v=197">
+<script src="firebase-config.js?v=197"></script>
+<script src="js/auth.js?v=197"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -1005,6 +1005,20 @@
         <div id="dev-history-list"></div>
       </div>
     </div>
+    <!-- 기기 이전용 통합 백업 — 개별 탭 내보내기를 매번 반복하지 않도록 한 파일로 묶는다 -->
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">💾 전체 데이터 백업·복원
+        <span class="sub-note">(관심종목·개발일지·메모·매매일지·포트폴리오·차트그리기 한 번에)</span>
+        <span style="flex:1"></span>
+        <button class="today-chart-btn" id="backup-all">⬇ 전체 백업</button>
+        <button class="today-chart-btn" id="restore-all">⬆ 전체 복원</button>
+        <input type="file" id="restore-all-file" accept=".json" style="display:none">
+      </h3>
+      <div id="backup-status" class="bk-status"></div>
+      <p class="mini-note">이 사이트의 개인 데이터는 <b>브라우저(localStorage)에만</b> 저장되고 서버로 전송되지
+        않습니다 — 그래서 <b>노트북·브라우저가 바뀌면 안 보입니다</b>(설계상 의도: 보유 종목·매매 기록이
+        공개 저장소에 올라가지 않도록). 기기를 옮길 땐 이 백업 파일을 새 기기에서 <b>전체 복원</b>하세요.</p>
+    </div>
     <!-- 안내문은 본문 아래로(첫 화면을 설명이 차지하지 않게) -->
     <div class="criteria" style="margin-top:14px">🛠️ <b>개발일지</b> — 이 사이트의 개발 내역과 앞으로의 아이디어를 관리합니다.
       아이디어는 <b>이 브라우저에만</b> 저장(서버 전송 없음) · ⬇내보내기로 백업하세요.</div>
@@ -1029,6 +1043,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=196"></script>
+<script src="js/app.js?v=197"></script>
 </body>
 </html>
