@@ -76,9 +76,17 @@ def _dart_key() -> str | None:
     return os.environ.get("DART_API_KEY")
 
 
-def _getj(url: str, timeout: int = 15):
+def _getj(url: str, timeout: int = 15, tries: int = 4):
+    """DART는 간헐적으로 SSL EOF를 던진다 → 재시도. 마지막까지 실패하면 예외를 그대로 올린다
+    (호출자가 '데이터 없음'과 구분해야 하므로 여기서 삼키면 안 된다)."""
     req = urllib.request.Request(url, headers={"User-Agent": "chart-principles fin yoo7337@gmail.com"})
-    return json.loads(urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8"))
+    for i in range(tries):
+        try:
+            return json.loads(urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8"))
+        except Exception:
+            if i == tries - 1:
+                raise
+            time.sleep(0.6 * (i + 1))
 
 
 def _num(s):
@@ -130,6 +138,7 @@ def _extract(rows: list) -> dict:
 
 
 _CALLS = {"n": 0, "max": 18000}  # DART 일일 한도(20,000) 보호 — 도달 시 중단, 다음 실행이 이어받음
+_PARTIAL = set()  # 이번 수집에서 네트워크 실패가 섞인 (corp/fs) — 기존 데이터를 지우지 않게 표시
 
 
 def _dart_call(url: str):
@@ -159,14 +168,16 @@ def _extract_full(rows: list) -> dict:
 
 
 def _fetch_report(corp: str, key: str, year: int, rc: str, fs: str) -> dict | None:
-    """단일 보고서 조회 → _extract_full 결과 (없으면 None)."""
+    """단일 보고서 조회 → _extract_full 결과.
+    ⚠반환은 3값: dict=데이터 / None=정말 없음(status 013) / False=조회 실패(네트워크).
+    실패를 None(없음)으로 뭉개면 '연속 2년 없음 → 중단' 휴리스틱이 걸려 **이력이 통째로 잘린다**."""
     try:
         d = _dart_call(f"https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key={key}"
                        f"&corp_code={corp}&bsns_year={year}&reprt_code={rc}&fs_div={fs}")
     except RuntimeError:
         raise
     except Exception:
-        return None
+        return False
     if d.get("status") == "000" and d.get("list"):
         return _extract_full(d["list"])
     return None
@@ -182,18 +193,22 @@ def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
     분기 손익=thstrm(3개월분), 현금흐름=누적 차감, 4Q=연간-3Q누적."""
     this_year = datetime.now(KST).year
     annual_raw = {}   # {year:int → full dict}
-    fail = 0
+    fail = errs = 0
     for yr in range(this_year - 1, this_year - 1 - YEARS, -1):
         got = _fetch_report(corp, key, yr, "11011", fs)
         if got:
             annual_raw[yr] = got
             fail = 0
+        elif got is False:   # 조회 실패(네트워크) — '없음'이 아니므로 중단 카운트에서 제외
+            errs += 1
         else:
             fail += 1
-            if fail >= 2:  # 연속 2년 없음 → 상장 이전/미작성 → 중단
+            if fail >= 2:  # 연속 2년 '없음' → 상장 이전/미작성 → 중단
                 break
     if not annual_raw:
         return None
+    if errs:   # 실패가 섞였으면 이력이 잘렸을 수 있다 → 호출자가 덮어쓰기를 보류하도록 표시
+        _PARTIAL.add(f"{corp}/{fs}")
     annual = {str(y): _eok(d) for y, d in annual_raw.items()}
 
     # ---- 분기: 최근 2년치(~9분기). 금년+전년만 받으면 연초엔 5분기밖에 안 나와 그래프가 1년치로 보인다 ----
@@ -244,6 +259,25 @@ def fetch_kr(code: str, corp: str, key: str) -> dict | None:
         if d:
             out[name] = d
     return out or None
+
+
+def _merge_fs(new: dict | None, old: dict | None) -> dict | None:
+    """재무 이력은 **줄어들 수 없다** — 새 수집이 일부만 받아왔어도 기존 연도/분기를 지우지 않는다.
+    (DART SSL EOF 한 번에 10년치가 날아가던 사고 방지. 값이 겹치면 새 수집이 이긴다.)"""
+    if not old:
+        return new
+    if not new:
+        return old
+    out = dict(new)
+    for name in ("cfs", "ofs"):
+        o, n = old.get(name), new.get(name)
+        if not o:
+            continue
+        if not n:
+            out[name] = o          # 통째로 실패한 구분은 기존 것을 유지
+            continue
+        out[name] = {k: {**(o.get(k) or {}), **(n.get(k) or {})} for k in ("annual", "quarter")}
+    return out
 
 
 def _yf_frame(df, mapping: dict, quarterly: bool = False) -> dict:
@@ -346,6 +380,16 @@ def _fresh(key: str, idx: dict) -> bool:
         return False
 
 
+def _read(key: str) -> dict | None:
+    p = OUTDIR / f"{key}.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def _write(key: str, payload: dict):
     OUTDIR.mkdir(parents=True, exist_ok=True)
     (OUTDIR / f"{key}.json").write_text(
@@ -359,7 +403,11 @@ def main():
     ap.add_argument("--kr-only", action="store_true")
     ap.add_argument("--us-only", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--max-calls", type=int, default=0,
+                    help="이번 실행의 DART 호출 상한(같은 날 여러 번 돌릴 때 20,000 한도 분할용)")
     args = ap.parse_args()
+    if args.max_calls:
+        _CALLS["max"] = args.max_calls
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     idx = _load_index()
 
@@ -394,6 +442,7 @@ def main():
                     break
                 done += 1
                 if data:
+                    data = _merge_fs(data, _read(k))   # 기존 이력 보존(수집 실패로 줄어들지 않게)
                     data["market"] = "kr"
                     data["est"] = _est_from_company(k)
                     _write(k, data)
