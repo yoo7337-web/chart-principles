@@ -1639,3 +1639,44 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .sync-badge.ok { background: rgba(34,192,122,.16); color: #3ed492; }
 .sync-badge.warn { background: rgba(240,179,76,.16); color: #f0b34c; }
 .sync-badge.err { background: rgba(245,68,90,.18); color: #ff7c8c; }
+/* 관심종목 표: .scr-name의 flex 정렬이 #scr-table에만 걸려 있어 로고·회사명 수평이 어긋났다 */
+.watch-table .scr-name { display: flex; align-items: center; gap: 8px; }
+.watch-table .scr-name .mv-logo { width: 22px; height: 22px; flex: none; }
+.watch-table td { vertical-align: middle; }
+
+/* 신호 목록 구조화: 채택/미채택 → 매수/매도 4구획 */
+.rule-legend-wrap { width: 100%; margin-top: 10px; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; }
+.rl-block { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; }
+.rl-block.sel { border-color: rgba(240,179,76,.38); background: rgba(240,179,76,.05); }
+.rl-block.unsel { opacity: .92; }
+.rl-block-h { display: flex; align-items: baseline; gap: 8px; font-weight: 700; font-size: .84rem;
+  margin-bottom: 6px; }
+.rl-block-h .sub-note { font-weight: 400; }
+.rl-sub { margin-top: 6px; }
+.rl-sub-h { display: flex; align-items: baseline; gap: 7px; font-size: .76rem; font-weight: 700;
+  padding: 2px 5px; border-radius: 5px; }
+.rl-sub.buy .rl-sub-h { color: #3ed492; background: rgba(34,192,122,.10); }
+.rl-sub.sell .rl-sub-h { color: #ff7c8c; background: rgba(245,68,90,.10); }
+.rl-sub .rule-legend { grid-template-columns: 1fr; margin-top: 2px; }
+/* 공시 스캐너 열 너비 — '공시 내용'이 전체를 밀어내지 않도록 고정 폭 + 말줄임 */
+#dsc-table { table-layout: fixed; }
+#dsc-table th:nth-child(1), #dsc-table td:nth-child(1) { width: 20%; }   /* 회사 */
+#dsc-table th:nth-child(2), #dsc-table td:nth-child(2) { width: 10%; }   /* 시가총액 */
+#dsc-table th:nth-child(3), #dsc-table td:nth-child(3) { width: 8%; }    /* 주가 */
+#dsc-table th:nth-child(4), #dsc-table td:nth-child(4) { width: 9%; }    /* 변동 */
+#dsc-table th:nth-child(5), #dsc-table td:nth-child(5) { width: 13%; }   /* 구분 */
+#dsc-table th:nth-child(6), #dsc-table td:nth-child(6) { width: 26%; }   /* 공시 내용 */
+#dsc-table th:nth-child(7), #dsc-table td:nth-child(7) { width: 9%; }    /* 제출인 */
+#dsc-table th:nth-child(8), #dsc-table td:nth-child(8) { width: 5%; }    /* 원본 */
+#dsc-table .dsc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dsc-table td:nth-child(7) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dsc-table .hld-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* PER/PBR 밴드 */
+.band-now { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: .86rem;
+  margin: 2px 0 6px; }
+.band-gauge { flex: 1; min-width: 140px; height: 6px; border-radius: 999px;
+  background: linear-gradient(90deg, rgba(67,145,255,.35), rgba(240,179,76,.35), rgba(245,68,90,.35));
+  position: relative; }
+.band-gauge > span { position: absolute; left: 0; top: -3px; height: 12px; width: 0;
+  border-right: 2px solid var(--ink); }

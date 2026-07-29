@@ -308,12 +308,22 @@ def kr_company(code: str) -> dict:
             txt = re.sub(r"[|\s]+", "|", re.sub(r"<[^>]+>", "|", html2[i:i + 5000]))
             m2 = re.search(r"제품명\|구성비\|(.*?)(?:&nbsp;|차트\|건너뛰기|$)", txt)
             if m2:
+                # ⚠제품명에 공백이 있으면("Wafer Test") 토큰이 쪼개져 **2개씩 짝짓는 방식이 깨진다**
+                #   (실측: 두산테스나가 Wafer Test 92.85/PKG Test 5.64/Die Preparation 1.51인데 5.64 하나만 잡혀
+                #    매출구성 합계가 5.6%로 나옴 — 전체의 30%가 이 문제였다).
+                #   → 숫자 토큰을 만나면 그 앞에 쌓아둔 토큰 전부를 이름으로 확정한다.
                 toks = [t for t in m2.group(1).split("|") if t]
-                mix = []
-                for a, b in zip(toks[::2], toks[1::2]):
-                    v = _num(b)
-                    if v is not None and -100 <= v <= 100 and not re.match(r"^[-0-9.,]+$", a):
-                        mix.append({"name": a.strip(), "pct": v})
+                mix, name_parts = [], []
+                for t in toks:
+                    v = _num(t) if re.fullmatch(r"-?[\d.,]+", t) else None
+                    if v is None:
+                        name_parts.append(t)
+                        continue
+                    # ⚠상한을 100으로 두면 안 된다 — 연결조정이 큰 지주·복합기업은 개별 부문이 100%를
+                    #   넘는다(실측: CS홀딩스 용접재료부문 144.22 + 지주 2.64 + 연결조정 −46.86 = 100).
+                    if name_parts and -500 <= v <= 500:
+                        mix.append({"name": " ".join(name_parts).strip()[:40], "pct": v})
+                    name_parts = []
                 if mix:
                     out["sales_mix"] = mix[:8]
     except Exception:

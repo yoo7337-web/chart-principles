@@ -4994,8 +4994,8 @@ function renderDiscTable() {
         : `${up ? "+" : "−"}${Math.abs(Math.round(dAmt)).toLocaleString()}
            <span class="dsc-pct">${up ? "+" : "−"}${Math.abs(q2.chg * 100).toFixed(2)}%</span>`}</td>
       <td><span class="dsc-badge c-${cid}">${c.icon} ${c.name}</span></td>
-      <td class="dsc-title">${fix ? `<span class="dsc-fix">정정</span>` : ""}${nm}</td>
-      <td class="sub-note">${flr || "-"}</td>
+      <td class="dsc-title" title="${nm.replace(/"/g, "&quot;")}">${fix ? `<span class="dsc-fix">정정</span>` : ""}${nm}</td>
+      <td class="sub-note" title="${(flr || "").replace(/"/g, "&quot;")}">${flr || "-"}</td>
       <td><a class="dsc-src" href="${discLink(rcp)}" target="_blank" rel="noopener">DART ↗</a></td>
     </tr>`;
   }).join("") : `<tr><td colspan="8" class="sub-note">조건에 맞는 공시가 없습니다.</td></tr>`) + `</tbody>`;
@@ -6463,21 +6463,36 @@ function buildSigChips(st) {
   }).join("");
   // 칩은 축약어(이격·BB·R30…)라 뜻을 알 수 없다 → 아래에 **이 종목에 실제로 걸린 원칙만**
   // 이름 + 판정 기준(results.json desc)으로 풀어 적는다. 채택 원칙(⭐)과 그 외를 구분 표기.
-  const legend = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([rid, n]) => {
+  // ①채택/미채택 ②그 안에서 매수/매도로 4구획 — 평면 목록은 무엇이 검증된 원칙인지 한눈에 안 들어온다
+  const items = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([rid, n]) => {
     const meta = (DATA?.rules || []).find((x) => x.rule_id === rid);
     const s = st.stats.find((x) => x.rule_id === rid);
-    const nm = meta?.name || s?.name || rid;
-    const side = (meta?.side || s?.side) === "buy" ? "buy" : "sell";
-    const on = ruleActive(rid, st.market);
-    return `<li class="rl-item${on ? "" : " off"}" data-rid="${rid}">
-      <span class="rl-ab ${side}">${RULE_ABBR[rid] || "•"}</span>
-      <b>${meta?.selected ? "⭐ " : ""}${nm}</b>
-      ${meta?.desc ? `<span class="rl-desc">${meta.desc}</span>` : ""}
-      <span class="rl-n">${n}회</span>${on ? "" : `<span class="rl-off">현 국면 꺼짐</span>`}</li>`;
-  }).join("");
+    return { rid, n, meta, nm: meta?.name || s?.name || rid,
+             side: (meta?.side || s?.side) === "buy" ? "buy" : "sell",
+             sel: !!meta?.selected, on: ruleActive(rid, st.market) };
+  });
+  const li = (x) => `<li class="rl-item${x.on ? "" : " off"}" data-rid="${x.rid}">
+      <span class="rl-ab ${x.side}">${RULE_ABBR[x.rid] || "•"}</span>
+      <b>${x.nm}</b>
+      ${x.meta?.desc ? `<span class="rl-desc">${x.meta.desc}</span>` : ""}
+      <span class="rl-n">${x.n}회</span>${x.on ? "" : `<span class="rl-off">현 국면 꺼짐</span>`}</li>`;
+  const sub = (arr, side) => {
+    const list = arr.filter((x) => x.side === side);
+    if (!list.length) return "";
+    return `<div class="rl-sub ${side}"><div class="rl-sub-h">${
+      side === "buy" ? "🟢 상승(매수) 신호" : "🔴 하락(매도) 신호"}
+      <span class="sub-note">${list.length}종 · ${list.reduce((a, b) => a + b.n, 0)}회</span></div>
+      <ul class="rule-legend">${list.map(li).join("")}</ul></div>`;
+  };
+  const block = (arr, title, note, cls) => arr.length ? `<div class="rl-block ${cls}">
+      <div class="rl-block-h">${title}<span class="sub-note">${note}</span></div>
+      ${sub(arr, "buy")}${sub(arr, "sell")}</div>` : "";
+  const legend = block(items.filter((x) => x.sel), "⭐ 채택 원칙",
+      "10년 검증 통과 — 이 종목에서 발생한 신호", "sel")
+    + block(items.filter((x) => !x.sel), "참고 원칙 (미채택)",
+      "검증 기준 미달 — 근거가 약하니 참고만", "unsel");
   const host = $("#lookup-chips");
-  host.innerHTML = chips + (legend
-    ? `<ul class="rule-legend">${legend}</ul>` : "");
+  host.innerHTML = chips + (legend ? `<div class="rule-legend-wrap">${legend}</div>` : "");
   host.querySelectorAll(".sig-chip, .rl-item").forEach((c) => c.addEventListener("click", () => {
     const rs = $("#lookup-rule");
     rs.value = rs.value === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
@@ -7080,14 +7095,27 @@ function renderLookupPeers(st) {
     const peers = co?.peers;
     if (!peers?.length) { host.style.display = "none"; return; }
     host.style.display = "";
-    const rows = peers.map((p) => `<tr ${goto("kr", p.ticker)}>
+    // 피어 API엔 PER/PBR이 없다 → 이미 전 종목 수집해 둔 company.metrics에서 끌어온다(파이프라인 무변경).
+    // 비교 기준을 맞추려고 조회 종목(self) 행을 맨 위에 함께 넣는다.
+    const met = (tk) => EXTRAS.company?.map?.[`kr_${tk}`]?.metrics || {};
+    const nf1 = (v) => (v == null || !isFinite(v) ? "-" : v.toFixed(1) + "배");
+    const all = [{ ticker: st.ticker, name: st.name, self: true,
+                   price: freshQuote(st)?.price ?? null, chg: null }, ...peers];
+    const rows = all.map((p) => {
+      const m = met(p.ticker);
+      return `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("kr", p.ticker)}>
       <td class="hld-name"><img class="mv-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${p.ticker}.svg" onerror="this.style.visibility='hidden'">
         <span><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></span></td>
-      <td>${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
-      <td class="${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td></tr>`).join("");
-    host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(네이버 동일업종)</span></h3>
+      <td class="scr-r">${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
+      <td class="scr-r ${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td>
+      <td class="scr-r">${nf1(m.per)}</td>
+      <td class="scr-r">${nf1(m.pbr)}</td></tr>`;
+    }).join("");
+    host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교
+        <span class="sub-note">(네이버 동일업종 · PER·PBR은 최근 보고서 기준)</span></h3>
       <div class="tablewrap"><table class="hld-table peer-table">
-        <thead><tr><th>종목</th><th>주가</th><th>등락률</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <thead><tr><th>종목</th><th class="scr-r">주가</th><th class="scr-r">등락률</th>
+          <th class="scr-r">PER</th><th class="scr-r">PBR</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div id="peer-chart"></div>`;
     drawPeerChart(st, peers.map((x) => ({ mk: "kr", ticker: x.ticker, name: x.name })));
   } else {
@@ -7100,14 +7128,22 @@ function renderLookupPeers(st) {
       .sort((a, b) => (b.mcap || 0) - (a.mcap || 0)).slice(0, 6);
     if (list.length < 2) { host.style.display = "none"; return; }
     host.style.display = "";
-    const rows = list.map((p) => `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("us", p.ticker)}>
+    // PBR은 FUND에 없어 company.metrics에서 보강(KR과 같은 소스 규칙)
+    const met2 = (tk) => EXTRAS.company?.map?.[`us_${tk}`]?.metrics || {};
+    const nf1 = (v) => (v == null || !isFinite(v) ? "-" : v.toFixed(1) + "배");
+    const rows = list.map((p) => {
+      const m = met2(p.ticker);
+      return `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("us", p.ticker)}>
       <td class="hld-name"><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></td>
-      <td>${p.per != null ? p.per.toFixed(1) + "배" : "-"}</td>
-      <td>${p.mcap != null ? fmtMcap(p.mcap, "us") : "-"}</td>
-      <td>${p.price != null ? fmtPrice(p.price, "us") : "-"}</td></tr>`).join("");
+      <td class="scr-r">${p.price != null ? fmtPrice(p.price, "us") : "-"}</td>
+      <td class="scr-r">${p.mcap != null ? fmtMcap(p.mcap, "us") : "-"}</td>
+      <td class="scr-r">${nf1(p.per ?? m.per)}</td>
+      <td class="scr-r">${nf1(m.pbr)}</td></tr>`;
+    }).join("");
     host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교 <span class="sub-note">(${ind} · 시총순)</span></h3>
       <div class="tablewrap"><table class="hld-table peer-table">
-        <thead><tr><th>종목</th><th>PER</th><th>시가총액</th><th>주가</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <thead><tr><th>종목</th><th class="scr-r">주가</th><th class="scr-r">시가총액</th>
+          <th class="scr-r">PER</th><th class="scr-r">PBR</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div id="peer-chart"></div>`;
     drawPeerChart(st, list.filter((x) => !x.self).map((x) => ({ mk: "us", ticker: x.ticker, name: x.name })));
   }
@@ -7201,7 +7237,116 @@ function renderLookupFinancials(st) {
     ftFs = null;  // Snapshot의 연결/별도 선택도 종목마다 새로 판단(이전 종목 선택이 남지 않게)
     finDraw(st);
     renderFinTrends(st);  // 실적·재무 추이 통합 카드(같은 financials 데이터)
+    renderValueBand(st);  // PER/PBR 밴드(같은 financials + 주가 시계열)
   }).catch(() => { host.style.display = "none"; $("#lookup-finq").style.display = "none"; });
+}
+
+/* ---------- 📐 PER / PBR 밴드 ----------
+   "지금 주가가 이 종목의 역사적 밸류에이션 범위 중 어디인가"를 본다.
+   밴드 = 그 시점의 EPS(또는 BPS) × 배수. 실적이 늘면 같은 배수라도 밴드가 올라가므로,
+   주가 선이 어느 밴드 사이에 있는지가 곧 그때의 PER/PBR이다.
+
+   ⚠주식수는 financials에 없다 → `순이익 ÷ EPS`(같은 해)로 역산해 **일정하다고 가정**한다.
+     밴드 차트의 통상적 근사이며, 대규모 증자·감자가 있었으면 과거 구간이 왜곡될 수 있다(화면에 명시). */
+let bandMode = "per";
+function renderValueBand(st) {
+  const host = $("#lookup-band");
+  if (!host) return;
+  const key = `${st.market}_${st.ticker}`;
+  const fin = FIN_CACHE[key];
+  const co = EXTRAS.company?.map?.[key];
+  const src = fin && (fin.cfs || fin.ofs || fin);
+  const annual = src?.annual || {};
+  const ext = (co?.fin_ext || []).filter((r) => !r.est && r.eps && r.net);
+  const series = st.series || [];
+  if (!Object.keys(annual).length || !ext.length || series.length < 60) { host.style.display = "none"; return; }
+
+  // 주식수: **시가총액 ÷ 주가**가 정확하다. 순이익÷EPS는 연결 순이익(비지배지분 포함) vs 지배주주 EPS라
+  // 주식수가 과대 추정돼 PBR이 낮게 나온다(실측: 삼성전자 1.89배 vs 실제 2.33배). 시총이 없을 때만 폴백.
+  const unitMul = st.market === "kr" ? 1e8 : 1e6;      // 억원→원 / 백만$→$
+  const tile = (MARKET?.heatmap || []).find((t) => t.m === st.market && t.t === st.ticker);
+  const qp = (MARKET?.quotes?.[key] || [])[0];
+  let shares = (tile?.mcap && !tile.mcap_est && qp) ? tile.mcap / qp : null;
+  if (!shares) {
+    const last = ext[ext.length - 1];
+    shares = (last.net * unitMul) / last.eps;
+  }
+  if (!isFinite(shares) || shares <= 0) { host.style.display = "none"; return; }
+
+  // 연도별 EPS·BPS (financials의 순이익·자본총계를 주식수로 나눔)
+  const perYear = {};
+  Object.entries(annual).forEach(([y, d]) => {
+    const yr = String(y).slice(0, 4);
+    if (d.np != null) perYear[yr] = { ...(perYear[yr] || {}), eps: (d.np * unitMul) / shares };
+    if (d.equity != null) perYear[yr] = { ...(perYear[yr] || {}), bps: (d.equity * unitMul) / shares };
+  });
+  const metric = bandMode === "per" ? "eps" : "bps";
+  // ⚠해당 연도 실적이 없으면(=올해는 아직 미발표) **직전 연도를 이월**해야 한다.
+  //   그냥 건너뛰면 올해 봉이 통째로 빠져 '현재 PER'이 작년 말 값이 된다(실측 사고).
+  const years = Object.keys(perYear).filter((y) => perYear[y][metric] > 0).sort();
+  const baseOf = (yr) => {
+    let pick = null;
+    for (const y of years) { if (y <= yr) pick = y; else break; }
+    return pick ? perYear[pick][metric] : null;
+  };
+  const pts = series.map((b) => {
+    const v = baseOf(b.t.slice(0, 4));
+    return v && v > 0 ? { t: b.t, c: b.c, base: v, mult: b.c / v } : null;
+  }).filter(Boolean);
+  if (pts.length < 40) { host.style.display = "none"; return; }
+
+  // 밴드 배수 = 이 종목 자신의 이력 분포(10/30/50/70/90 백분위) — 임의 배수보다 해석이 쉽다
+  const sorted = pts.map((p) => p.mult).sort((a, b) => a - b);
+  const q = (r) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * r))];
+  const mults = [...new Set([q(0.1), q(0.3), q(0.5), q(0.7), q(0.9)]
+    .map((m) => +m.toFixed(m < 10 ? 2 : 1)))].sort((a, b) => a - b);
+  const now = pts[pts.length - 1];
+  const pctRank = sorted.filter((m) => m <= now.mult).length / sorted.length * 100;
+
+  const W = 940, H = 320, P = { l: 52, r: 66, t: 14, b: 24 };
+  const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, pts.length - 1));
+  const all = pts.flatMap((p) => [p.c, ...mults.map((m) => p.base * m)]);
+  const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 1;
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - (lo - pad)) / ((hi + pad) - (lo - pad)));
+  const COLORS = ["#4391ff", "#22c07a", "#f0b34c", "#ff8a4c", "#f5445a"];
+  const bandLines = mults.map((m, i) => {
+    const d = pts.map((p, j) => `${X(j).toFixed(1)},${Y(p.base * m).toFixed(1)}`).join(" ");
+    return `<polyline points="${d}" fill="none" stroke="${COLORS[i % 5]}" stroke-width="1.2"
+      stroke-dasharray="5 4" opacity=".8"/>
+      <text x="${W - P.r + 4}" y="${Y(pts[pts.length - 1].base * m) + 3.5}" class="cr-end"
+        fill="${COLORS[i % 5]}">${m}배</text>`;
+  }).join("");
+  const price = `<polyline points="${pts.map((p, j) => `${X(j).toFixed(1)},${Y(p.c).toFixed(1)}`).join(" ")}"
+    fill="none" stroke="#e7e7ec" stroke-width="2"/>`;
+  const grid = [0, .5, 1].map((r) => {
+    const v = (lo - pad) + ((hi + pad) - (lo - pad)) * r;
+    return `<line x1="${P.l}" y1="${Y(v)}" x2="${W - P.r}" y2="${Y(v)}" stroke="var(--line)"/>
+      <text x="${P.l - 5}" y="${Y(v) + 3}" text-anchor="end" class="cr-ax">${fmtPrice(v, st.market)}</text>`;
+  }).join("");
+  const xl = [0, Math.floor(pts.length / 2), pts.length - 1].map((i) =>
+    `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"}"
+      class="cr-ax">${pts[i].t.slice(0, 7)}</text>`).join("");
+  const lab = bandMode === "per" ? "PER" : "PBR";
+  host.style.display = "";
+  host.innerHTML = `<h3 class="lk-h3">📐 ${lab} 밴드
+      <span class="sub-note">(주가가 역사적 ${lab} 범위 중 어디인지 · 밴드=그 시점 ${
+        bandMode === "per" ? "EPS" : "BPS"} × 배수)</span>
+      <span style="flex:1"></span>
+      <span class="mk-toggle" id="band-mode">
+        <button data-b="per" class="${bandMode === "per" ? "active" : ""}">PER</button>
+        <button data-b="pbr" class="${bandMode === "pbr" ? "active" : ""}">PBR</button>
+      </span></h3>
+    <div class="band-now">현재 <b>${lab} ${now.mult.toFixed(now.mult < 10 ? 2 : 1)}배</b>
+      <span class="sub-note">— 지난 ${(pts.length / 252).toFixed(1)}년 중 <b>하위 ${pctRank.toFixed(0)}%</b> 수준</span>
+      <span class="band-gauge"><span style="width:${Math.min(100, Math.max(0, pctRank))}%"></span></span></div>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${bandLines}${price}${xl}</svg>
+    <p class="mini-note">흰 선 = 주가 · 점선 = ${lab} 배수 밴드(이 종목 이력의 10·30·50·70·90 백분위).
+      주가가 <b>아래쪽 밴드</b>에 있으면 과거 대비 싸고, <b>위쪽</b>이면 비쌉니다.
+      ⚠주식수는 최근 <b>순이익÷EPS</b>로 역산해 일정하다고 가정 — 증자·감자가 있었다면 과거 구간이 왜곡될 수 있습니다.
+      ${bandMode === "pbr" ? "" : "적자 연도는 EPS가 음수라 그 구간이 빠집니다."}</p>`;
+  host.querySelectorAll("#band-mode button").forEach((b) => b.onclick = () => {
+    bandMode = b.dataset.b; renderValueBand(st);
+  });
 }
 
 /* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
