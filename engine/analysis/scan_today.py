@@ -19,7 +19,8 @@ from common import APP_DATA, ROOT, dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
 
-LOOKBACK = 3  # 최근 N영업일 신호만
+LOOKBACK = 3     # 최근 N영업일 신호만 (화면에 뜨는 신호)
+HIST_DAYS = 120  # 신호 상태(반전/최초/지속) 판정을 위해 되짚어 볼 기간
 
 
 def main():
@@ -51,28 +52,75 @@ def main():
         d = add_indicators(raw)
         asof = max(asof or d.index[-1], d.index[-1])
         n = len(d)
+        hist = []      # 이 종목의 최근 HIST_DAYS 신호 전부 (방향 판정용)
         for rid, entry in ruleset.items():
             try:
                 sig = entry["rule"].fn(d).to_numpy()
             except Exception:
                 continue
+            act = bool(is_active(entry, cur_regime[mk]))
             for p in dedupe_positions(sig):
+                if p < n - HIST_DAYS:
+                    continue
+                rec = {"pos": p, "side": entry["rule"].side, "rule": entry["rule"].name,
+                       "date": d.index[p].strftime("%Y-%m-%d"), "active": act}
+                hist.append(rec)
                 if p >= n - LOOKBACK:
                     signals.append({
                         "market": mk, "ticker": tk,
                         "name": kr_names.get(tk, tk) if mk == "kr" else tk,
                         "rule_id": rid, "rule": entry["rule"].name,
                         "side": entry["rule"].side,
-                        "date": d.index[p].strftime("%Y-%m-%d"),
+                        "date": rec["date"],
                         "price": round(float(d["close"].iloc[p]), 2),
-                        "active": bool(is_active(entry, cur_regime[mk])),
+                        "active": act,
+                        "_pos": p,
                     })
+        # ── 신호 상태 판정: 이번에 방향이 뒤집혔나 / 처음인가 / 계속 같은 방향인가 ──
+        # ⚠**바(날짜) 단위 방향**으로 판정한다. 같은 날 여러 원칙이 매수·매도를 동시에 낼 수 있어
+        #   (실측: WDC 07-15에 '이격도 과대낙폭' 매수 + '60일선 하향돌파' 매도 동시 발생)
+        #   개별 신호를 그대로 이어 붙이면 정렬 순서에 따라 판정이 뒤집힌다.
+        bars = {}
+        for h in hist:
+            b = bars.setdefault(h["pos"], {"buy": 0, "sell": 0, "date": h["date"]})
+            b[h["side"]] += 1
+        def bar_dir(p):
+            b = bars[p]
+            return "buy" if b["buy"] > b["sell"] else "sell" if b["sell"] > b["buy"] else "mixed"
+        ordered = sorted(bars)
+        for s in signals:
+            if s["market"] != mk or s["ticker"] != tk:
+                continue
+            prior = [p for p in ordered if p < s["_pos"] and bar_dir(p) != "mixed"]
+            last = prior[-1] if prior else None
+            if last is None:
+                s["status"] = "first"                    # 관측 기간 내 첫 신호
+            elif bar_dir(last) != s["side"]:
+                s["status"] = "flip"                     # 직전 신호일과 반대 → 방향 전환
+            else:
+                s["status"] = "repeat"                   # 같은 방향 반복
+            s["prev_side"] = bar_dir(last) if last is not None else None
+            s["prev_date"] = bars[last]["date"] if last is not None else None
+            s["days_since"] = int(s["_pos"] - last) if last is not None else None
+            # 같은 방향이 며칠(몇 회) 연속인지 — 반대 방향 바를 만나면 중단
+            streak = 1
+            for p in reversed(prior):
+                if bar_dir(p) == s["side"]:
+                    streak += 1
+                else:
+                    break
+            s["streak"] = streak
+            # 이 날짜에 매수·매도가 동시에 나왔는지(엇갈리는 신호 = 판단 유보 신호)
+            s["conflict"] = bar_dir(s["_pos"]) == "mixed"
+    for s in signals:
+        s.pop("_pos", None)
 
     signals.sort(key=lambda x: (x["date"], x["market"], x["ticker"]), reverse=True)
     payload = {
         "generated": date.today().isoformat(),
         "asof": asof.strftime("%Y-%m-%d") if asof is not None else None,
         "lookback_days": LOOKBACK,
+        "hist_days": HIST_DAYS,
         "regime": cur_regime,
         "rules": rule_panel,
         "signals": signals,

@@ -24,7 +24,9 @@ H = 20
 
 
 def build_supply(mk: str, tk: str, df) -> tuple:
-    """수급(외국인·기관) 누적 순매수 대금 + 요약. KR만, 없으면 (None, None)."""
+    """수급(외국인·기관·개인) 누적 순매수 대금 + 요약. KR만, 없으면 (None, None).
+    ⚠개인은 네이버 모바일 trend API의 **실측치**(시장진단의 −(외인+기관) 근사와 다름).
+      구 HTML 스크래핑으로 만든 옛 parquet엔 없으므로 컬럼이 없으면 생략한다."""
     if mk != "kr":
         return None, None
     path = DATA_DIR / f"flow_{tk}.parquet"
@@ -36,12 +38,16 @@ def build_supply(mk: str, tk: str, df) -> tuple:
     # 일별 순매수 대금(억원) ≈ 순매매량 × 종가
     frgn_val = (flow["frgn_net_vol"].fillna(0) * close / 1e8)
     inst_val = (flow["inst_net_vol"].fillna(0) * close / 1e8)
+    has_indi = "indi_net_vol" in flow.columns and flow["indi_net_vol"].notna().any()
+    indi_val = (flow["indi_net_vol"].fillna(0) * close / 1e8) if has_indi else None
     w = flow.tail(SUPPLY_BARS)
     frgn_cum = frgn_val.tail(SUPPLY_BARS).cumsum()
     inst_cum = inst_val.tail(SUPPLY_BARS).cumsum()
+    indi_cum = indi_val.tail(SUPPLY_BARS).cumsum() if has_indi else None
     series = [{
         "t": ts.strftime("%Y-%m-%d"),
         "fc": round(float(frgn_cum.loc[ts]), 1), "ic": round(float(inst_cum.loc[ts]), 1),
+        **({"pc": round(float(indi_cum.loc[ts]), 1)} if has_indi else {}),
         "fr": None if pd.isna(w.loc[ts, "frgn_ratio"]) else round(float(w.loc[ts, "frgn_ratio"]), 2),
     } for ts in w.index]
 
@@ -51,6 +57,7 @@ def build_supply(mk: str, tk: str, df) -> tuple:
     summary = {
         "frgn_5": net(frgn_val, 5), "frgn_20": net(frgn_val, 20),
         "inst_5": net(inst_val, 5), "inst_20": net(inst_val, 20),
+        **({"indi_5": net(indi_val, 5), "indi_20": net(indi_val, 20)} if has_indi else {}),
         "frgn_ratio": round(float(ratio.iloc[-1]), 2) if len(ratio) else None,
         "frgn_ratio_chg": round(float(ratio.iloc[-1] - ratio.iloc[-21]), 2) if len(ratio) > 21 else None,
         "asof": w.index[-1].strftime("%Y-%m-%d") if len(w) else None,

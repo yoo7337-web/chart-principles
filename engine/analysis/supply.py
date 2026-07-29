@@ -49,21 +49,57 @@ def _num(s):
         return None
 
 
-def fetch_flow(code: str, pages: int) -> pd.DataFrame | None:
+"""네이버 모바일 API — frgn HTML엔 없는 **개인 순매매량**까지 준다(근사 유도가 아닌 실측).
+`/api/stock/{code}/trend?page=N&pageSize=50` (pageSize 100은 400 · 50이 상한). 실패 시 HTML 스크래핑 폴백."""
+_TREND = "https://m.stock.naver.com/api/stock/{code}/trend?page={page}&pageSize=50"
+_TREND_HDRS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+    "Referer": "https://m.stock.naver.com/",
+}
+
+
+def _fetch_trend(code: str, pages: int) -> list:
+    """⚠이 API엔 **페이지네이션이 없다** — page를 늘려도 같은 최근 50거래일을 준다(실측 page 1/2/3 동일).
+    그래서 한 번에 받는 건 50일이 최대이고, 그 이상은 main의 병합으로 누적된다."""
     rows = []
-    for p in range(1, pages + 1):
+    for p in (1,):
+        req = urllib.request.Request(_TREND.format(code=code, page=p), headers=_TREND_HDRS)
         try:
-            df = _fetch_page(code, p)
+            arr = json.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
         except Exception:
             break
-        if df is None or df.empty:
+        if not arr:
             break
-        for _, r in df.iterrows():
-            d = str(r["date"]).replace(".", "-").strip()
-            inst, frgn, ratio = _num(r["inst_net_vol"]), _num(r["frgn_net_vol"]), _num(r["frgn_ratio"])
-            if len(d) == 10 and (inst is not None or frgn is not None):
-                rows.append({"date": d, "inst_net_vol": inst, "frgn_net_vol": frgn, "frgn_ratio": ratio})
-        time.sleep(0.2)
+        for r in arr:
+            d = str(r.get("bizdate") or "")
+            if len(d) != 8:
+                continue
+            rows.append({"date": f"{d[:4]}-{d[4:6]}-{d[6:]}",
+                         "inst_net_vol": _num(r.get("organPureBuyQuant")),
+                         "frgn_net_vol": _num(r.get("foreignerPureBuyQuant")),
+                         "indi_net_vol": _num(r.get("individualPureBuyQuant")),
+                         "frgn_ratio": _num(r.get("foreignerHoldRatio"))})
+        time.sleep(0.15)
+    return rows
+
+
+def fetch_flow(code: str, pages: int) -> pd.DataFrame | None:
+    rows = _fetch_trend(code, pages)
+    if not rows:   # API 실패 시에만 구 HTML 경로(개인 없음)
+        for p in range(1, pages + 1):
+            try:
+                df = _fetch_page(code, p)
+            except Exception:
+                break
+            if df is None or df.empty:
+                break
+            for _, r in df.iterrows():
+                d = str(r["date"]).replace(".", "-").strip()
+                inst, frgn, ratio = _num(r["inst_net_vol"]), _num(r["frgn_net_vol"]), _num(r["frgn_ratio"])
+                if len(d) == 10 and (inst is not None or frgn is not None):
+                    rows.append({"date": d, "inst_net_vol": inst, "frgn_net_vol": frgn, "frgn_ratio": ratio})
+            time.sleep(0.2)
     if not rows:
         return None
     out = pd.DataFrame(rows).drop_duplicates("date").set_index("date").sort_index()
@@ -95,7 +131,9 @@ def main():
             if new is None:
                 fail += 1
                 continue
-            if args.refresh and path.exists():
+            # ⚠**항상 병합**한다(--refresh 여부 무관). 소스가 한 번에 주는 건 최근 50거래일뿐이라
+            #   덮어쓰면 이력이 영원히 50일에 묶인다. 병합해야 실행할수록 과거가 쌓인다.
+            if path.exists():
                 old = pd.read_parquet(path)
                 merged = pd.concat([old[~old.index.isin(new.index)], new]).sort_index()
             else:
