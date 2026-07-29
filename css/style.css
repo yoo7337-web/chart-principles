@@ -1703,3 +1703,16 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .sent-part .sp-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
   font-size: .82rem; }
 .sent-part .sp-score { font-weight: 700; font-size: .95rem; font-variant-numeric: tabular-nums; }
+
+/* 그리기 툴바 — 차트 안 왼쪽 세로 레일(가로 한 줄을 차지하던 것을 접음) */
+.draw-rail { position: absolute; left: 6px; top: 6px; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 5px 4px; border-radius: 10px; background: rgba(30,30,36,.86);
+  border: 1px solid var(--line); backdrop-filter: blur(4px); opacity: .55;
+  transition: opacity .15s ease; }
+.draw-rail:hover { opacity: 1; }
+.draw-rail .mk-toggle { flex-direction: column; gap: 2px; padding: 2px; }
+.draw-rail .mk-toggle button { padding: 3px 6px; font-size: .82rem; min-width: 26px; line-height: 1.1; }
+.draw-rail .draw-swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.draw-rail .draw-swatches button { width: 13px; height: 13px; }
+.draw-rail #draw-clear { padding: 2px 6px; font-size: .78rem; }

@@ -1675,10 +1675,14 @@ function setDrawMode(m) {
   const svg = document.getElementById("lookup-draw");
   if (svg) svg.style.pointerEvents = m ? "auto" : "none";  // 이동 모드에선 차트로 이벤트 통과
   document.querySelectorAll("#draw-mode button").forEach((b) => b.classList.toggle("active", b.dataset.dm === m));
-  const hint = document.getElementById("draw-hint");
-  if (hint) hint.textContent = m === "erase" ? "지우고 싶은 선/박스를 클릭하세요"
+  // 툴바를 세로 레일로 접으면서 힌트 문구는 숨겼다 → 레일 자체의 툴팁으로 안내를 유지
+  const msg = m === "erase" ? "지우고 싶은 선/박스를 클릭하세요"
     : m ? "차트에서 드래그해 그리세요 · 줌/스크롤에 따라 봉에 고정됩니다"
-    : "추세선/박스권 선택 후 차트에서 드래그 · 이 브라우저에 저장";
+    : "추세선/박스권을 고르고 차트에서 드래그 · 이 브라우저에 저장";
+  const hint = document.getElementById("draw-hint");
+  if (hint) hint.textContent = msg;
+  const rail = document.getElementById("draw-tools");
+  if (rail) rail.title = `✏️ 그리기 — ${msg}`;
   redrawDrawings();
 }
 
@@ -3384,22 +3388,24 @@ function relTime(genStr) {
 // TradingView 티커 로딩 감시 — 6초 내 iframe 미렌더 시에만 자체 티커로 완전 대체(정상 로딩 시 이중 티커
 // 노출 방지 — TV 티커+자체 티커가 동시에 보이는 것은 중복 UI였음). "!" 문제는 TV 실패 시의 자체 티커
 // 기본 목록에 DX-Y.NYB를 포함시켜 해결(TV 심볼 자체가 불안정했던 것).
+/* 전광판은 이제 자체 데이터(renderMacroTicker)가 담당한다 — TradingView 위젯 제거.
+   ⚠제거 이유: 무료 위젯이 선물 심볼(CL1!·GC1!) 권한이 없어 "!"만 표시되는데, iframe이 **교차 출처**라
+   내부 오류를 스크립트로 감지할 수 없다(기존 감시 로직은 iframe 높이만 보고 성공으로 오판했다).
+   남은 TV 마크업이 있으면 숨기기만 한다(구 캐시 대응). */
 function watchTvTicker() {
   const tv = $("#tv-ticker");
-  if (!tv) return;
-  // 폴백 티커는 기본 숨김(HTML) — TV가 실패했을 때만 켠다(반대로 하면 로딩 6초간 둘 다 보임)
-  setTimeout(() => {
-    const frame = tv.querySelector("iframe");
-    const ok = frame && frame.clientHeight > 10;
-    if (!ok) { tv.style.display = "none"; $("#macro-ticker").style.display = ""; }
-  }, 6000);
+  if (tv) tv.style.display = "none";
+  const mt = $("#macro-ticker");
+  if (mt) mt.style.display = "";
 }
 
 // 자체 매크로 데이터로 지수 티커 스트립 렌더 — TradingView 로딩 실패 시의 전체 대체용(정상 로딩 시 watchTvTicker가 숨김)
 function renderMacroTicker(pickOverride) {
   const host = $("#macro-ticker");
   if (!host || !MARKET?.macro) return;
-  const pick = pickOverride || ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X", "^VIX", "DX-Y.NYB", "CL=F"];
+  // 전광판이 자체 데이터로 바뀌면서 상시 노출 → 항목을 늘려 한눈에 더 많이 보이게 한다
+  const pick = pickOverride || ["^KS11", "^KQ11", "^GSPC", "^IXIC", "^SOX", "KRW=X",
+                                "^VIX", "DX-Y.NYB", "CL=F", "GC=F", "^TNX"];
   const byId = Object.fromEntries(MARKET.macro.map((m) => [m.id, m]));
   host.innerHTML = pick.filter((id) => byId[id]).map((id) => {
     const m = byId[id]; const up = m.chg >= 0;
@@ -5830,9 +5836,11 @@ const INT_CHARTS = [
     n: "양수=상승이 <b>폭넓게 확산</b>, 음수=<b>대형주 쏠림</b>(지수만 오르는 장세)" },
   { k: "conc10", c: "#ea580c", t: "거래대금 상위 10종목 집중도(%)",
     n: "유동성 쏠림 — 높을수록 소수 종목에 자금이 몰림(순환매 약화)" },
-  { ks: ["frgn20", "inst20"], cs: ["#4391ff", "#ea580c"], labs: ["외국인", "기관"], base: 0, mk: "kr",
-    t: "외국인·기관 20일 누적 순매수(억원)",
-    n: "수급 주체 방향. <span class='sub-note'>네이버 수급 데이터 · 노트북 배치라 갱신 주기가 김</span>" },
+  { ks: ["frgn20", "inst20", "indi20"], cs: ["#4391ff", "#ea580c", "#22c07a"],
+    labs: ["외국인", "기관", "개인"], base: 0, mk: "kr",
+    t: "투자자별 20일 누적 순매수(억원)",
+    n: "수급 주체 방향 — 셋의 합은 0에 가깝다(한쪽이 사면 다른 쪽이 판다). " +
+       "<span class='sub-note'>네이버 수급 데이터 · <b>개인은 −(외국인+기관)으로 유도</b>(기타법인 제외, 오차 1~2%) · 노트북 배치라 갱신 주기가 김</span>" },
   { curve: true, c: "#0f766e", base: 0, mk: "kr", t: "국고채 장단기 스프레드(10Y−2Y, %p)",
     n: "<b>음수=장단기 역전</b>(경기 침체 선행 신호). <span class='sub-note'>토스 국고채 캔들 API — 2020년~ 일봉 이력</span>" },
 ];
@@ -5847,8 +5855,11 @@ function renderInternals() {
     $("#int-brief").innerHTML = `<h3>🤖 AI 마켓 브리핑 <span class="sub-note">(${MPRO.brief_at || MPRO.generated} · Gemini · 하루 3회)</span></h3>
       <p>${MPRO.brief.replace(/\n/g, "<br>")}</p>`;
   }
+  // 대상 유니버스를 명시 — "한국이 코스피인가 코스닥인가"라는 질문이 나왔다(둘을 합친 거래대금 상위다)
   $("#int-context").innerHTML =
     `시장 내부(internals) — 지수가 아니라 <b>구성 종목 전체의 체력</b>을 봅니다.
+     <b>🇰🇷 한국 = 코스피·코스닥을 합친 거래대금 상위 300종목</b>(특정 지수가 아님 · 거래가 거의 없는
+     종목은 시장폭을 왜곡해 제외) · <b>🇺🇸 미국 = 수집 유니버스 전체</b>.
      지표 갱신 ${MPRO.generated} (${relTime(MPRO.generated)} · <b>클라우드 30분 주기</b>)`;
 
   const r = MPRO.risk || {};
@@ -7336,47 +7347,84 @@ function renderValueBand(st) {
   const key = `${st.market}_${st.ticker}`;
   const fin = FIN_CACHE[key];
   const co = EXTRAS.company?.map?.[key];
-  const src = fin && (fin.cfs || fin.ofs || fin);
-  const annual = src?.annual || {};
-  const ext = (co?.fin_ext || []).filter((r) => !r.est && r.eps && r.net);
+  // 연결(cfs) 우선하되 분기가 있는 쪽을 쓴다 — 별도만 공시하는 회사가 있다(두산테스나 등)
+  const cand = [fin?.cfs, fin?.ofs, fin].filter((x) => x && (x.annual || x.quarter));
+  const src = cand.find((x) => Object.keys(x.quarter || {}).length >= 4) || cand[0];
+  const annual = src?.annual || {}, quarter = src?.quarter || {};
   const series = st.series || [];
-  if (!Object.keys(annual).length || !ext.length || series.length < 60) { host.style.display = "none"; return; }
+  if (!Object.keys(annual).length || series.length < 60) { host.style.display = "none"; return; }
 
-  // 주식수: **시가총액 ÷ 주가**가 정확하다. 순이익÷EPS는 연결 순이익(비지배지분 포함) vs 지배주주 EPS라
-  // 주식수가 과대 추정돼 PBR이 낮게 나온다(실측: 삼성전자 1.89배 vs 실제 2.33배). 시총이 없을 때만 폴백.
+  // 주식수: **시가총액 ÷ 주가**가 정확하다(순이익÷EPS는 연결 순이익 vs 지배주주 EPS라 과대 추정).
   const unitMul = st.market === "kr" ? 1e8 : 1e6;      // 억원→원 / 백만$→$
   const tile = (MARKET?.heatmap || []).find((t) => t.m === st.market && t.t === st.ticker);
   const qp = (MARKET?.quotes?.[key] || [])[0];
   let shares = (tile?.mcap && !tile.mcap_est && qp) ? tile.mcap / qp : null;
   if (!shares) {
-    const last = ext[ext.length - 1];
-    shares = (last.net * unitMul) / last.eps;
+    const ex = (co?.fin_ext || []).filter((r) => !r.est && r.eps > 0 && r.net);
+    if (ex.length) shares = (ex[ex.length - 1].net * unitMul) / ex[ex.length - 1].eps;
   }
   if (!isFinite(shares) || shares <= 0) { host.style.display = "none"; return; }
 
-  // 연도별 EPS·BPS (financials의 순이익·자본총계를 주식수로 나눔)
-  const perYear = {};
-  Object.entries(annual).forEach(([y, d]) => {
-    const yr = String(y).slice(0, 4);
-    if (d.np != null) perYear[yr] = { ...(perYear[yr] || {}), eps: (d.np * unitMul) / shares };
-    if (d.equity != null) perYear[yr] = { ...(perYear[yr] || {}), bps: (d.equity * unitMul) / shares };
-  });
-  const metric = bandMode === "per" ? "eps" : "bps";
-  // ⚠해당 연도 실적이 없으면(=올해는 아직 미발표) **직전 연도를 이월**해야 한다.
-  //   그냥 건너뛰면 올해 봉이 통째로 빠져 '현재 PER'이 작년 말 값이 된다(실측 사고).
-  const years = Object.keys(perYear).filter((y) => perYear[y][metric] > 0).sort();
-  const baseOf = (yr) => {
-    let pick = null;
-    for (const y of years) { if (y <= yr) pick = y; else break; }
-    return pick ? perYear[pick][metric] : null;
-  };
-  const pts = series.map((b) => {
-    const v = baseOf(b.t.slice(0, 4));
-    return v && v > 0 ? { t: b.t, c: b.c, base: v, mult: b.c / v } : null;
-  }).filter(Boolean);
-  if (pts.length < 40) { host.style.display = "none"; return; }
+  const perShare = (v) => (v == null ? null : (v * unitMul) / shares);
+  const fcfOf = (d) => (d?.fcf != null ? d.fcf
+    : d?.cfo != null ? d.cfo - Math.abs((d.capex_ppe || 0) + (d.capex_intan || 0)) : null);
 
-  // 밴드 배수 = 이 종목 자신의 이력 분포(10/30/50/70/90 백분위) — 임의 배수보다 해석이 쉽다
+  /* ── 밴드 기준선의 '적용 시작일' ──────────────────────────────────────
+     회계기간이 끝난 날이 아니라 **공시된 날부터** 적용해야 한다. 회기 중에 그 해 확정 실적을
+     쓰면 미래 정보를 당겨쓰는 셈(look-ahead)이라 밴드가 실제보다 유리하게 보인다.
+     실무 공시 시차: 분기 ~45일 / 연간(사업보고서) ~90일. */
+  const asOf = (endY, endM, isAnnual) => {
+    const d = new Date(Date.UTC(endY, endM, 1));
+    d.setUTCDate(d.getUTCDate() + (isAnnual ? 90 : 45));
+    return d.toISOString().slice(0, 10);
+  };
+  const pointsMap = {};
+  Object.keys(annual).sort().forEach((y) => {
+    const d = annual[y], yr = +String(y).slice(0, 4);
+    if (!yr) return;
+    pointsMap[asOf(yr, 12, true)] = {
+      eps: perShare(d.np), bps: perShare(d.equity), sps: perShare(d.rev), fps: perShare(fcfOf(d)),
+    };
+  });
+  // 분기 TTM(최근 구간) — 참조 차트처럼 **분기마다 계단**이 생긴다
+  const qk = Object.keys(quarter).sort();
+  qk.forEach((k, i) => {
+    if (i < 3) return;                                    // TTM은 4개 분기가 모여야 성립
+    const win = qk.slice(i - 3, i + 1).map((x) => quarter[x]);
+    const sum = (f) => win.reduce((a, b) => a + (f(b) ?? NaN), 0);
+    const m = /^(\d{2})Q(\d)$/.exec(k);
+    if (!m) return;
+    const yr = 2000 + +m[1], endM = +m[2] * 3;
+    const curq = quarter[k];
+    pointsMap[asOf(yr, endM, false)] = {
+      eps: perShare(sum((d) => d.np)), bps: perShare(curq.equity),   // BPS는 잔액이라 시점값
+      sps: perShare(sum((d) => d.rev)), fps: perShare(sum(fcfOf)),
+    };
+  });
+  const basePts = Object.keys(pointsMap).sort().map((d) => ({ d, ...pointsMap[d] }));
+  if (!basePts.length) { host.style.display = "none"; return; }
+
+  const METRICS = [["per", "PER", "eps", "EPS"], ["pbr", "PBR", "bps", "BPS"],
+                   ["psr", "PSR", "sps", "주당매출"], ["pfcf", "P/FCF", "fps", "주당FCF"]];
+  const cur = METRICS.find((m) => m[0] === bandMode) || METRICS[0];
+  const fld = cur[2];
+  const tabs = `<span class="mk-toggle" id="band-mode">${METRICS.map(([id, label]) =>
+    `<button data-b="${id}" class="${bandMode === id ? "active" : ""}">${label}</button>`).join("")}</span>`;
+  // 각 봉 시점에 **그때 공시돼 있던** 최신 기준선을 쓴다(계단형)
+  let bi = -1;
+  const pts = [];
+  series.forEach((b) => {
+    while (bi + 1 < basePts.length && basePts[bi + 1].d <= b.t) bi++;
+    const base = bi >= 0 ? basePts[bi][fld] : null;
+    if (base != null && base > 0) pts.push({ t: b.t, c: b.c, base, mult: b.c / base });
+  });
+  host.style.display = "";
+  if (pts.length < 40) {
+    host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 밴드<span style="flex:1"></span>${tabs}</h3>
+      <p class="mini-note">${cur[1]} 밴드를 그릴 데이터가 부족합니다 — ${cur[3]}가 음수이거나 이력이 짧습니다.</p>`;
+    bandTabs(host, st);
+    return;
+  }
   const sorted = pts.map((p) => p.mult).sort((a, b) => a - b);
   const q = (r) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * r))];
   const mults = [...new Set([q(0.1), q(0.3), q(0.5), q(0.7), q(0.9)]
@@ -7384,21 +7432,31 @@ function renderValueBand(st) {
   const now = pts[pts.length - 1];
   const pctRank = sorted.filter((m) => m <= now.mult).length / sorted.length * 100;
 
-  const W = 940, H = 320, P = { l: 52, r: 66, t: 14, b: 24 };
+  const W = 940, H = 320, P = { l: 52, r: 70, t: 14, b: 24 };
   const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, pts.length - 1));
   const all = pts.flatMap((p) => [p.c, ...mults.map((m) => p.base * m)]);
   const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 1;
   const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - (lo - pad)) / ((hi + pad) - (lo - pad)));
   const COLORS = ["#4391ff", "#22c07a", "#f0b34c", "#ff8a4c", "#f5445a"];
-  const bandLines = mults.map((m, i) => {
-    const d = pts.map((p, j) => `${X(j).toFixed(1)},${Y(p.base * m).toFixed(1)}`).join(" ");
-    return `<polyline points="${d}" fill="none" stroke="${COLORS[i % 5]}" stroke-width="1.2"
-      stroke-dasharray="5 4" opacity=".8"/>
+  // 계단형으로 그린다 — 기준선이 공시일에 점프하므로 직선 보간은 사실과 다르다
+  const stepPath = (fn) => {
+    let d = "", prev = null;
+    pts.forEach((p, i) => {
+      const v = fn(p), x = X(i), y = Y(v);
+      if (prev === null) d += `${x.toFixed(1)},${y.toFixed(1)}`;
+      else if (v !== prev) d += ` ${x.toFixed(1)},${Y(prev).toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
+      else d += ` ${x.toFixed(1)},${y.toFixed(1)}`;
+      prev = v;
+    });
+    return d;
+  };
+  const bandLines = mults.map((m, i) => `
+      <polyline points="${stepPath((p) => p.base * m)}" fill="none" stroke="${COLORS[i % 5]}"
+        stroke-width="1.3" opacity=".85"/>
       <text x="${W - P.r + 4}" y="${Y(pts[pts.length - 1].base * m) + 3.5}" class="cr-end"
-        fill="${COLORS[i % 5]}">${m}배</text>`;
-  }).join("");
+        fill="${COLORS[i % 5]}">${m}배</text>`).join("");
   const price = `<polyline points="${pts.map((p, j) => `${X(j).toFixed(1)},${Y(p.c).toFixed(1)}`).join(" ")}"
-    fill="none" stroke="#e7e7ec" stroke-width="2"/>`;
+    fill="none" stroke="#22c07a" stroke-width="2"/>`;
   const grid = [0, .5, 1].map((r) => {
     const v = (lo - pad) + ((hi + pad) - (lo - pad)) * r;
     return `<line x1="${P.l}" y1="${Y(v)}" x2="${W - P.r}" y2="${Y(v)}" stroke="var(--line)"/>
@@ -7407,16 +7465,13 @@ function renderValueBand(st) {
   const xl = [0, Math.floor(pts.length / 2), pts.length - 1].map((i) =>
     `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"}"
       class="cr-ax">${pts[i].t.slice(0, 7)}</text>`).join("");
-  const lab = bandMode === "per" ? "PER" : "PBR";
-  // ── Forward P/E: 컨센서스 추정 EPS(fin_ext est=true) 기준 ──
+
   const estRow = (co?.fin_ext || []).filter((r) => r.est && r.eps > 0).slice(-1)[0];
   const nowPx = freshQuote(st)?.price ?? now.c;
-  const fwdPer = estRow ? nowPx / estRow.eps : null;
+  const fwdPer = bandMode === "per" && estRow ? nowPx / estRow.eps : null;
   const fwdHtml = fwdPer && isFinite(fwdPer) && fwdPer > 0
     ? `<span class="band-fwd">선행 PER <b>${fwdPer.toFixed(fwdPer < 10 ? 2 : 1)}배</b>
-        <span class="sub-note">(${String(estRow.y).slice(0, 4)} 추정 EPS ${
-          Math.round(estRow.eps).toLocaleString()}${st.market === "kr" ? "원" : "$"} 기준 · 컨센서스)</span></span>` : "";
-  // ── ROE 추이: financials 순이익÷자본 (연간, 최대 10년) ──
+        <span class="sub-note">(${String(estRow.y).slice(0, 4)} 추정 · 컨센서스)</span></span>` : "";
   const roeRows = Object.keys(annual).sort().map((y) => {
     const d0 = annual[y];
     return d0?.equity ? { y: String(y).slice(0, 4), v: (d0.np / d0.equity) * 100 } : null;
@@ -7431,7 +7486,7 @@ function renderValueBand(st) {
     const zero = rlo < 0 ? `<line x1="${RP.l}" y1="${RY(0)}" x2="${RW - RP.r}" y2="${RY(0)}"
       stroke="#8b8b93" stroke-dasharray="3 3"/>` : "";
     roeHtml = `<div class="roe-wrap"><div class="lk-h3" style="font-size:.9rem;margin:10px 0 2px">
-        📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계 · 자기자본 수익률)</span></div>
+        📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계)</span></div>
       <svg viewBox="0 0 ${RW} ${RH}" class="fin-svg">${zero}
         <polyline points="${roeRows.map((r, i) => `${RX(i).toFixed(1)},${RY(r.v).toFixed(1)}`).join(" ")}"
           fill="none" stroke="#b79bff" stroke-width="2.2"/>
@@ -7441,25 +7496,27 @@ function renderValueBand(st) {
           <text x="${RX(i).toFixed(1)}" y="${RH - 5}" text-anchor="middle" class="cr-ax">${r.y}</text>`).join("")}
       </svg></div>`;
   }
-  host.style.display = "";
-  host.innerHTML = `<h3 class="lk-h3">📐 ${lab} 밴드
-      <span class="sub-note">(주가가 역사적 ${lab} 범위 중 어디인지 · 밴드=그 시점 ${
-        bandMode === "per" ? "EPS" : "BPS"} × 배수)</span>
-      <span style="flex:1"></span>
-      <span class="mk-toggle" id="band-mode">
-        <button data-b="per" class="${bandMode === "per" ? "active" : ""}">PER</button>
-        <button data-b="pbr" class="${bandMode === "pbr" ? "active" : ""}">PBR</button>
-      </span></h3>
-    <div class="band-now">현재 <b>${lab} ${now.mult.toFixed(now.mult < 10 ? 2 : 1)}배</b>
-      <span class="sub-note">— 지난 ${(pts.length / 252).toFixed(1)}년 중 <b>하위 ${pctRank.toFixed(0)}%</b> 수준</span>
+  const qn = qk.length;
+  host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 밴드
+      <span class="sub-note">(밴드 = 그 시점 ${cur[3]} × 배수 · 공시일마다 계단식)</span>
+      <span style="flex:1"></span>${tabs}</h3>
+    <div class="band-now">현재 <b>${cur[1]} ${now.mult.toFixed(now.mult < 10 ? 2 : 1)}배</b>
+      <span class="sub-note">— 지난 ${(pts.length / 252).toFixed(1)}년 중 <b>하위 ${pctRank.toFixed(0)}%</b></span>
       <span class="band-gauge"><span style="width:${Math.min(100, Math.max(0, pctRank))}%"></span></span>
       ${fwdHtml}</div>
     <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${bandLines}${price}${xl}</svg>
     ${roeHtml}
-    <p class="mini-note">흰 선 = 주가 · 점선 = ${lab} 배수 밴드(이 종목 이력의 10·30·50·70·90 백분위).
-      주가가 <b>아래쪽 밴드</b>에 있으면 과거 대비 싸고, <b>위쪽</b>이면 비쌉니다.
-      ⚠주식수는 최근 <b>순이익÷EPS</b>로 역산해 일정하다고 가정 — 증자·감자가 있었다면 과거 구간이 왜곡될 수 있습니다.
-      ${bandMode === "pbr" ? "" : "적자 연도는 EPS가 음수라 그 구간이 빠집니다."}</p>`;
+    <p class="mini-note">초록 선 = 주가 · 계단선 = ${cur[1]} 배수 밴드(이 종목 이력의 10·30·50·70·90 백분위).
+      주가가 <b>아래쪽 밴드</b>면 과거 대비 싸고 <b>위쪽</b>이면 비쌉니다.
+      기준선은 <b>실적이 공시된 시점부터</b> 반영합니다(분기 +45일·연간 +90일) — 회기 중에 확정 실적을
+      쓰면 미래를 당겨쓰는 셈이라 밴드가 실제보다 유리해 보입니다.
+      ${qn >= 4 ? `최근 구간은 <b>분기 TTM</b>(${qn}분기)이라 분기마다, 그 이전은 연간이라 해마다 계단이 생깁니다.`
+        : `분기 데이터가 ${qn}개뿐이라 <b>연간 기준</b>으로만 계단이 생깁니다.`}
+      ⚠주식수는 시가총액÷주가로 산출해 일정하다고 가정 — 증자·감자가 있었다면 과거 구간이 왜곡될 수 있습니다.</p>`;
+  bandTabs(host, st);
+}
+
+function bandTabs(host, st) {
   host.querySelectorAll("#band-mode button").forEach((b) => b.onclick = () => {
     bandMode = b.dataset.b; renderValueBand(st);
   });

@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=204">
-<script src="firebase-config.js?v=204"></script>
-<script src="js/auth.js?v=204"></script>
+<link rel="stylesheet" href="css/style.css?v=205">
+<script src="firebase-config.js?v=205"></script>
+<script src="js/auth.js?v=205"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=204"></script>
+<script src="js/sync.js?v=205"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -355,25 +355,25 @@
         <span class="sub-note">(복수 선택 · 미선택 시 원칙 연동 · ⓘ에 커서를 올리면 설명)</span>
       </span>
     </div>
-    <div class="controls" id="draw-tools" style="display:none;align-items:center;gap:8px">
-      <span class="sub-note">✏️ 그리기</span>
-      <span class="mk-toggle" id="draw-mode">
-        <button data-dm="" class="active">🖐 이동</button>
-        <button data-dm="trend">📈 추세선</button>
-        <button data-dm="box">▭ 박스권</button>
-        <button data-dm="erase">🧽 지우기</button>
-      </span>
-      <span class="draw-swatches" id="draw-color"></span>
-      <span class="mk-toggle" id="draw-linestyle">
-        <button data-ls="solid" class="active" title="실선">──</button>
-        <button data-ls="dashed" title="파선">– –</button>
-        <button data-ls="dotted" title="점선">···</button>
-      </span>
-      <button class="today-chart-btn" id="draw-clear">전체 삭제</button>
-      <span class="sub-note" id="draw-hint">추세선/박스권 선택 후 차트에서 드래그 · 이 브라우저에 저장</span>
-    </div>
     <div id="lookup-info" class="lk-caption" style="display:none"></div>
     <div id="lookup-chart-wrap" style="position:relative">
+      <!-- 그리기 툴바 — 차트 안 왼쪽 세로바(가로 한 줄을 통째로 쓰던 것을 접음) -->
+      <div id="draw-tools" class="draw-rail" style="display:none">
+        <span class="mk-toggle" id="draw-mode">
+          <button data-dm="" class="active" title="이동 — 차트를 드래그해 이동/줌">🖐</button>
+          <button data-dm="trend" title="추세선">📈</button>
+          <button data-dm="box" title="박스권">▭</button>
+          <button data-dm="erase" title="지우기 — 그린 것을 눌러 삭제">🧽</button>
+        </span>
+        <span class="draw-swatches" id="draw-color"></span>
+        <span class="mk-toggle" id="draw-linestyle">
+          <button data-ls="solid" class="active" title="실선">──</button>
+          <button data-ls="dashed" title="파선">– –</button>
+          <button data-ls="dotted" title="점선">···</button>
+        </span>
+        <button class="today-chart-btn" id="draw-clear" title="이 종목에 그린 것 전체 삭제">🗑</button>
+        <span class="sub-note" id="draw-hint" hidden></span>
+      </div>
       <div id="lookup-chart" class="chart" style="display:none"></div>
       <svg id="lookup-draw" class="draw-overlay"></svg>
     </div>
@@ -515,33 +515,11 @@
   </section>
 
   <section id="tab-heatmap" class="panel active">
-    <!-- TradingView 실시간 티커테이프 (로딩 실패 시 JS가 숨기고 자체 티커로 폴백) -->
-    <div id="tv-ticker" class="tv-ticker">
-      <div class="tradingview-widget-container">
-        <div class="tradingview-widget-container__widget"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-        {
-          "symbols": [
-            {"proName": "SP:SPX", "title": "S&P 500"},
-            {"proName": "NASDAQ:IXIC", "title": "나스닥"},
-            {"proName": "NASDAQ:SOX", "title": "필라델피아 반도체"},
-            {"proName": "FX_IDC:USDKRW", "title": "달러/원"},
-            {"proName": "NYMEX:CL1!", "title": "WTI 유가"},
-            {"proName": "COMEX:GC1!", "title": "금"},
-            {"proName": "TVC:US10Y", "title": "미 10년물"}
-          ],
-          "showSymbolLogo": false,
-          "colorTheme": "dark",
-          "isTransparent": false,
-          "displayMode": "adaptive",
-          "locale": "kr"
-        }
-        </script>
-      </div>
-    </div>
-    <!-- 자체 데이터 기반 지수 티커 (TV 로딩 실패 시 폴백, 30분 갱신) -->
-    <!-- TV 티커 실패 시에만 노출되는 폴백(기본 숨김 — 로딩 중 잠깐 보이던 중복 티커 방지) -->
-    <div id="macro-ticker" class="macro-ticker" style="display:none"></div>
+    <!-- ⚠전광판을 자체 데이터로 전환(2026-07-29). TradingView 무료 위젯은 선물(NYMEX:CL1!·COMEX:GC1!)에
+         데이터 권한이 없어 "!"만 뜨는데, iframe이 교차 출처라 **내부 오류를 감지할 수 없다**
+         (감시 로직은 iframe 높이만 보고 성공으로 오판). 그래서 항상 정보가 나오는 자체 티커를 기본으로 쓴다.
+         실시간이 필요하면 종목조회의 TradingView 차트를 이용. -->
+    <div id="macro-ticker" class="macro-ticker"></div>
 
     <div class="home-topbar">
       <div class="mk-toggle" id="home-mk">
@@ -1054,6 +1032,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=204"></script>
+<script src="js/app.js?v=205"></script>
 </body>
 </html>
