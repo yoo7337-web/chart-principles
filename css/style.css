@@ -1634,3 +1634,8 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .bk-row b { color: var(--accent); }
 .bk-row.empty { opacity: .45; }
 .bk-row.empty b { color: var(--muted); }
+.sync-badge { font-size: .76rem; padding: 3px 10px; border-radius: 999px; font-weight: 600;
+  background: rgba(255,255,255,.07); color: var(--muted); white-space: nowrap; }
+.sync-badge.ok { background: rgba(34,192,122,.16); color: #3ed492; }
+.sync-badge.warn { background: rgba(240,179,76,.16); color: #f0b34c; }
+.sync-badge.err { background: rgba(245,68,90,.18); color: #ff7c8c; }

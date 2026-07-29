@@ -1967,12 +1967,23 @@ function renderBackupStatus() {
       · 도메인 <b>${location.origin}</b> 기준</p>`;
 }
 
+/* 동기화 상태 배지 — 실패(보안 규칙 미설정 등)를 조용히 넘기지 않고 눈에 보이게 */
+function renderSyncBadge(d) {
+  const el = document.getElementById("sync-badge");
+  if (!el) return;
+  const s = d || window.__cpSync || {};
+  el.textContent = s.msg || "확인 중…";
+  el.className = "sync-badge " + (s.kind || "");
+}
+window.addEventListener("cpsync", (e) => renderSyncBadge(e.detail));
+
 function bindBackupAll() {
   const bk = document.getElementById("backup-all");
   const rs = document.getElementById("restore-all");
   const f = document.getElementById("restore-all-file");
   if (!bk || !rs || !f) return;
   renderBackupStatus();
+  renderSyncBadge();
 
   bk.onclick = () => {
     const data = {};
