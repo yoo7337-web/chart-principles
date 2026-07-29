@@ -86,12 +86,60 @@ BUY = [
     Rule("disparity_low", "buy", "이격도 과대낙폭",
          "20일선 이격도 -15% 이하",
          lambda d: _s(d["disparity20"] < -0.15)),
+    # ── '떨어지는 칼날' 분해 (2026-07-29 이벤트 스터디에서 도출) ─────────────────
+    # 이격도 과대낙폭이 반복될 때 무엇이 반등이고 무엇이 추락인지 갈라 보니, 상식과 반대였다:
+    #   투매 흔적(52주 신저가·거래량 폭증·극단 과매도)이 있을수록 승률이 높고(72~75%),
+    #   아직 장기추세(MA120) 위에서 난 낙폭은 오히려 승률 41%로 손실 — 하락의 '초입'이었다.
+    Rule("disparity_capitulation", "buy", "투매 클라이맥스(과대낙폭+신저가+거래량)",
+         "20일선 이격도 -15% 이하 + 52주 신저가 경신 + 거래량 20일 평균의 2배",
+         lambda d: _s((d["disparity20"] < -0.15) & d["new_lo52"] & (d["vol_ratio"] >= 2))),
+    # ⚠1차 등록은 '반복' 조건을 빼먹어 탐색 결과(반복 4회↑에서 승률 41%)와 다른 걸 재게 됐고 탈락했다
+    #   (전·후반 −3.26/+0.85, p=0.65). 측정한 것과 같은 모집단이 되도록 반복 조건을 넣어 재검증한다.
+    Rule("disparity_early_break", "sell", "고점 이탈 초입(낙폭 반복인데 장기추세 위)",
+         "20일선 이격도 -15% 이하가 최근 20일 내 4회 이상 반복 + 종가가 아직 MA120 위 (하락 초입 — 저가매수 함정)",
+         lambda d: _s((d["disparity20"] < -0.15) & (d["close"] > d["ma120"])
+                      & ((d["disparity20"] < -0.15).rolling(20).sum() >= 4))),
     Rule("obv_breakout", "buy", "OBV 돌파(수급 선행)",
          "OBV가 OBV 20일선 상향 돌파 + 주가는 MA20 위",
          lambda d: _s(cross_up(d["obv"], d["obv_ma20"]) & (d["close"] > d["ma20"]))),
     Rule("pullback_ma20", "buy", "정배열 눌림목(20일선)",
          "정배열 유지 중 저가가 MA20 터치(±1.5%) 후 양봉",
          lambda d: _s(d["aligned_up"] & (abs(d["low"] / d["ma20"] - 1) < 0.015)
+                      & (d["close"] > d["open"]))),
+
+    # ── '불타기'(추세 추종) 후보 — 2026-07-26 추가 ────────────────────────
+    # 기존 채택 매수 원칙 5개가 전부 역추세(BB하단·RSI과매도·이격도)라 "오를 때 더 산다"는
+    # 원칙이 없었다. 기존 돌파 원칙들은 **한국에선 +, 미국에선 −**라 '한·미 일치' 조건에서
+    # 전부 탈락했으므로(52주신고가+거래량: KR +1.49% / US −0.12%), 여기서는 **추세 필터**
+    # (장기 이평 위 · 절대 모멘텀)를 얹어 미국 쪽 성적을 끌어올릴 수 있는지 검증한다.
+    Rule("hi52_vol_trend", "buy", "신고가+거래량+추세필터",
+         "52주 신고가 + 거래량 2배 + 종가가 MA120 위 & MA120 상승",
+         lambda d: _s(d["new_hi52"] & (d["vol_ratio"] >= 2) & (d["close"] > d["ma120"])
+                      & (d["ma120"] > d["ma120"].shift(20)))),
+    Rule("mom_breakout", "buy", "모멘텀 신고가 돌파",
+         "6개월 수익률 +20% 이상 + 20일 고점 상향 돌파 + 거래량 1.5배",
+         lambda d: _s((d["close"].pct_change(120) >= 0.20)
+                      & (d["close"] > d["high"].shift(1).rolling(20).max())
+                      & (d["vol_ratio"] >= 1.5))),
+    Rule("flag_breakout", "buy", "플래그 돌파(급등 후 재돌파)",
+         "10일 +20% 급등 후 5~15일 좁은 조정(−10% 이내) 뒤 10일 고점 재돌파",
+         lambda d: _s((d["close"].shift(10).pct_change(10) >= 0.20)
+                      & (d["close"] / d["high"].shift(1).rolling(10).max() - 1 >= -0.10)
+                      & (d["close"] > d["high"].shift(1).rolling(10).max())
+                      & (d["close"] > d["open"]))),
+    Rule("hi52_pullback_buy", "buy", "신고가 눌림 재상승",
+         "최근 20일 내 52주 신고가 + 고점 대비 −3~−12% + MA20 위 + 양봉",
+         lambda d: _s(d["new_hi52"].rolling(20).max().astype(bool)
+                      & (d["close"] / d["hi52"] - 1 <= -0.03)
+                      & (d["close"] / d["hi52"] - 1 >= -0.12)
+                      & (d["close"] > d["ma20"]) & (d["close"] > d["open"]))),
+    Rule("gc_above_ma120", "buy", "골든크로스+장기추세",
+         "MA20이 MA60 상향 돌파 + 종가가 MA120 위 (추세 안에서만)",
+         lambda d: _s(cross_up(d["ma20"], d["ma60"]) & (d["close"] > d["ma120"]))),
+    Rule("pullback_strong", "buy", "강세 눌림목(모멘텀)",
+         "정배열 + 6개월 +20% + 저가가 MA20 터치 후 양봉 마감",
+         lambda d: _s(d["aligned_up"] & (d["close"].pct_change(120) >= 0.20)
+                      & (d["low"] <= d["ma20"] * 1.015) & (d["close"] > d["ma20"])
                       & (d["close"] > d["open"]))),
 ]
 

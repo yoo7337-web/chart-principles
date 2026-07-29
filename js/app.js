@@ -3919,6 +3919,84 @@ function renderMacroTab() {
   renderMacro();       // 매크로 카드 (macroRendered 세팅)
   renderBondCurve();   // 국고채 금리 커브 (toss_market.json — 없으면 섹션 숨김)
   renderWorld();       // 세계 지도 — 증시/기준금리 토글 (중앙은행 금리는 MARKET.cbanks)
+  loadSentiment();     // 시장 심리(공포·탐욕·풋콜) — lazy 1회
+}
+
+/* ---------- 😨 시장 심리 — 미국 CNN 공포·탐욕 + 풋콜(5일평균) / 한국 자체 합성 ---------- */
+let SENT = null, sentMk = "us";
+function loadSentiment() {
+  if (SENT !== null) { renderSentiment(); return; }
+  fetch("data/sentiment.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    SENT = d || false;
+    renderSentiment();
+  }).catch(() => { SENT = false; });
+}
+const SENT_KO = { "extreme fear": "극단적 공포", fear: "공포", neutral: "중립",
+                  greed: "탐욕", "extreme greed": "극단적 탐욕" };
+const sentColor = (v) => v < 25 ? "#4391ff" : v < 45 ? "#6ba7ff" : v < 55 ? "#9aa4b2"
+  : v < 75 ? "#f0b34c" : "#f5445a";
+
+function sentLine(series, W, H, color, fmt) {
+  if (!series?.length) return "";
+  const P = { l: 40, r: 14, t: 10, b: 18 };
+  const v = series.map((p) => p.v);
+  const lo = Math.min(...v), hi = Math.max(...v), pad = (hi - lo) * 0.1 || 1;
+  const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, series.length - 1));
+  const Y = (x) => P.t + (H - P.t - P.b) * (1 - (x - (lo - pad)) / ((hi + pad) - (lo - pad)));
+  const grid = [0, .5, 1].map((r) => {
+    const val = (lo - pad) + ((hi + pad) - (lo - pad)) * r;
+    return `<line x1="${P.l}" y1="${Y(val)}" x2="${W - P.r}" y2="${Y(val)}" stroke="var(--line)"/>
+      <text x="${P.l - 4}" y="${Y(val) + 3}" text-anchor="end" class="cr-ax">${fmt(val)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}
+    <polyline points="${series.map((p, i) => `${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ")}"
+      fill="none" stroke="${color}" stroke-width="2"/>
+    <text x="${P.l}" y="${H - 4}" class="cr-ax">${series[0].t}</text>
+    <text x="${W - P.r}" y="${H - 4}" text-anchor="end" class="cr-ax">${series[series.length - 1].t}</text>
+  </svg>`;
+}
+
+function renderSentiment() {
+  const host = $("#sent-wrap");
+  if (!host || !SENT) return;
+  const d = SENT[sentMk];
+  if (!d) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const score = d.score ?? 0;
+  const parts = (d.parts || []).map((p) => `<div class="sent-part">
+      <div class="sp-h"><b>${p.label}</b><span class="sp-score" style="color:${sentColor(p.score ?? 50)}">${
+        p.score == null ? "-" : Math.round(p.score)}</span></div>
+      <div class="sub-note">${p.note}</div></div>`).join("");
+  const pc = SENT.us?.putcall;
+  const pcBlock = sentMk === "us" && pc?.last ? `<div class="card-flat" style="margin-top:12px">
+      <h3 class="lk-h3">⚖️ 풋콜 비율 <span class="sub-note">(CBOE · <b>5일 이동평균</b> — 하루치는 튀어서)</span></h3>
+      <div class="sent-now"><b>${pc.last}</b>
+        <span class="sub-note">당일 ${pc.last_raw} · 1보다 크면 풋(하락 베팅)이 많다는 뜻 = 공포</span></div>
+      ${sentLine(pc.series, 940, 170, "#f0b34c", (v) => v.toFixed(2))}
+      <p class="mini-note">풋옵션 거래량 ÷ 콜옵션 거래량. <b>높을수록 공포</b>(하락 대비 수요),
+        낮을수록 낙관. 과도하게 높으면 오히려 바닥 신호로 보기도 합니다.</p></div>` : "";
+  host.innerHTML = `<div class="card-flat">
+      <h3 class="lk-h3">😨 시장 심리 — 공포·탐욕 지수
+        <span class="sub-note">${sentMk === "us" ? "CNN Fear &amp; Greed (미국 증시)"
+          : "자체 합성 (한국 — 공식 지수 없음)"}</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="sent-mk">
+          <button data-m="us" class="${sentMk === "us" ? "active" : ""}">🇺🇸 미국</button>
+          <button data-m="kr" class="${sentMk === "kr" ? "active" : ""}">🇰🇷 한국</button>
+        </span></h3>
+      <div class="sent-now"><b style="color:${sentColor(score)}">${Math.round(score)}</b>
+        <span class="sent-rate" style="color:${sentColor(score)}">${SENT_KO[d.rating] || d.rating || ""}</span>
+        <span class="sent-gauge"><span style="left:${Math.min(100, Math.max(0, score))}%"></span></span>
+        <span class="sub-note">0 = 극단적 공포 · 100 = 극단적 탐욕</span></div>
+      ${sentLine(d.hist, 940, 200, sentColor(score), (v) => v.toFixed(0))}
+      <div class="sent-parts">${parts}</div>
+      <p class="mini-note">${sentMk === "us"
+        ? "CNN이 7개 지표(모멘텀·신고가·거래량폭·풋콜·VIX·정크본드·안전자산)를 합성한 <b>미국 증시</b> 지수입니다. 크립토 탭의 공포·탐욕과는 <b>다른 지표</b>(그쪽은 암호화폐 전용)."
+        : "⚠한국은 <b>공식 공포·탐욕 지수가 없습니다</b>(KOSPI200 옵션 풋콜은 KRX 로그인벽으로 수집 불가). 그래서 우리가 이미 계산하는 시장폭·변동성 지표 7종을 CNN과 같은 방식(각 지표의 1년 백분위 평균)으로 합성했습니다 — <b>CNN 지수와 구성이 다르므로 직접 비교는 하지 마세요.</b>"}</p>
+    </div>${pcBlock}`;
+  host.querySelectorAll("#sent-mk button").forEach((b) => b.onclick = () => {
+    sentMk = b.dataset.m; renderSentiment();
+  });
 }
 
 // 국채 금리 커브 — 한국(토스)/미국(야후) 토글 + 주요국 비교. 데이터 없으면 섹션 숨김.
@@ -4976,9 +5054,9 @@ function renderDiscTable() {
   };
   $("#dsc-table").innerHTML = `<thead><tr>
       <th>회사</th>${th("mcap", "시가총액")}${th("price", "주가")}${th("chg", "변동")}
-      <th>구분</th><th>공시 내용</th><th>제출인</th><th>원본</th>
+      <th>구분</th><th>공시 내용</th><th class="num">반응</th><th>원본</th>
     </tr></thead><tbody>` + (rows.length ? rows.map((it) => {
-    const [name, code, mk, nm, rcp, flr, cid, fix] = it;
+    const [name, code, mk, nm, rcp, flr, cid, fix, vr] = it;
     const c = cats[cid] || { icon: "📄", name: "기타" };
     const q2 = discMkt(code);
     // 변동액 = 현재가 − 전일종가 (전일종가 = 현재가 / (1+등락률))
@@ -4996,7 +5074,9 @@ function renderDiscTable() {
            <span class="dsc-pct">${up ? "+" : "−"}${Math.abs(q2.chg * 100).toFixed(2)}%</span>`}</td>
       <td><span class="dsc-badge c-${cid}">${c.icon} ${c.name}</span></td>
       <td class="dsc-title" title="${nm.replace(/"/g, "&quot;")}">${fix ? `<span class="dsc-fix">정정</span>` : ""}${nm}</td>
-      <td class="sub-note" title="${(flr || "").replace(/"/g, "&quot;")}">${flr || "-"}</td>
+      <td class="num">${vr == null ? `<span class="sub-note">-</span>`
+        : `<span class="dsc-vr${vr >= 3 ? " hot" : vr >= 1.8 ? " warm" : ""}"
+             title="공시일(또는 익일) 거래량이 직전 20일 평균의 ${vr}배">×${vr.toFixed(1)}</span>`}</td>
       <td><a class="dsc-src" href="${discLink(rcp)}" target="_blank" rel="noopener">DART ↗</a></td>
     </tr>`;
   }).join("") : `<tr><td colspan="8" class="sub-note">조건에 맞는 공시가 없습니다.</td></tr>`) + `</tbody>`;
@@ -7328,6 +7408,39 @@ function renderValueBand(st) {
     `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"}"
       class="cr-ax">${pts[i].t.slice(0, 7)}</text>`).join("");
   const lab = bandMode === "per" ? "PER" : "PBR";
+  // ── Forward P/E: 컨센서스 추정 EPS(fin_ext est=true) 기준 ──
+  const estRow = (co?.fin_ext || []).filter((r) => r.est && r.eps > 0).slice(-1)[0];
+  const nowPx = freshQuote(st)?.price ?? now.c;
+  const fwdPer = estRow ? nowPx / estRow.eps : null;
+  const fwdHtml = fwdPer && isFinite(fwdPer) && fwdPer > 0
+    ? `<span class="band-fwd">선행 PER <b>${fwdPer.toFixed(fwdPer < 10 ? 2 : 1)}배</b>
+        <span class="sub-note">(${String(estRow.y).slice(0, 4)} 추정 EPS ${
+          Math.round(estRow.eps).toLocaleString()}${st.market === "kr" ? "원" : "$"} 기준 · 컨센서스)</span></span>` : "";
+  // ── ROE 추이: financials 순이익÷자본 (연간, 최대 10년) ──
+  const roeRows = Object.keys(annual).sort().map((y) => {
+    const d0 = annual[y];
+    return d0?.equity ? { y: String(y).slice(0, 4), v: (d0.np / d0.equity) * 100 } : null;
+  }).filter((r) => r && isFinite(r.v)).slice(-10);
+  let roeHtml = "";
+  if (roeRows.length >= 3) {
+    const RW = 940, RH = 150, RP = { l: 46, r: 24, t: 16, b: 20 };
+    const rv = roeRows.map((r) => r.v);
+    const rlo = Math.min(0, ...rv), rhi = Math.max(...rv), rpad = (rhi - rlo) * 0.15 || 1;
+    const RX = (i) => RP.l + (RW - RP.l - RP.r) * (i / Math.max(1, roeRows.length - 1));
+    const RY = (v) => RP.t + (RH - RP.t - RP.b) * (1 - (v - (rlo - rpad)) / ((rhi + rpad) - (rlo - rpad)));
+    const zero = rlo < 0 ? `<line x1="${RP.l}" y1="${RY(0)}" x2="${RW - RP.r}" y2="${RY(0)}"
+      stroke="#8b8b93" stroke-dasharray="3 3"/>` : "";
+    roeHtml = `<div class="roe-wrap"><div class="lk-h3" style="font-size:.9rem;margin:10px 0 2px">
+        📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계 · 자기자본 수익률)</span></div>
+      <svg viewBox="0 0 ${RW} ${RH}" class="fin-svg">${zero}
+        <polyline points="${roeRows.map((r, i) => `${RX(i).toFixed(1)},${RY(r.v).toFixed(1)}`).join(" ")}"
+          fill="none" stroke="#b79bff" stroke-width="2.2"/>
+        ${roeRows.map((r, i) => `<circle cx="${RX(i).toFixed(1)}" cy="${RY(r.v).toFixed(1)}" r="3" fill="#b79bff"/>
+          <text x="${RX(i).toFixed(1)}" y="${RY(r.v) - 8}" text-anchor="middle" class="cr-end"
+            fill="${r.v >= 0 ? "#b79bff" : "#ff7c8c"}">${r.v.toFixed(1)}%</text>
+          <text x="${RX(i).toFixed(1)}" y="${RH - 5}" text-anchor="middle" class="cr-ax">${r.y}</text>`).join("")}
+      </svg></div>`;
+  }
   host.style.display = "";
   host.innerHTML = `<h3 class="lk-h3">📐 ${lab} 밴드
       <span class="sub-note">(주가가 역사적 ${lab} 범위 중 어디인지 · 밴드=그 시점 ${
@@ -7339,8 +7452,10 @@ function renderValueBand(st) {
       </span></h3>
     <div class="band-now">현재 <b>${lab} ${now.mult.toFixed(now.mult < 10 ? 2 : 1)}배</b>
       <span class="sub-note">— 지난 ${(pts.length / 252).toFixed(1)}년 중 <b>하위 ${pctRank.toFixed(0)}%</b> 수준</span>
-      <span class="band-gauge"><span style="width:${Math.min(100, Math.max(0, pctRank))}%"></span></span></div>
+      <span class="band-gauge"><span style="width:${Math.min(100, Math.max(0, pctRank))}%"></span></span>
+      ${fwdHtml}</div>
     <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${grid}${bandLines}${price}${xl}</svg>
+    ${roeHtml}
     <p class="mini-note">흰 선 = 주가 · 점선 = ${lab} 배수 밴드(이 종목 이력의 10·30·50·70·90 백분위).
       주가가 <b>아래쪽 밴드</b>에 있으면 과거 대비 싸고, <b>위쪽</b>이면 비쌉니다.
       ⚠주식수는 최근 <b>순이익÷EPS</b>로 역산해 일정하다고 가정 — 증자·감자가 있었다면 과거 구간이 왜곡될 수 있습니다.

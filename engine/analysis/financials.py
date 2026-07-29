@@ -196,10 +196,10 @@ def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
         return None
     annual = {str(y): _eok(d) for y, d in annual_raw.items()}
 
-    # ---- 분기: 최근 ~6분기 (금년 + 전년 보고서) ----
+    # ---- 분기: 최근 2년치(~9분기). 금년+전년만 받으면 연초엔 5분기밖에 안 나와 그래프가 1년치로 보인다 ----
     QRC = [("11013", 1), ("11012", 2), ("11014", 3), ("11011", 4)]
     reports = {}  # {(year, qn): full dict}
-    for yr in (this_year, this_year - 1):
+    for yr in (this_year, this_year - 1, this_year - 2):
         for rc, qn in QRC:
             if yr == this_year and rc == "11011":
                 continue  # 금년 사업보고서는 아직 없음

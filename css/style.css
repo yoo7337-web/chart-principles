@@ -1667,10 +1667,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 #dsc-table th:nth-child(4), #dsc-table td:nth-child(4) { width: 9%; }    /* 변동 */
 #dsc-table th:nth-child(5), #dsc-table td:nth-child(5) { width: 13%; }   /* 구분 */
 #dsc-table th:nth-child(6), #dsc-table td:nth-child(6) { width: 26%; }   /* 공시 내용 */
-#dsc-table th:nth-child(7), #dsc-table td:nth-child(7) { width: 9%; }    /* 제출인 */
+#dsc-table th:nth-child(7), #dsc-table td:nth-child(7) { width: 8%; }    /* 반응(거래량 배율) */
 #dsc-table th:nth-child(8), #dsc-table td:nth-child(8) { width: 5%; }    /* 원본 */
 #dsc-table .dsc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dsc-table td:nth-child(7) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 #dsc-table .hld-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* PER/PBR 밴드 */
 .band-now { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: .86rem;
@@ -1680,3 +1680,26 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   position: relative; }
 .band-gauge > span { position: absolute; left: 0; top: -3px; height: 12px; width: 0;
   border-right: 2px solid var(--ink); }
+
+/* 공시 반응도 — 공시일 거래량이 평소의 몇 배였나(DART엔 조회수가 없어 이걸로 대신 본다) */
+.dsc-vr { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: .74rem;
+  font-weight: 700; background: rgba(255,255,255,.07); color: var(--muted); }
+.dsc-vr.warm { background: rgba(240,179,76,.18); color: #f0b34c; }
+.dsc-vr.hot { background: rgba(245,68,90,.20); color: #ff7c8c; }
+.band-fwd { font-size: .84rem; white-space: nowrap; }
+.band-fwd b { color: var(--accent); }
+.roe-wrap { margin-top: 4px; }
+/* 시장 심리(공포·탐욕·풋콜) */
+.sent-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
+.sent-now > b { font-size: 2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.sent-rate { font-weight: 700; font-size: .95rem; }
+.sent-gauge { flex: 1; min-width: 160px; height: 8px; border-radius: 999px; position: relative;
+  background: linear-gradient(90deg, #4391ff, #6ba7ff, #9aa4b2, #f0b34c, #f5445a); }
+.sent-gauge > span { position: absolute; top: -4px; width: 3px; height: 16px; background: var(--ink);
+  border-radius: 2px; transform: translateX(-50%); }
+.sent-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px; margin-top: 10px; }
+.sent-part { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.sent-part .sp-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  font-size: .82rem; }
+.sent-part .sp-score { font-weight: 700; font-size: .95rem; font-variant-numeric: tabular-nums; }

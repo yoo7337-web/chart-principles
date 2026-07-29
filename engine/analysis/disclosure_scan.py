@@ -19,6 +19,8 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "app" / "data" / "disclosures"
 KST = timezone(timedelta(hours=9))
@@ -113,6 +115,43 @@ def fetch_day(key: str, d: date) -> list:
     return out
 
 
+_PX = None
+
+
+def _vol_ratio(code: str, d: date):
+    """공시일 거래량 급증 배율 = max(당일, 익일) ÷ 직전 20일 평균.
+
+    DART엔 조회수가 없어(응답 필드 9개뿐) '시장이 이 공시에 반응했나'를 거래량으로 대신 본다.
+    ⚠익일까지 보는 이유: 장 마감 후 공시는 당일 거래량에 반영되지 않는다.
+    """
+    global _PX
+    if _PX is None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from collect import load_all
+            _PX = {t: df for (mk, t), df in load_all().items() if mk == "kr"}
+            print(f"  거래량 참조 {len(_PX)}종목 로드")
+        except Exception as e:
+            print(f"  거래량 로드 실패({e}) — 배율 생략", file=sys.stderr)
+            _PX = {}
+    df = _PX.get(code)
+    if df is None or len(df) < 25:
+        return None
+    try:
+        v = df["volume"]
+        idx = v.index.searchsorted(pd.Timestamp(d))     # 공시일 위치(휴장이면 다음 거래일)
+        if idx >= len(v) or idx < 21:
+            return None
+        base = float(v.iloc[idx - 20:idx].mean())
+        if not base or base <= 0:
+            return None
+        cur = float(v.iloc[idx:idx + 2].max())          # 당일·익일 중 큰 쪽
+        r = cur / base
+        return round(r, 1) if r == r and r < 200 else None
+    except Exception:
+        return None
+
+
 def build_day(key: str, d: date) -> dict | None:
     rows = fetch_day(key, d)
     if not rows:
@@ -135,6 +174,7 @@ def build_day(key: str, d: date) -> dict | None:
             "" if flr == corp else flr,             # 5 제출인(회사와 다를 때만)
             cid,                                    # 6 카테고리
             1 if _FIX_RE.search(nm) else 0,         # 7 정정 여부
+            _vol_ratio((r.get("stock_code") or "").strip(), d),  # 8 거래량 급증 배율(반응도)
         ])
     if not items:
         return None
