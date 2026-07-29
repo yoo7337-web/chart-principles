@@ -5067,7 +5067,6 @@ function renderWatch() {
     const sg = r.sig ? `<span class="td-stat ${r.sig.status || ""}">${r.sig.side === "buy" ? "🟢" : "🔴"}
       ${r.sig.rule}<span class="sub-note"> ${r.sig.date.slice(5)}</span></span>` : `<span class="sub-note">-</span>`;
     return `<tr class="watch-row" data-key="${r.k}">
-      <td class="scr-star">${starBtn(r.k, r.name)}</td>
       <td class="scr-name"><img class="mv-logo" src="${logoUrl(r.mk, r.t)}" alt="" loading="lazy"
         onerror="this.style.visibility='hidden'"><b>${r.name}</b> <span class="sub-note">${r.t}</span></td>
       <td>${r.mk === "kr" ? "🇰🇷" : "🇺🇸"}</td>
@@ -5079,14 +5078,15 @@ function renderWatch() {
         placeholder="메모"></td>
       <td class="sub-note">${r.added || ""}</td></tr>`;
   };
-  const head = `<thead><tr><th class="scr-star">★</th><th>종목</th><th></th><th>산업</th>
+  // ★ 열 제거(행마다 별은 불필요) — 담기/해제는 종목조회·주식찾기의 ⭐로 한다
+  const head = `<thead><tr><th>종목</th><th></th><th>산업</th>
     <th class="scr-r">현재가</th><th class="scr-r">등락</th><th>최근 신호</th><th>메모</th><th>담은날</th></tr></thead>`;
   let body;
   if (watchGroup === "ind") {
     const by = {};
     rows.forEach((r) => (by[r.grp] = by[r.grp] || []).push(r));
     body = IND_GROUPS.concat([SCR_GROUP_ETC]).filter((g) => by[g.key]).map((g) =>
-      `<tr class="watch-gh"><td colspan="9">${g.icon} <b>${g.name}</b>
+      `<tr class="watch-gh"><td colspan="8">${g.icon} <b>${g.name}</b>
         <span class="sub-note">${by[g.key].length}종목</span></td></tr>` +
       by[g.key].map(row).join("")).join("");
   } else {
