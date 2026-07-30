@@ -2364,7 +2364,11 @@ function scrSectorsFor(country) {
 function initScreener() {
   if (!MARKET || !MARKET.heatmap) return;  // 데이터 로딩 전 — 다음 진입 시 재시도
   screenerRendered = true;
-  $("#scr-context").innerHTML = `<b>주식찾기</b> — 시장(한국/미국)을 고른 뒤 <b>산업·시가총액 + 세부 지표</b>(기업가치·성장성·수익성·재무건전성·배당)로 종목을 걸러냅니다. 지표 여러 개 = AND, 한 지표의 구간 여러 개 = OR.`;
+  $("#scr-context").innerHTML = `<b>주식찾기</b> — 종목 발굴 3단계: <b>① 어디서</b>(산업·밸류체인) → <b>② 어떤 회사를</b>(투자 스타일) → <b>③ 언제</b>(차트 신호). 각 단계는 건너뛰어도 되고, 고른 조건은 <b>모두 동시 적용(AND)</b>됩니다. 오른쪽 세부 지표(PER·성장률 등)로 더 좁힐 수 있습니다.`;
+  // 발굴 3단계 카드 — 클릭=해당 패널 펼침(하나만), 활성 카드 재클릭=접힘
+  document.querySelectorAll("#scr-steps .scr-step").forEach((b) =>
+    b.onclick = () => scrSetStep(b.dataset.step));
+  scrStep = null; scrSetStep("industry");   // 첫 진입은 ①산업 펼침
   // 국가 토글
   document.querySelectorAll("#scr-country button").forEach((b) => b.onclick = () => {
     document.querySelectorAll("#scr-country button").forEach((x) => x.classList.toggle("active", x === b));
@@ -2968,6 +2972,72 @@ function buildScrTiers() {
   });
 }
 
+/* ── 발굴 3단계 패널(v209) — 카드=탭(하나만 펼침·재클릭=접힘), 선택 상태는 칩바·카드 요약에 집계 ── */
+let scrStep = "industry";
+function scrSetStep(s) {
+  scrStep = (scrStep === s) ? null : s;   // 활성 카드 재클릭 = 접힘(첫 화면을 결과 위주로)
+  document.querySelectorAll("#scr-steps .scr-step").forEach((b) =>
+    b.classList.toggle("active", b.dataset.step === scrStep));
+  ["industry", "style", "signal"].forEach((k) => {
+    const p = $("#scr-panel-" + k);
+    if (p) p.style.display = (k === scrStep) ? "" : "none";
+  });
+}
+function scrIndustryLabel() {
+  // 구체적인 선택(밸류체인 단계 > 세부업종 > 산업군) 순으로 요약
+  if (scrChainIndustry && scrChainSel.size) {
+    const ind = CHAINS[scrChainIndustry];
+    const st = [...scrChainSel].map((k) => ind?.stages.find((x) => x.key === k)?.name || k);
+    return `${ind?.name || scrChainIndustry} › ${st.slice(0, 2).join("·")}${st.length > 2 ? ` 외 ${st.length - 2}` : ""}`;
+  }
+  if (scrState.sectors) {
+    const s = [...scrState.sectors];
+    return `${s.slice(0, 2).join("·")}${s.length > 2 ? ` 외 ${s.length - 2}` : ""}`;
+  }
+  if (scrState.groups) {
+    const meta = Object.fromEntries([...IND_GROUPS, SCR_GROUP_ETC].map((g) => [g.key, g.name]));
+    const s = [...scrState.groups].map((k) => meta[k] || k);
+    return `${s.slice(0, 2).join("·")}${s.length > 2 ? ` 외 ${s.length - 2}` : ""}`;
+  }
+  return null;
+}
+function scrSignalLabel() {
+  if (!scrTechActive) return null;
+  if (scrTechActive.startsWith("gap_")) return GAP_DEF[scrTechActive]?.name || scrTechActive;
+  return TECHPAT?.patterns?.find((p) => p.id === scrTechActive)?.name || scrTechActive;
+}
+function scrChips(nRows, nPool) {
+  const bar = $("#scr-chipbar"); if (!bar) return;
+  const defs = [
+    ["industry", "c1", "①", scrIndustryLabel()],
+    ["style", "c2", "②", scrThemeActive ? SCR_THEMES.find((x) => x.id === scrThemeActive)?.name : null],
+    ["signal", "c3", "③", scrSignalLabel()],
+  ];
+  // 카드 요약도 같은 텍스트로 동기화
+  defs.forEach(([k, , , label]) => {
+    const el = $("#scr-sum-" + k);
+    if (el) { el.textContent = label || "전체"; el.classList.toggle("set", !!label); }
+  });
+  const chips = defs.filter(([, , , label]) => label)
+    .map(([k, c, num, label]) => `<button class="scr-chip ${c}" data-act="${k}" title="클릭=이 조건 해제">${num} ${label} <span class="x">×</span></button>`);
+  bar.innerHTML = `<span class="lbl">적용 조건</span>
+    ${chips.length ? chips.join("") : `<span class="lbl">없음 — 아래 카드에서 조건을 고르세요</span>`}
+    ${chips.length > 1 ? `<span class="lbl">모두 동시 적용(AND)</span>` : ""}
+    <span class="scr-chip-count">결과 <b>${(nRows ?? 0).toLocaleString()}</b> / ${(nPool ?? 0).toLocaleString()}종목</span>
+    ${chips.length ? `<button class="scr-chip-reset" data-act="all">전체 초기화</button>` : ""}`;
+  const clear = {
+    industry: () => { scrState.groups = scrState.sectors = null; scrOpenGroup = null;
+      scrChainIndustry = null; scrChainSel.clear(); buildScrSectors(); renderScrChain(); },
+    style: () => { scrThemeActive = null; renderScrThemes(); },
+    signal: () => { scrTechActive = null; renderScrTech(); },
+  };
+  bar.querySelectorAll("[data-act]").forEach((b) => b.onclick = () => {
+    if (b.dataset.act === "all") Object.values(clear).forEach((f) => f());
+    else clear[b.dataset.act]();
+    renderScreener();
+  });
+}
+
 // 테마 프리셋 칩
 function renderScrThemes() {
   const host = $("#scr-themes"); if (!host) return;
@@ -2975,7 +3045,7 @@ function renderScrThemes() {
   const setDesc = () => { const d = $("#scr-theme-desc"); if (d) d.textContent = scrThemeActive ? SCR_THEMES.find((x) => x.id === scrThemeActive).desc : ""; };
   host.querySelectorAll(".scr-theme").forEach((b) => b.onclick = () => {
     scrThemeActive = (scrThemeActive === b.dataset.id) ? null : b.dataset.id;
-    scrTechActive = null;              // 재무 테마와 기술 패턴은 상호배타
+    // v209: 기술 패턴과 상호배타 해제 — 차원이 달라 AND 조합("저평가 성장주이면서 플래그")이 이 화면의 강점
     renderScrThemes(); renderScrTech(); renderScreener();
   });
   setDesc();
@@ -3072,9 +3142,9 @@ function renderScrTech() {
   host.querySelectorAll(".scr-theme.tech").forEach((b) => {
       b.onclick = () => {
         scrTechActive = (scrTechActive === b.dataset.id) ? null : b.dataset.id;
-        scrThemeActive = null;           // 재무 테마 해제(상호배타)
+        // v209: 재무 테마와 상호배타 해제 — 세 단계(산업·스타일·신호)는 전부 AND
         tip.style.display = "none";
-        renderScrThemes(); renderScreener();
+        renderScrTech(); renderScreener();
       };
       // 말풍선: 패턴의 의미 + 판정 기준 + 10년 검증 수치(통과/탈락 사유)
       b.onmouseenter = () => {
@@ -3216,6 +3286,7 @@ function renderScreener() {
     }
   });
   updateScrCatCounts();
+  scrChips(rows.length, scrPool().length);   // 조건 칩바 + 카드 요약 + 결과 수(v209)
   const themeNote = useTheme ? ` · <b>${SCR_THEMES.find((x) => x.id === scrThemeActive).name}</b>` : "";
   $("#scr-summary").innerHTML = `<b>${rows.length}</b>개 종목 <span class="sub-note">/ 유니버스 ${scrPool().length}${active.length ? ` · 지표 ${active.length}종` : ""}${themeNote}</span>`;
   const tb = $("#scr-table");

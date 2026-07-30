@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=208">
-<script src="firebase-config.js?v=208"></script>
-<script src="js/auth.js?v=208"></script>
+<link rel="stylesheet" href="css/style.css?v=209">
+<script src="firebase-config.js?v=209"></script>
+<script src="js/auth.js?v=209"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=208"></script>
+<script src="js/sync.js?v=209"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -447,28 +447,51 @@
         <button data-c="us">🇺🇸 미국</button>
       </span>
     </div>
-    <!-- 시장 선택 아래: [산업 선택 | 테마] 2열 → 그 아래 전폭으로 세부 항목(밸류체인 단계·미국 세부업종) -->
+    <!-- 발굴 3단계(v209): ①범위(산업·밸류체인) ②질(투자 스타일) ③타이밍(차트 신호).
+         카드=탭(하나만 펼침·다시 클릭=접힘), 선택 상태는 카드 요약+조건 칩바에 집계. 세 단계는 전부 AND. -->
     <div class="card-flat scr-toprow">
-      <div class="scr-frow scr-frow-top" id="scr-sector-row">
-        <span class="scr-label">산업</span>
-        <div style="flex:1">
-          <div class="scr-sec-actions">
-            <button class="today-chart-btn" id="scr-sec-reset">산업 전체</button>
-            <span class="sub-note" id="scr-sec-count"></span>
-            <span class="sub-note">한·미 공통 12산업군 · 선택 후 다시 클릭=세부업종</span>
+      <div class="scr-steps" id="scr-steps">
+        <button class="scr-step" data-step="industry">
+          <span class="scr-step-k">① 어디서 찾을까</span>
+          <span class="scr-step-t">🏭 산업 · 밸류체인</span>
+          <span class="scr-step-sum" id="scr-sum-industry">전체</span>
+        </button>
+        <button class="scr-step" data-step="style">
+          <span class="scr-step-k">② 어떤 회사를</span>
+          <span class="scr-step-t">⭐ 투자 스타일</span>
+          <span class="scr-step-sum" id="scr-sum-style">전체</span>
+        </button>
+        <button class="scr-step" data-step="signal">
+          <span class="scr-step-k">③ 언제 살까</span>
+          <span class="scr-step-t">📈 차트 신호</span>
+          <span class="scr-step-sum" id="scr-sum-signal">전체</span>
+        </button>
+      </div>
+      <div class="scr-chipbar" id="scr-chipbar"></div>
+      <div class="scr-panel" id="scr-panel-industry">
+        <div class="scr-frow scr-frow-top" id="scr-sector-row">
+          <span class="scr-label">산업</span>
+          <div style="flex:1">
+            <div class="scr-sec-actions">
+              <button class="today-chart-btn" id="scr-sec-reset">산업 전체</button>
+              <span class="sub-note" id="scr-sec-count"></span>
+              <span class="sub-note">한·미 공통 12산업군 · 선택 후 다시 클릭=세부업종</span>
+            </div>
+            <div class="scr-groups" id="scr-sectors"></div>
           </div>
-          <div class="scr-groups" id="scr-sectors"></div>
+        </div>
+        <!-- 선택한 산업/업종의 세부 항목(밸류체인 단계·미국 세부업종) -->
+        <div class="scr-detail-row" id="scr-detail-row">
+          <div class="scr-chain-flow" id="scr-chain-flow"></div>
+          <div id="scr-sub-host"></div>
         </div>
       </div>
-      <div class="scr-themes-wrap">
-        <div class="scr-themes-head">⭐ 테마 <span class="sub-note" id="scr-theme-desc"></span></div>
+      <div class="scr-panel" id="scr-panel-style" style="display:none">
+        <div class="scr-themes-head">⭐ 투자 스타일 <span class="sub-note">재무 조건 묶음 — 하나 선택 · </span><span class="sub-note" id="scr-theme-desc"></span></div>
         <div class="scr-themes" id="scr-themes"></div>
       </div>
-      <div class="scr-themes-wrap" id="scr-tech"></div>
-      <!-- 선택한 산업/업종의 세부 항목 — 항상 마지막 행 전폭(테마가 밀려나지 않게) -->
-      <div class="scr-detail-row" id="scr-detail-row">
-        <div class="scr-chain-flow" id="scr-chain-flow"></div>
-        <div id="scr-sub-host"></div>
+      <div class="scr-panel" id="scr-panel-signal" style="display:none">
+        <div class="scr-themes-wrap" id="scr-tech"></div>
       </div>
     </div>
 
@@ -1032,6 +1055,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=208"></script>
+<script src="js/app.js?v=209"></script>
 </body>
 </html>

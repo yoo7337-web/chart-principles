@@ -536,6 +536,37 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 밸류체인 카드는 원래 padding-top 12px가 있어 테마보다 12px 내려감 → 상단행에선 제거(시작선 일치) */
 .scr-toprow .scr-chain, .scr-toprow .scr-themes-wrap { margin: 0; padding-top: 0; }
 .scr-toprow .scr-frow-top { display: block; }
+/* ── 발굴 3단계(v209): 카드=탭 + 조건 칩바. 구 그리드 배치는 패널 내부로 흡수 ── */
+.scr-toprow { display: block; }
+.scr-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.scr-step { text-align: left; background: var(--card2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 12px; cursor: pointer; display: flex; flex-direction: column;
+  gap: 2px; min-width: 0; color: inherit; font: inherit; }
+.scr-step:hover { border-color: rgba(255,255,255,.28); }
+.scr-step.active { border: 2px solid var(--kdn); padding: 8px 11px; }
+.scr-step-k { font-size: .72rem; color: var(--muted); }
+.scr-step.active .scr-step-k { color: var(--kdn); }
+.scr-step-t { font-size: .92rem; font-weight: 700; }
+.scr-step-sum { font-size: .76rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scr-step-sum.set { color: #e7e7ec; }
+.scr-chipbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 10px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 9px;
+  margin-bottom: 10px; font-size: .8rem; }
+.scr-chipbar .lbl { color: var(--muted); font-size: .74rem; }
+.scr-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px;
+  padding: 3px 10px; cursor: pointer; border: none; font: inherit; font-size: .8rem; }
+.scr-chip .x { opacity: .65; font-weight: 700; }
+.scr-chip:hover .x { opacity: 1; }
+.scr-chip.c1 { background: rgba(67,145,255,.16); color: #8ab8ff; }
+.scr-chip.c2 { background: rgba(34,192,122,.16); color: #57d99f; }
+.scr-chip.c3 { background: rgba(240,179,76,.18); color: #f0b34c; }
+.scr-chip-count { margin-left: auto; color: var(--muted); }
+.scr-chip-count b { color: #e7e7ec; font-size: .9rem; }
+.scr-chip-reset { border: 1px solid var(--line); background: none; color: var(--muted);
+  border-radius: 7px; padding: 3px 9px; cursor: pointer; font: inherit; font-size: .74rem; }
+.scr-chip-reset:hover { color: #e7e7ec; border-color: rgba(255,255,255,.3); }
+.scr-panel { border-top: 1px dashed var(--line); padding-top: 10px; }
 /* 각 칸 제목줄 통일(밸류체인·테마·업종) — 시작 높이 일치 */
 .scr-toprow .scr-chain-head, .scr-toprow .scr-themes-head, .scr-toprow .scr-sec-actions {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
