@@ -92,6 +92,11 @@ jobs:
             git push origin HEAD:main || echo "push 실패(무시, 배포는 진행)"
           fi
 
+      # ⚠게시 직전 최신 main으로 동기화 — 실행 중 들어온 다른 배포를 되돌리지 않게(refresh.yml과 동일 이유)
+      - name: Sync to latest main before publish
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

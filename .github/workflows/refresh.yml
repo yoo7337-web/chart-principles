@@ -99,6 +99,15 @@ jobs:
             git push origin HEAD:main || echo "push 실패(무시, 배포는 진행)"
           fi
 
+      # ⚠게시 직전 **최신 main으로 동기화**한다.
+      # upload-pages-artifact는 '이 런의 작업 트리'를 그대로 올리는데, 그 트리는 런이 시작될 때의
+      # 체크아웃이다. 실행 중에 노트북 deploy가 push하면, 이 런이 나중에 끝나면서 **옛 트리를 게시해
+      # 그 배포를 되돌린다**(실측: 저장소엔 새 데이터가 있는데 화면만 옛것 — 하루 3회 발생).
+      # 우리 데이터는 위에서 이미 커밋·푸시했으므로 origin/main에 들어 있다 → 리셋해도 잃지 않는다.
+      - name: Sync to latest main before publish
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
