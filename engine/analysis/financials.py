@@ -371,12 +371,12 @@ def _load_index() -> dict:
     return {}
 
 
-def _fresh(key: str, idx: dict) -> bool:
+def _fresh(key: str, idx: dict, age_days: int = MAX_AGE_D) -> bool:
     stamp = idx.get(key)
     if not stamp:
         return False
     try:
-        return (datetime.now(KST) - datetime.strptime(stamp, "%Y-%m-%d %H:%M").replace(tzinfo=KST)) < timedelta(days=MAX_AGE_D)
+        return (datetime.now(KST) - datetime.strptime(stamp, "%Y-%m-%d %H:%M").replace(tzinfo=KST)) < timedelta(days=age_days)
     except Exception:
         return False
 
@@ -433,7 +433,9 @@ def main():
     ap.add_argument("--max-calls", type=int, default=0,
                     help="이번 실행의 DART 호출 상한(같은 날 여러 번 돌릴 때 20,000 한도 분할용)")
     ap.add_argument("--from-disclosures", type=int, metavar="DAYS", default=0,
-                    help="최근 N일 공시에서 정기보고서를 낸 종목만 갱신(일일 배치용)")
+                    help="KR: 최근 N일 공시에서 정기보고서를 낸 종목만 갱신(일일 배치용). US엔 영향 없음")
+    ap.add_argument("--us-age", type=int, metavar="DAYS", default=0,
+                    help="US age 가드 일수 override(기본 6). 미국은 yfinance라 호출 한도가 없어 1로 매일 돌려도 된다")
     args = ap.parse_args()
     if args.max_calls:
         _CALLS["max"] = args.max_calls
@@ -492,9 +494,12 @@ def main():
         if args.limit:
             tickers = tickers[:args.limit]
         wrote = 0
+        # ⚠미국 실적은 분기말 3주 뒤에 몰려 발표된다(TSLA·GOOGL 7/22). 가드가 6일이면 그만큼 늦게 반영된다.
+        #   yfinance는 DART 같은 일일 한도가 없으니 --us-age 1로 매일 확인해도 부담이 없다.
+        us_age = args.us_age or MAX_AGE_D
         for i, tk in enumerate(tickers, 1):
             k = f"us_{tk}"
-            if not args.force and _fresh(k, idx):
+            if not args.force and _fresh(k, idx, us_age):
                 continue
             data = fetch_us(tk)
             if data:
