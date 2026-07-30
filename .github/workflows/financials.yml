@@ -1,15 +1,25 @@
-name: Quarterly Financials (DART 연결·별도·분기 + yfinance)
-# 상세 재무제표(data/financials/*.json) 분기 갱신.
-#  - 한국 공시 마감 직후 실행: 사업보고서(3/31)→4월 초, 1Q(5/15)→5월 중, 반기(8/14)→8월 중, 3Q(11/14)→11월 중
-#  - DART 일일 호출 한도(20,000) 보호: financials.py가 18,000콜에서 중단 → 다음날 두 번째 cron이 이어받음(index.json 가드)
-#  - 수동 실행: Actions 탭 workflow_dispatch
+name: Financials (DART 연결·별도·분기 + yfinance)
+# 상세 재무제표(data/financials/*.json) 갱신 — 2단 구성.
+#  ① **매일 08:20 KST — 공시 트리거 증분**: 최근 7일에 정기보고서(사업/반기/분기)를 낸 종목만 갱신.
+#     재무제표는 매일 바뀌지 않고 공시일에만 바뀐다(실측 하루 평균 6.3건·최대 24건) → 수백 콜이면 끝난다.
+#     ⚠전 종목 훑기는 종목당 ~70콜 × 750종목 = 5만 콜이라 하루 한도(20,000)를 넘어 며칠씩 걸린다.
+#  ② **분기 전수(full)**: 공시 마감 직후 — 사업보고서(3/31)→4월 초, 1Q(5/15)→5월 중, 반기(8/14)→8월 중, 3Q(11/14)→11월 중.
+#     증분이 놓친 것(공시 수집 실패·유니버스 신규 편입 등)을 메우는 안전망.
+#  - DART 일일 한도 보호: financials.py가 18,000콜에서 중단 → 다음 실행이 index.json 가드로 이어받음
+#  - 수동 실행: Actions 탭 workflow_dispatch (full=true면 전수)
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      full:
+        description: '전 종목 훑기(기본은 공시 트리거 증분)'
+        type: boolean
+        default: false
   schedule:
-    - cron: '0 23 1,2 4 *'      # 4/2·4/3 08:00 KST (사업보고서 반영)
-    - cron: '0 23 15,16 5 *'    # 5/16·17 (1분기보고서)
-    - cron: '0 23 14,15 8 *'    # 8/15·16 (반기보고서)
-    - cron: '0 23 14,15 11 *'   # 11/15·16 (3분기보고서)
+    - cron: '20 23 * * *'       # 매일 08:20 KST — 공시 트리거 증분
+    - cron: '0 23 1,2 4 *'      # 4/2·4/3 08:00 KST (사업보고서 반영, 전수)
+    - cron: '0 23 15,16 5 *'    # 5/16·17 (1분기보고서, 전수)
+    - cron: '0 23 14,15 8 *'    # 8/15·16 (반기보고서, 전수)
+    - cron: '0 23 14,15 11 *'   # 11/15·16 (3분기보고서, 전수)
 
 permissions:
   contents: write
@@ -45,13 +55,25 @@ jobs:
           mkdir -p engine/app/data
           cp -f data/*.json engine/app/data/ 2>/dev/null || true
           [ -d data/financials ] && cp -r data/financials engine/app/data/financials || true
+          # 공시 트리거는 날짜별 공시 파일을 읽는다 — 시드하지 않으면 대상이 0종목이 된다
+          mkdir -p engine/app/data/disclosures
+          cp -f data/disclosures/*.json engine/app/data/disclosures/ 2>/dev/null || true
 
       - name: Collect financials
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: |
           cd engine
-          python analysis/financials.py
+          # 분기 마감 cron(0분)과 수동 full=true만 전수, 나머지(매일 20분)는 공시 트리거 증분
+          if [ "${{ github.event.inputs.full }}" = "true" ] || [ "${{ github.event.schedule }}" = "0 23 1,2 4 *" ] \
+             || [ "${{ github.event.schedule }}" = "0 23 15,16 5 *" ] || [ "${{ github.event.schedule }}" = "0 23 14,15 8 *" ] \
+             || [ "${{ github.event.schedule }}" = "0 23 14,15 11 *" ]; then
+            echo "모드: 전 종목 훑기"
+            python analysis/financials.py
+          else
+            echo "모드: 공시 트리거 증분(최근 7일 정기보고서 제출 종목)"
+            python analysis/financials.py --kr-only --from-disclosures 7
+          fi
 
       - name: Copy back + commit
         run: |

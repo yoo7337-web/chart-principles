@@ -17,6 +17,7 @@ r"""종목별 상세 재무제표(손익·재무상태·현금흐름) → app\da
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -380,6 +381,32 @@ def _fresh(key: str, idx: dict) -> bool:
         return False
 
 
+_PERIODIC_RE = re.compile(r"(사업보고서|반기보고서|분기보고서)")
+
+
+def codes_from_disclosures(days: int) -> set:
+    """최근 N일 공시에서 **정기보고서를 낸 종목코드**만 뽑는다.
+
+    재무제표는 매일 바뀌지 않고 정기보고서 공시일에만 바뀐다 → 전 종목을 훑을 이유가 없다.
+    (실측: 하루 평균 6.3건 · 최대 24건 → 종목당 ~70콜이어도 하루 수백 콜이면 끝난다.)
+    ⚠정정([기재정정] 등)도 수치가 바뀌므로 포함한다 — 공시명에 태그가 붙어도 정규식이 본문을 잡는다.
+    """
+    out = set()
+    ddir = APP_DATA / "disclosures"
+    if not ddir.is_dir():
+        return out
+    for p in sorted(ddir.glob("20*.json"), reverse=True)[:max(1, days)]:
+        try:
+            items = (json.loads(p.read_text(encoding="utf-8")) or {}).get("items") or []
+        except Exception:
+            continue
+        for it in items:
+            # 압축 배열: [회사명, 종목코드, 시장, 공시명, 접수번호, 제출인, 카테고리, 정정, 반응]
+            if len(it) > 3 and it[1] and _PERIODIC_RE.search(it[3] or ""):
+                out.add(str(it[1]).zfill(6))
+    return out
+
+
 def _read(key: str) -> dict | None:
     p = OUTDIR / f"{key}.json"
     if not p.exists():
@@ -405,6 +432,8 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-calls", type=int, default=0,
                     help="이번 실행의 DART 호출 상한(같은 날 여러 번 돌릴 때 20,000 한도 분할용)")
+    ap.add_argument("--from-disclosures", type=int, metavar="DAYS", default=0,
+                    help="최근 N일 공시에서 정기보고서를 낸 종목만 갱신(일일 배치용)")
     args = ap.parse_args()
     if args.max_calls:
         _CALLS["max"] = args.max_calls
@@ -425,8 +454,12 @@ def main():
         else:
             cmap = _corp_codes(key)
             codes = [args.only] if args.only and args.only.isdigit() else list(kr_names.keys() or cmap.keys())
-            if args.limit:
-                codes = codes[:args.limit]
+            if args.from_disclosures:
+                filed = codes_from_disclosures(args.from_disclosures)
+                codes = [c for c in codes if c in filed]
+                print(f"  [KR fin] 최근 {args.from_disclosures}일 정기보고서 제출 {len(filed)}종목 → 유니버스 내 {len(codes)}종목만 갱신")
+                for c in codes:      # age 가드를 넘겨 반드시 다시 받게 한다(수치가 바뀐 종목이므로)
+                    idx.pop(f"kr_{c}", None)
             done = wrote = 0
             for code in codes:
                 k = f"kr_{code}"
