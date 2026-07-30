@@ -6379,7 +6379,11 @@ function renderLookupProfile(st) {
   const PERIODS = [["1주", p.ret_w1, p.rel_w1], ["1개월", p.ret_m1, p.rel_m1],
                    ["3개월", p.ret_m3, p.rel_m3], ["1년", p.ret_y1, p.rel_y1]];
   const shown = PERIODS.filter(([, a, r]) => a != null || r != null);
-  const maxAbs = Math.max(0.05, ...shown.flatMap(([, a, r]) => [Math.abs(a || 0), Math.abs(r || 0)]));
+  /* 눈금 상한을 60%로 **제한**한다. 데이터 최대값에 맞추면 1년 +222% 같은 값 하나가 눈금을 지배해
+     1주·1개월 막대가 보이지 않는다(사용자 지적). 초과분은 끝까지 채우고 아래 안내로 명시. */
+  const rawMax = Math.max(0.05, ...shown.flatMap(([, a, r]) => [Math.abs(a || 0), Math.abs(r || 0)]));
+  const maxAbs = Math.min(rawMax, 0.6);
+  const clipped = rawMax > maxAbs;
   const perfViz = shown.length ? `<div class="pf2-wrap">
     <div class="pf2-head"><span class="perf-h" style="margin:0">기간 수익률</span>
       <span class="sub-note"><span class="pf2-key bar"></span>절대 <span class="pf2-key dot"></span>시장 대비(초과수익)</span></div>
@@ -6400,7 +6404,7 @@ function renderLookupProfile(st) {
         <b class="pf2-val ${(abs ?? 0) >= 0 ? "pos" : "neg"}">${abs == null ? "-" : pct(abs, 1)}</b>
         ${relTxt}</div>`;
     }).join("")}
-    <p class="sub-note pf2-note">막대는 ±${(maxAbs * 100).toFixed(0)}% 범위로 그려집니다 — 넘는 값은 끝까지 채워지니 숫자를 보세요.</p>
+    <p class="sub-note pf2-note">막대 눈금 ±${(maxAbs * 100).toFixed(0)}%${clipped ? " — 이를 넘는 값은 끝까지 채워집니다(정확한 값은 오른쪽 숫자)" : ""}</p>
   </div>` : "";
 
   // ── 리스크 게이지: 베타·변동성을 막대 한 줄로(문구 대신 위치로 인지) ──
