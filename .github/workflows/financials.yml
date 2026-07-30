@@ -71,8 +71,10 @@ jobs:
             echo "모드: 전 종목 훑기"
             python analysis/financials.py
           else
-            echo "모드: 공시 트리거 증분(최근 7일 정기보고서 제출 종목)"
-            python analysis/financials.py --kr-only --from-disclosures 7
+            # KR=공시 트리거(DART 한도 보호) · US=age 1일(yfinance는 한도가 없어 매일 확인해도 된다)
+            # ⚠--kr-only를 붙이면 **미국이 통째로 빠진다**(실사고: TSLA·GOOGL 7/22 실적이 26Q1까지만 반영)
+            echo "모드: KR 공시 트리거 증분 + US 일일 확인"
+            python analysis/financials.py --from-disclosures 7 --us-age 1
           fi
 
       - name: Copy back + commit
