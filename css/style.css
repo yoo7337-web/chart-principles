@@ -502,6 +502,17 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .draw-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; touch-action: none; }
 .draw-overlay .dw { stroke-width: 1.6; cursor: pointer; }   /* 색·fill·선모양은 요소 inline style이 결정 */
 .draw-overlay .dw-preview { opacity: .8; pointer-events: none; }
+/* v216 그리기 개선 — 클릭 히트영역/선택 강조/라벨/텍스트 */
+.draw-overlay .dw-hit { cursor: pointer; }            /* 투명 굵은 선(12px) — 1px 도형을 쉽게 집기 위함 */
+.draw-overlay .dw { pointer-events: none; }           /* 실제 도형은 히트영역이 대신 받는다 */
+.draw-overlay .dw.on { stroke-width: 3; filter: drop-shadow(0 0 4px currentColor); }
+.draw-overlay .dw-lab { font-size: 10px; pointer-events: none; }
+.draw-overlay .dw-text { font-size: 12px; font-weight: 700; }
+.draw-overlay .dw-fib { stroke-width: 1.2; }
+/* 선택 모드에서도 도형만 클릭되도록 — SVG 자체는 통과, 히트영역만 받음 */
+.draw-overlay { pointer-events: none; }
+.draw-overlay .dw-hit, .draw-overlay .dw-text { pointer-events: auto; }
+#draw-tools button[disabled] { opacity: .35; cursor: default; }
 #draw-mode button { font-size: .8rem; }
 #draw-linestyle button { font-size: .8rem; letter-spacing: 1px; min-width: 34px; }
 /* 그리기 색 스와치 */
@@ -1416,6 +1427,10 @@ dialog { background: var(--card); color: var(--ink); }
    ⚠검색 바(.lk-sticky)가 top:0을 이미 쓰므로 그 높이만큼 내려서 겹치지 않게 한다(--lk-bar). */
 .lk-main .lookup-head { position: sticky; top: var(--lk-bar, 48px); z-index: 6; background: var(--bg);
   margin: 0 0 10px; padding: 8px 0 8px; border-bottom: 1px solid var(--line); }
+/* 🐞고정 헤더 '위쪽 빈틈' — sticky는 top 위치에서 멈추지만 그 위 몇 px 구간은 비어 있어
+   스크롤되는 내용이 비쳐 보인다(검색 바와 헤더 사이). ::before로 그 띠를 배경색으로 덮는다. */
+.lk-main .lookup-head::before { content: ""; position: absolute; left: 0; right: 0;
+  top: -10px; height: 10px; background: var(--bg); }
 .lk-head-gap { flex: 1 1 auto; }
 .lk-head-rule { font-size: .82rem; color: var(--muted); white-space: nowrap; }
 .lk-head-rule select { max-width: 230px; }
@@ -1819,3 +1834,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 @media (max-width: 1000px) { .ws-layout { grid-template-columns: 1fr; } .ws-rail { position: static; max-height: none; } }
 /* 관심종목은 하위 탭바가 없는 solo 그룹 — 그룹 nav와 본문 사이 간격을 탭바 높이만큼 보정 */
 #tab-watch { margin-top: 16px; }
+/* 크립토 범례 — 전체 선택/해제 (코인 12개를 하나씩 끄는 수고 제거) */
+.cr-bulk { display: inline-flex; gap: 5px; margin-right: 8px; padding-right: 8px;
+  border-right: 1px solid var(--line); }
+.cr-bulk button { font-size: .72rem; padding: 3px 8px; }

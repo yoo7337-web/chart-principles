@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=214">
-<script src="firebase-config.js?v=214"></script>
-<script src="js/auth.js?v=214"></script>
+<link rel="stylesheet" href="css/style.css?v=216">
+<script src="firebase-config.js?v=216"></script>
+<script src="js/auth.js?v=216"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=214"></script>
+<script src="js/sync.js?v=216"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -376,10 +376,14 @@
       <!-- 그리기 툴바 — 차트 안 왼쪽 세로바(가로 한 줄을 통째로 쓰던 것을 접음) -->
       <div id="draw-tools" class="draw-rail" style="display:none">
         <span class="mk-toggle" id="draw-mode">
-          <button data-dm="" class="active" title="이동 — 차트를 드래그해 이동/줌">🖐</button>
-          <button data-dm="trend" title="추세선">📈</button>
-          <button data-dm="box" title="박스권">▭</button>
-          <button data-dm="erase" title="지우기 — 그린 것을 눌러 삭제">🧽</button>
+          <button data-dm="" class="active" title="선택/이동 — 그림을 클릭해 선택(Delete로 삭제) · 빈 곳 드래그는 차트 이동">🖐</button>
+          <button data-dm="trend" title="추세선 — 두 점을 잇는 사선">📈</button>
+          <button data-dm="hline" title="수평선 — 지지·저항 가격대">━</button>
+          <button data-dm="vline" title="수직선 — 특정 날짜 표시">┃</button>
+          <button data-dm="box" title="박스권 — 가격 구간">▭</button>
+          <button data-dm="arrow" title="화살표 — 방향 표시">↗</button>
+          <button data-dm="fib" title="피보나치 되돌림 — 고점·저점을 드래그">𝔽</button>
+          <button data-dm="text" title="텍스트 메모 — 클릭한 자리에 글자">🅣</button>
         </span>
         <span class="draw-swatches" id="draw-color"></span>
         <span class="mk-toggle" id="draw-linestyle">
@@ -387,11 +391,16 @@
           <button data-ls="dashed" title="파선">– –</button>
           <button data-ls="dotted" title="점선">···</button>
         </span>
+        <button class="today-chart-btn" id="draw-undo" title="되돌리기 (Ctrl+Z)">↶</button>
+        <button class="today-chart-btn" id="draw-del" title="선택한 그림 삭제 (Delete)" disabled>✕</button>
         <button class="today-chart-btn" id="draw-clear" title="이 종목에 그린 것 전체 삭제">🗑</button>
         <span class="sub-note" id="draw-hint" hidden></span>
       </div>
       <div id="lookup-chart" class="chart" style="display:none"></div>
-      <svg id="lookup-draw" class="draw-overlay"></svg>
+      <svg id="lookup-draw" class="draw-overlay">
+        <defs><marker id="dw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+          orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+      </svg>
     </div>
     <!-- 공시 띠: 차트 x축과 같은 좌표계에 공시일 동그라미(hover=내용 / click=DART 원문) -->
     <div id="lookup-discband" class="disc-band" style="display:none"></div>
@@ -1071,6 +1080,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=214"></script>
+<script src="js/app.js?v=216"></script>
 </body>
 </html>

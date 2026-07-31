@@ -1717,28 +1717,125 @@ function redrawDrawings() {
   };
   const Y = (p) => { const c = lookupCandles.priceToCoordinate(p); return c == null ? null : c; };
   const arr = drawLoad()[drawKey()] || [];
-  svg.innerHTML = arr.map((d, i) => {
-    const x1 = X(d.t1, d.fo1), y1 = Y(d.p1), x2 = X(d.t2, d.fo2), y2 = Y(d.p2);
-    if ([x1, y1, x2, y2].some((v) => v == null)) return "";
-    const stl = drawShapeStyle(d.color || "#4391ff", d.style || "solid", d.type === "box");
-    if (d.type === "trend") return `<line class="dw" data-i="${i}" style="${stl}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
-    return `<rect class="dw" data-i="${i}" style="${stl}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
-  }).join("");
-  if (drawMode === "erase") svg.querySelectorAll(".dw").forEach((sh) => sh.onclick = () => {
-    const o = drawLoad(), k = drawKey();
-    if (o[k]) { o[k].splice(+sh.dataset.i, 1); if (!o[k].length) delete o[k]; drawSaveAll(o); redrawDrawings(); }
+  svg.innerHTML = arr.map((d, i) => drawShapeSvg(d, i, X, Y, w, h)).join("")
+    + `<g id="dw-sel-layer"></g>`;
+  /* ⚠클릭 히트영역 — 1px 선은 정확히 누르기가 매우 어렵다(사용자: "지우기가 너무 어려움").
+     같은 좌표에 **투명 굵은 선(12px)** 을 겹쳐 깔아 그것으로 집는다. */
+  svg.querySelectorAll(".dw-hit").forEach((sh) => {
+    // 선택은 '이동/선택' 모드에서만 — 그리기 중에는 도형 위에서 시작해도 그려져야 한다
+    sh.onclick = (ev) => { if (drawMode) return; ev.stopPropagation(); drawSelect(+sh.dataset.i); };
+    sh.oncontextmenu = (ev) => { ev.preventDefault(); ev.stopPropagation(); drawDelete(+sh.dataset.i); };
   });
+  drawPaintSelection();
 }
+
+/* 도형 1개 → SVG. 보이는 도형 + 그 위에 투명 히트영역(클릭용)을 함께 낸다. */
+function drawShapeSvg(d, i, X, Y, w, h) {
+  const col = d.color || "#4391ff";
+  const stl = drawShapeStyle(col, d.style || "solid", d.type === "box");
+  const hit = `class="dw-hit" data-i="${i}" stroke="transparent" stroke-width="12" fill="none"`;
+  const x1 = X(d.t1, d.fo1), y1 = Y(d.p1);
+  if (x1 == null || y1 == null) return "";
+  // 수평선·수직선·텍스트는 한 점만 있으면 그려진다(끝점 없어도 됨)
+  if (d.type === "hline")
+    return `<line class="dw" data-i="${i}" style="${stl}" x1="0" y1="${y1}" x2="${w}" y2="${y1}"/>
+      <text class="dw-lab" x="4" y="${y1 - 4}" fill="${col}">${fmtPrice(d.p1, LOOKUP_ST?.market)}</text>
+      <line ${hit} x1="0" y1="${y1}" x2="${w}" y2="${y1}"/>`;
+  if (d.type === "vline")
+    return `<line class="dw" data-i="${i}" style="${stl}" x1="${x1}" y1="0" x2="${x1}" y2="${h}"/>
+      <line ${hit} x1="${x1}" y1="0" x2="${x1}" y2="${h}"/>`;
+  if (d.type === "text")
+    return `<text class="dw dw-text" data-i="${i}" x="${x1}" y="${y1}" fill="${col}">${String(d.text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>
+      <rect ${hit} x="${x1 - 4}" y="${y1 - 14}" width="${Math.max(24, (d.text || "").length * 9 + 8)}" height="20" stroke="none" fill="transparent"/>`;
+  const x2 = X(d.t2, d.fo2), y2 = Y(d.p2);
+  if (x2 == null || y2 == null) return "";
+  if (d.type === "trend")
+    return `<line class="dw" data-i="${i}" style="${stl}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>
+      <line ${hit} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  if (d.type === "arrow")
+    return `<line class="dw" data-i="${i}" style="${stl}" marker-end="url(#dw-arrow)" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>
+      <line ${hit} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  if (d.type === "fib") {
+    // 되돌림 = 시작가(p1)~끝가(p2) 구간의 23.6/38.2/50/61.8/78.6%
+    const lv = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+    const lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+    return lv.map((r) => {
+      const p = d.p1 + (d.p2 - d.p1) * r, y = Y(p);
+      if (y == null) return "";
+      return `<line class="dw dw-fib" data-i="${i}" stroke="${col}" stroke-dasharray="${r === 0 || r === 1 ? "none" : "4 3"}"
+          x1="${lo}" y1="${y}" x2="${hi}" y2="${y}"/>
+        <text class="dw-lab" x="${hi + 3}" y="${y - 3}" fill="${col}">${(r * 100).toFixed(1)}%</text>`;
+    }).join("") + `<line ${hit} x1="${lo}" y1="${Y(d.p1)}" x2="${hi}" y2="${Y(d.p1)}"/>
+      <line ${hit} x1="${lo}" y1="${Y(d.p2)}" x2="${hi}" y2="${Y(d.p2)}"/>`;
+  }
+  // box
+  return `<rect class="dw" data-i="${i}" style="${stl}" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}"
+      width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>
+    <rect ${hit} x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"/>`;
+}
+
+/* ── 선택·삭제·되돌리기 ── */
+let drawSel = null;          // 선택된 그림 인덱스
+const DRAW_UNDO = [];        // 스냅샷 스택(종목 전환 시 비움)
+function drawPush() {        // 변경 직전 상태 저장
+  const k = drawKey(); if (!k) return;
+  DRAW_UNDO.push(JSON.stringify(drawLoad()[k] || []));
+  if (DRAW_UNDO.length > 30) DRAW_UNDO.shift();
+}
+function drawSelect(i) {
+  drawSel = (drawSel === i) ? null : i;
+  drawPaintSelection();
+}
+function drawPaintSelection() {
+  const svg = document.getElementById("lookup-draw");
+  if (!svg) return;
+  svg.querySelectorAll(".dw").forEach((el) => el.classList.toggle("on", +el.dataset.i === drawSel));
+  const del = document.getElementById("draw-del");
+  if (del) del.disabled = drawSel == null;
+}
+function drawDelete(i) {
+  const o = drawLoad(), k = drawKey();
+  if (!o[k] || i == null || !o[k][i]) return;
+  drawPush();
+  o[k].splice(i, 1);
+  if (!o[k].length) delete o[k];
+  drawSaveAll(o);
+  drawSel = null;
+  redrawDrawings();
+}
+function drawUndo() {
+  const k = drawKey();
+  if (!k || !DRAW_UNDO.length) return;
+  const o = drawLoad();
+  const prev = JSON.parse(DRAW_UNDO.pop());
+  if (prev.length) o[k] = prev; else delete o[k];
+  drawSaveAll(o);
+  drawSel = null;
+  redrawDrawings();
+}
+
+const DRAW_HINT = {
+  "": "그림을 클릭하면 선택됩니다 (Delete=삭제 · 우클릭=바로 삭제) · 빈 곳 드래그는 차트 이동",
+  trend: "두 점을 드래그해 추세선을 그립니다",
+  hline: "누른 지점의 가격에 수평선을 긋습니다(지지·저항)",
+  vline: "누른 지점의 날짜에 수직선을 긋습니다",
+  box: "드래그해 박스권을 그립니다",
+  arrow: "드래그 방향으로 화살표를 그립니다",
+  fib: "고점→저점(또는 반대)을 드래그하면 되돌림 비율선이 나옵니다",
+  text: "클릭한 자리에 메모를 남깁니다",
+};
+// 한 번 클릭으로 끝나는 도구(드래그 불필요)
+const DRAW_CLICK1 = new Set(["hline", "vline", "text"]);
 
 function setDrawMode(m) {
   drawMode = m;
+  drawSel = null;
   const svg = document.getElementById("lookup-draw");
-  if (svg) svg.style.pointerEvents = m ? "auto" : "none";  // 이동 모드에선 차트로 이벤트 통과
+  // ⚠선택 모드("")에서도 그림은 클릭할 수 있어야 한다 → SVG는 항상 이벤트를 받고,
+  //   빈 곳(도형 밖)은 CSS `pointer-events:none`(SVG 자체) + 도형만 auto로 통과시킨다.
+  if (svg) svg.style.pointerEvents = m ? "auto" : "none";
   document.querySelectorAll("#draw-mode button").forEach((b) => b.classList.toggle("active", b.dataset.dm === m));
-  // 툴바를 세로 레일로 접으면서 힌트 문구는 숨겼다 → 레일 자체의 툴팁으로 안내를 유지
-  const msg = m === "erase" ? "지우고 싶은 선/박스를 클릭하세요"
-    : m ? "차트에서 드래그해 그리세요 · 줌/스크롤에 따라 봉에 고정됩니다"
-    : "추세선/박스권을 고르고 차트에서 드래그 · 이 브라우저에 저장";
+  const msg = DRAW_HINT[m] || DRAW_HINT[""];
   const hint = document.getElementById("draw-hint");
   if (hint) hint.textContent = msg;
   const rail = document.getElementById("draw-tools");
@@ -1766,8 +1863,23 @@ function bindDrawTools() {
   });
   document.getElementById("draw-clear").onclick = () => {
     if (!confirm("이 종목의 그림을 모두 지울까요?")) return;
-    const o = drawLoad(); delete o[drawKey()]; drawSaveAll(o); redrawDrawings();
+    drawPush();
+    const o = drawLoad(); delete o[drawKey()]; drawSaveAll(o); drawSel = null; redrawDrawings();
   };
+  document.getElementById("draw-undo").onclick = drawUndo;
+  document.getElementById("draw-del").onclick = () => drawDelete(drawSel);
+  // 키보드: Delete=선택 삭제 · Ctrl+Z=되돌리기 · Esc=선택 해제 (입력 중일 땐 무시)
+  if (!window.__drawKeys) {
+    window.__drawKeys = true;
+    document.addEventListener("keydown", (ev) => {
+      if (currentTab !== "lookup") return;
+      const tag = (ev.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || ev.target.isContentEditable) return;
+      if ((ev.key === "Delete" || ev.key === "Backspace") && drawSel != null) { ev.preventDefault(); drawDelete(drawSel); }
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { ev.preventDefault(); drawUndo(); }
+      else if (ev.key === "Escape") { drawSel = null; drawPaintSelection(); }
+    });
+  }
   const svg = document.getElementById("lookup-draw");
   let start = null;
   const toData = (ev) => {
@@ -1785,8 +1897,24 @@ function bindDrawTools() {
     return { x, y, t, fo, p };
   };
   svg.addEventListener("pointerdown", (ev) => {
-    if (!drawMode || drawMode === "erase" || !lookupCandles) return;
-    start = toData(ev);
+    if (!drawMode || !lookupCandles) return;
+    const c = toData(ev);
+    if (DRAW_CLICK1.has(drawMode)) {          // 수평선·수직선·텍스트는 클릭 한 번으로 완성
+      if (c.p == null || (c.t == null && c.fo == null)) return;
+      let text = null;
+      if (drawMode === "text") {
+        text = prompt("메모 내용");
+        if (!text) return;
+      }
+      drawPush();
+      const o = drawLoad(), k = drawKey();
+      (o[k] = o[k] || []).push({ type: drawMode, t1: c.t, fo1: c.fo, p1: c.p,
+        color: drawColor, style: drawStyle, ...(text ? { text } : {}) });
+      drawSaveAll(o);
+      redrawDrawings();
+      return;
+    }
+    start = c;
     try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
   });
   svg.addEventListener("pointermove", (ev) => {
@@ -1794,9 +1922,15 @@ function bindDrawTools() {
     const c = toData(ev);
     const prev = svg.querySelector(".dw-preview"); if (prev) prev.remove();
     const stl = drawShapeStyle(drawColor, drawStyle, drawMode === "box");
-    const el = drawMode === "trend"
-      ? `<line class="dw dw-preview" style="${stl}" x1="${start.x}" y1="${start.y}" x2="${c.x}" y2="${c.y}"/>`
-      : `<rect class="dw dw-preview" style="${stl}" x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
+    let el;
+    if (drawMode === "box")
+      el = `<rect class="dw dw-preview" style="${stl}" x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
+    else if (drawMode === "fib") {           // 미리보기는 양 끝선만(확정 시 비율선 전체)
+      el = `<rect class="dw dw-preview" style="stroke:${drawColor};fill:${hexRGBA(drawColor, 0.07)}"
+        x="${Math.min(start.x, c.x)}" y="${Math.min(start.y, c.y)}" width="${Math.abs(c.x - start.x)}" height="${Math.abs(c.y - start.y)}"/>`;
+    } else
+      el = `<line class="dw dw-preview" style="${stl}"${drawMode === "arrow" ? ' marker-end="url(#dw-arrow)"' : ""}
+        x1="${start.x}" y1="${start.y}" x2="${c.x}" y2="${c.y}"/>`;
     svg.insertAdjacentHTML("beforeend", el);
   });
   const finish = (ev) => {
@@ -1804,6 +1938,7 @@ function bindDrawTools() {
     const end = toData(ev);
     const okA = start.t != null || start.fo != null, okB = end.t != null || end.fo != null;
     if (okA && okB && start.p != null && end.p != null && (Math.abs(end.x - start.x) > 3 || Math.abs(end.y - start.y) > 3)) {
+      drawPush();
       const o = drawLoad(), k = drawKey();
       (o[k] = o[k] || []).push({ type: drawMode, t1: start.t, fo1: start.fo, p1: start.p, t2: end.t, fo2: end.fo, p2: end.p,
         color: drawColor, style: drawStyle });   // 선택한 색·선모양 저장
@@ -1921,6 +2056,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v216", "2026-07-31", "그리기 도구 대폭 개선 + 크립토 전체선택 + 공시 전량 수집", "①**차트 그리기 도구 개편** — 그린 선을 지우기 어렵던 문제를 해결했습니다. 얇은 선도 쉽게 집도록 **투명한 두꺼운 클릭 영역**을 깔았고, 그림을 클릭하면 선택(강조)된 뒤 **Delete 키·✕ 버튼·우클릭** 어느 쪽으로도 지울 수 있습니다. **Ctrl+Z 되돌리기**(최근 30단계, 전체삭제도 복구)도 넣었습니다. 도구는 추세선·박스권에 더해 **수평선(지지·저항, 가격 라벨 자동)·수직선(날짜)·화살표·피보나치 되돌림(23.6~78.6% 자동)·텍스트 메모** 5종을 추가했습니다. 수평선·수직선·텍스트는 클릭 한 번으로 그려집니다. ②**크립토 차트에 전체 선택/해제 버튼** 추가(코인 12개를 하나씩 끄던 수고 제거). ③**공시 스캐너가 전체 공시를 담도록** 변경 — 코스피·코스닥만 남기던 필터 때문에 전체의 39%(기타·코넥스)가 빠져 정기공시가 누락돼 보였습니다. 하루 평균 501건 → 729건. ④종목조회 고정 헤더 위 빈틈 제거. ⑤재무 차트가 통째로 사라지던 버그 수정(대한항공 등 37종목 — 값이 없는 해에서 계산이 깨지며 차트 전체 좌표가 무효화되던 문제)."],
   ["v214", "2026-07-31", "차트 기간 10년 확대 + 분봉 3주기(당일 1분·5분 60일·60분 2년)", "①**일봉 차트를 5년 → 10년으로** 늘렸습니다(2016~2026, 2,520봉). 저장 형식을 압축 배열로 바꿔 기간이 2배가 됐는데도 용량 증가는 17%에 그쳤습니다. ②**분봉을 3가지 주기로 확대** — 기존엔 '당일 1분봉'만 있어 며칠 전 급등이 어떻게 만들어졌는지 볼 수 없었습니다. 이제 **5분봉으로 최근 60일**, **60분봉으로 최근 2년**을 되짚을 수 있습니다(유동성 상위 90종목 대상, 없는 종목은 버튼이 자동으로 숨겨집니다). ⚠1분봉의 과거 소급은 데이터 제공처가 최근 7일까지만 주기 때문에 불가능하며, 그래서 5분·60분으로 과거를 덮는 방식을 택했습니다."],
   ["v213", "2026-07-31", "종목조회 헤더 중복 제거 + 공시 스캐너 회사명 복구", "①**종목조회 상단의 고정 바와 아래 종목 헤더가 같은 정보**(종목명·현재가·등락)를 두 번 보여주던 것을 정리했습니다. 위쪽 중복 표시를 없애고 **아래 종목 헤더 자체를 고정 영역**으로 만들었으며, 원칙 선택 드롭다운도 그 헤더 안으로 합쳤습니다(검색창은 맨 위 유지). ②**공시 스캐너에서 회사명이 아예 안 보이던 문제 수정** — 앞선 수정에서 최소 너비를 제거하자, 회사 칸이 표의 열 너비(244px)를 따르지 않고 내용 크기(44px)로 줄어들며 이름이 사라졌습니다. 원인은 그 칸에 걸린 flex 배치가 표의 열 너비 계산에서 빠지는 것이었고, 일반 표 셀 배치로 되돌려 해결했습니다(689건 전부 정상 표시)."],
   ["v211", "2026-07-31", "관심종목 워크스페이스 — 종목별 종합 대시보드", "관심종목 탭을 단순 목록표에서 **종목별 리서치 워크스페이스**로 개편. 왼쪽 목록(현재가·등락·최근 신호·보고서 보유 배지, 등록순/등락률/시총/신호 정렬)에서 종목을 고르면 오른쪽에 그 종목의 사이트 전체 정보가 **8개 카드 한 화면**으로 모입니다: ①심층 보고서(있으면 열기, 없으면 '보고서 요청' 문구 복사) ②추이·신호(6개월 미니차트+최근 신호+국면) ③재무(분기 매출 막대+YoY·이익률·ROE·부채비율) ④밸류에이션(PER·PBR·선행PER+참고 내재가치 괴리) ⑤수급(외국인·기관·개인 20일) ⑥산업 맥락(소속 산업 1개월 수익률·순위) ⑦공시·뉴스 ⑧원칙 성적(이 종목 10년 베스트/워스트 원칙). 각 카드의 '자세히 →'는 해당 탭 상세로 이동. 새 수집 없이 기존 데이터 전부 재사용. 상대 주가 추이 비교는 하단 접이식으로 유지."],
@@ -4992,13 +5128,23 @@ function crCorr() {
 function crTable(d) {
   const coins = d.coins || [];
   const host = $("#cr-legend");
-  host.innerHTML = coins.map((c, i) =>
+  // v216: 코인이 12개라 하나씩 끄는 게 번거롭다 → 전체 선택/해제 버튼 추가(사용자 요청)
+  host.innerHTML = `<span class="cr-bulk">
+      <button class="today-chart-btn" data-bulk="all">전체 선택</button>
+      <button class="today-chart-btn" data-bulk="none">전체 해제</button></span>` +
+    coins.map((c, i) =>
     `<button class="cr-chip ${crOff.has(c.sym) ? "off" : ""}" data-s="${c.sym}">
       <i style="background:${crC(i)}"></i>${c.sym.toUpperCase()}</button>`).join("");
   host.querySelectorAll(".cr-chip").forEach((b) => b.onclick = () => {
     const s = b.dataset.s;
     crOff.has(s) ? crOff.delete(s) : crOff.add(s);
     b.classList.toggle("off", crOff.has(s));
+    crLines();
+  });
+  host.querySelectorAll("[data-bulk]").forEach((b) => b.onclick = () => {
+    crOff.clear();
+    if (b.dataset.bulk === "none") coins.forEach((c) => crOff.add(c.sym));
+    host.querySelectorAll(".cr-chip").forEach((x) => x.classList.toggle("off", crOff.has(x.dataset.s)));
     crLines();
   });
   $("#cr-table").innerHTML =
