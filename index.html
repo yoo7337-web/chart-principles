@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=217">
-<script src="firebase-config.js?v=217"></script>
-<script src="js/auth.js?v=217"></script>
+<link rel="stylesheet" href="css/style.css?v=218">
+<script src="firebase-config.js?v=218"></script>
+<script src="js/auth.js?v=218"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=217"></script>
+<script src="js/sync.js?v=218"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -333,11 +333,12 @@
     <!-- empty 클래스: 종목 미선택 시 검색창을 안내문 바로 옆에(선택 후엔 우측 고정) -->
     <!-- v213: 위·아래 헤더가 같은 정보였다 → 위 sticky 바는 제거하고, 검색·원칙 선택을
          아래 종목 헤더(#lookup-head)로 합쳐 **그 영역을 고정**한다. 미선택 시엔 안내+검색만 보인다. -->
+    <!-- v218: 검색창을 맨 왼쪽으로(사용자 요청 — 우측 끝은 시선 이동이 큼) -->
     <div id="lk-sticky" class="lk-sticky empty">
-      <span class="sub-note" id="lk-sticky-hint">종목을 검색하세요</span>
-      <span class="lk-sticky-gap"></span>
       <label class="lk-sticky-search">🔍 <input type="text" id="lookup-q" placeholder="종목 검색 (예: 현대차, NVDA)" list="lookup-list" autocomplete="off">
       <datalist id="lookup-list"></datalist></label>
+      <span class="sub-note" id="lk-sticky-hint">종목을 검색하세요</span>
+      <span class="lk-sticky-gap"></span>
     </div>
     <!-- 검색 아래 전체를 2단: 좌=본문(헤더·차트·개요~원칙성적) / 우=레일(호가·프로파일·메모) -->
     <div class="lk-grid">
@@ -352,10 +353,8 @@
       <label><input type="radio" name="sigfilter" value="all"> 전체 신호</label>
       <label><input type="radio" name="sigfilter" value="on"> ✅ 현 국면 적용 원칙만</label>
       <label><input type="radio" name="sigfilter" value="off"> ⛔ 미적용 원칙만</label>
-      <span class="mk-toggle sig-allbtn">
-        <button id="sig-all" title="모든 원칙의 신호를 차트에 표시">전체 적용</button>
-        <button id="sig-none" title="차트에서 신호 마커를 모두 숨김">전체 해제</button>
-      </span>
+      <!-- v218: '전체 적용'은 라디오 '전체 신호'와 중복이라 제거 — 해제 버튼만 라디오 크기에 맞춰 유지 -->
+      <button id="sig-none" class="sig-nonebtn" title="차트에서 신호 마커를 모두 숨김(캔들만 보기)">신호 끄기</button>
       <span id="lookup-chips" class="sig-chips"></span>
     </div>
     <div class="controls" id="lookup-tfbar" style="display:none">
@@ -1080,6 +1079,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=217"></script>
+<script src="js/app.js?v=218"></script>
 </body>
 </html>

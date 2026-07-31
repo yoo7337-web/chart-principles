@@ -1652,7 +1652,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .dsc-pct { display: block; font-size: .7rem; opacity: .8; }
 
 /* ---------- 차트 하단 공시 띠 ---------- */
-.sig-allbtn { margin-left: 6px; }
+/* '신호 끄기' — 옆 라디오 라벨과 같은 높이·글자 크기(혼자 크지 않게) */
+.sig-nonebtn { margin-left: 8px; background: none; border: 1px solid var(--line); border-radius: 7px;
+  color: var(--muted); font: inherit; font-size: .8rem; padding: 3px 10px; cursor: pointer; }
+.sig-nonebtn:hover { color: #e7e7ec; border-color: rgba(255,255,255,.3); }
 .disc-band { position: relative; margin-top: 2px; }
 .disc-band-svg { display: block; }
 .disc-band-label { position: absolute; left: 2px; top: 1px; font-size: .68rem; color: var(--muted);
@@ -1872,3 +1875,11 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-rep-concl { margin: 5px 0 0; font-size: .8rem; line-height: 1.5; }
 .ws-rule-row { padding: 2.5px 0; }
 .ws-rule-div { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 6px; }
+/* 관심종목 재무 3줄 미니 막대 + EPS 추이 */
+.ws-fin-row { display: flex; align-items: flex-end; gap: 8px; padding: 2px 0; }
+.ws-fin-lab { flex: 0 0 52px; font-size: .72rem; color: var(--muted); align-self: center; }
+.ws-fin-bars { flex: 1; display: flex; gap: 3px; align-items: flex-end; height: 26px; }
+.ws-fin-bars i { flex: 1; border-radius: 2px 2px 0 0; min-height: 3px; opacity: .9; font-style: normal; }
+.ws-fin-bars i.nil { background: rgba(255,255,255,.08); height: 3px; }
+.ws-fin-bars.eps i { background: #f0b34c; }
+.ws-fin-bars.eps i.est { background: repeating-linear-gradient(45deg, #f0b34c, #f0b34c 3px, rgba(240,179,76,.35) 3px, rgba(240,179,76,.35) 6px); }

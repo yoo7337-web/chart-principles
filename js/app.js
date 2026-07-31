@@ -1253,13 +1253,7 @@ function loadLookup(key) {
     document.querySelectorAll('input[name="sigfilter"]').forEach((r) => {
       r.onchange = () => { lookupHideSignals = false; drawLookupChart(); };
     });
-    $("#sig-all").onclick = () => {              // 모든 원칙의 신호를 한 번에
-      lookupHideSignals = false;
-      $("#lookup-rule").value = "";              // 단일 원칙 선택 해제
-      const all = document.querySelector('input[name="sigfilter"][value="all"]');
-      if (all) all.checked = true;
-      drawLookupChart();
-    };
+    // v218: '전체 적용' 버튼 제거 — 라디오 '전체 신호'가 같은 일을 한다(중복 UI 정리)
     $("#sig-none").onclick = () => { lookupHideSignals = true; drawLookupChart(); };
 
     fillRuleSelect(st);   // 원칙 드롭다운(헤더 안) — 전체 + 이 종목에 신호가 있는 원칙만
@@ -2056,6 +2050,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v218", "2026-08-01", "관심종목 카드 심화(재무 3종 그래프·밸류 확장·산업지표) + UI 정리", "①**관심종목 재무 카드** — 매출만 있던 분기 그래프를 **매출·영업이익·순이익 3줄 미니 막대**로 확장(각자 스케일, 적자 분기는 파란 막대). ②**밸류에이션 카드 보강** — PBR도 동종 평균과 비교, **PSR**(시총÷최근 연매출), **EPS 4개년 추이 막대**(추정치는 빗금) 추가. ③**산업 맥락 카드에 산업 진단의 실물 지표 연동** — 소속 산업의 수출금액지수(한국은행)·글로벌 프록시(SOX 등) 3종을 3개월 변화율과 함께 표시. 월간·주간 시계열의 주기가 섞여 있어 잘못 계산되던 문제(+229%로 표시)도 함께 수정. ④**종목조회 검색창을 맨 왼쪽으로** 이동, '전체 적용' 버튼 제거(라디오 '전체 신호'와 중복) 후 '신호 끄기' 버튼을 주변 요소와 같은 크기로 정리."],
   ["v217", "2026-08-01", "유니버스 전 상장 확장 + 관심종목 카드 정보 확대 + 공시 1년 전량", "①**한국 유니버스를 1,200 → 2,564종목(전 상장, 스팩·우선주 제외)으로 확장** — 이제 코스피·코스닥 거의 모든 종목이 조회됩니다(10년 일봉·원칙 신호 포함). 신규 종목의 재무·기업개요는 며칠에 걸쳐 자동 충전됩니다. ②**관심종목 카드 정보 확대** — 심층 보고서 카드에 신호등 3개+한 줄 결론, 추이 카드에 기간 수익률 4구간·신호 이력·베타/변동성, 재무 카드에 최근 분기 매출/영업이익/순이익 YoY 표, 밸류에이션에 동종업계 평균 대비·배당수익률, 수급을 5일/20일 2단 표로, 산업 카드에 동종 상위 3사 등락, 공시 4건+뉴스 3건, 원칙 성적 상위 3+워스트. ③**종목별 공시가 실제 1년치로** — 기존엔 최신 15건에서 끊겨 활발한 대형주는 2~3주치만 보였습니다(SK하이닉스 실측 15건 → 400건). 기본 12건 표시 + '더 보기'로 펼침. ④동종업계 비교에 기준 종목의 주가·등락률 표시."],
   ["v216", "2026-07-31", "그리기 도구 대폭 개선 + 크립토 전체선택 + 공시 전량 수집", "①**차트 그리기 도구 개편** — 그린 선을 지우기 어렵던 문제를 해결했습니다. 얇은 선도 쉽게 집도록 **투명한 두꺼운 클릭 영역**을 깔았고, 그림을 클릭하면 선택(강조)된 뒤 **Delete 키·✕ 버튼·우클릭** 어느 쪽으로도 지울 수 있습니다. **Ctrl+Z 되돌리기**(최근 30단계, 전체삭제도 복구)도 넣었습니다. 도구는 추세선·박스권에 더해 **수평선(지지·저항, 가격 라벨 자동)·수직선(날짜)·화살표·피보나치 되돌림(23.6~78.6% 자동)·텍스트 메모** 5종을 추가했습니다. 수평선·수직선·텍스트는 클릭 한 번으로 그려집니다. ②**크립토 차트에 전체 선택/해제 버튼** 추가(코인 12개를 하나씩 끄던 수고 제거). ③**공시 스캐너가 전체 공시를 담도록** 변경 — 코스피·코스닥만 남기던 필터 때문에 전체의 39%(기타·코넥스)가 빠져 정기공시가 누락돼 보였습니다. 하루 평균 501건 → 729건. ④종목조회 고정 헤더 위 빈틈 제거. ⑤재무 차트가 통째로 사라지던 버그 수정(대한항공 등 37종목 — 값이 없는 해에서 계산이 깨지며 차트 전체 좌표가 무효화되던 문제)."],
   ["v214", "2026-07-31", "차트 기간 10년 확대 + 분봉 3주기(당일 1분·5분 60일·60분 2년)", "①**일봉 차트를 5년 → 10년으로** 늘렸습니다(2016~2026, 2,520봉). 저장 형식을 압축 배열로 바꿔 기간이 2배가 됐는데도 용량 증가는 17%에 그쳤습니다. ②**분봉을 3가지 주기로 확대** — 기존엔 '당일 1분봉'만 있어 며칠 전 급등이 어떻게 만들어졌는지 볼 수 없었습니다. 이제 **5분봉으로 최근 60일**, **60분봉으로 최근 2년**을 되짚을 수 있습니다(유동성 상위 90종목 대상, 없는 종목은 버튼이 자동으로 숨겨집니다). ⚠1분봉의 과거 소급은 데이터 제공처가 최근 7일까지만 주기 때문에 불가능하며, 그래서 5분·60분으로 과거를 덮는 방식을 택했습니다."],
@@ -5650,18 +5645,24 @@ function wsShow(key) {
         blk = [fin.cfs, fin.ofs].filter(Boolean).sort((a, b) =>
           Object.keys(b?.annual || {}).length - Object.keys(a?.annual || {}).length)[0];
       const qs = Object.entries(blk?.quarter || {}).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
-      let bars = "", note = "";
+      let bars = "";
       if (qs.length >= 2) {
-        const revs = qs.map(([, r]) => r.rev ?? 0), mx = Math.max(...revs.map(Math.abs), 1);
-        bars = `<div class="ws-bars">${qs.map(([lab, r]) =>
-          `<span title="${lab} 매출 ${((r.rev ?? 0)).toLocaleString()}" style="height:${Math.max(6, Math.abs(r.rev ?? 0) / mx * 100)}%"></span>`).join("")}</div>
-          <div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]}</span></div>`;
-        const [ll, lr] = qs[qs.length - 1];   // 전년 동분기 YoY
-        const prev = qs.find(([l2]) => l2 === `${String(+ll.slice(0, 2) - 1).padStart(2, "0")}${ll.slice(2)}`);
-        const yoy = prev && prev[1].rev ? (lr.rev / prev[1].rev - 1) : null;
-        const opm = lr.rev ? (lr.op ?? null) != null ? lr.op / lr.rev : null : null;
-        note = `${ll} 매출${yoy != null ? ` <b class="${yoy >= 0 ? "pos" : "neg"}">${yoy >= 0 ? "+" : ""}${(yoy * 100).toFixed(1)}% YoY</b>` : ""}
-          ${opm != null ? ` · 영업이익률 ${(opm * 100).toFixed(1)}%` : ""}`;
+        // 매출·영업이익·순이익을 각자 줄로(스케일이 크게 달라 한 축에 못 섞는다). 음수는 아래쪽·파랑.
+        const row = (lab2, k2, color) => {
+          const vals = qs.map(([, r]) => r[k2]);
+          if (!vals.some((v) => Number.isFinite(v))) return "";
+          const mx = Math.max(...vals.filter(Number.isFinite).map(Math.abs), 1);
+          return `<div class="ws-fin-row"><span class="ws-fin-lab">${lab2}</span>
+            <span class="ws-fin-bars">${qs.map(([lab3, r]) => {
+              const v = r[k2];
+              if (!Number.isFinite(v)) return `<i class="nil"></i>`;
+              const h = Math.max(8, Math.abs(v) / mx * 100);
+              return `<i class="${v < 0 ? "neg" : ""}" title="${lab3} ${lab2} ${Math.round(v).toLocaleString()}"
+                style="height:${h}%;background:${v < 0 ? "var(--kdn)" : color}"></i>`;
+            }).join("")}</span></div>`;
+        };
+        bars = row("매출", "rev", "#4391ff") + row("영업이익", "op", "#22c07a") + row("순이익", "np", "#9d7bff")
+          + `<div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]}</span></div>`;
       }
       // 최근 분기 3행(매출·영업이익·순이익 + YoY) — 카드에서 바로 실적 레벨이 읽히게
       let tb = "";
@@ -5702,13 +5703,36 @@ function wsShow(key) {
       }
     }
     const dy = m.dps && price ? (m.dps / price * 100) : null;
-    const peerPers = (co.peers || []).map((x) => EXTRAS.company?.map?.[`kr_${x.ticker}`]?.metrics?.per).filter((v) => Number.isFinite(v));
-    const peerAvg = peerPers.length ? peerPers.reduce((a, b) => a + b, 0) / peerPers.length : null;
+    const peerM = (co.peers || []).map((x) => EXTRAS.company?.map?.[`kr_${x.ticker}`]?.metrics || {});
+    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    const peerPer = avg(peerM.map((x) => x.per).filter(Number.isFinite));
+    const peerPbr = avg(peerM.map((x) => x.pbr).filter(Number.isFinite));
+    // PSR = 시총 ÷ 최근 확정 연매출(fin의 est 아닌 마지막) — KR은 억원 단위 통일
+    const lastFin = (co.fin || []).filter((r) => !r.est).pop();
+    const tile2 = (MARKET?.heatmap || []).find((x) => `${x.m}_${x.t}` === key);
+    const psr = tile2?.mcap && lastFin?.rev ? (tile2.mcap / 1e8) / lastFin.rev : null;
+    // EPS 추이(확정+추정) 미니 막대 — 이익 성장의 방향을 카드에서 바로
+    const epsRows = (co.fin_ext || []).filter((r) => r.eps != null).slice(-4);
+    let epsBar = "";
+    if (epsRows.length >= 2) {
+      const mx = Math.max(...epsRows.map((r) => Math.abs(r.eps)), 1);
+      epsBar = `<div class="ws-fin-row"><span class="ws-fin-lab">EPS</span>
+        <span class="ws-fin-bars eps">${epsRows.map((r) =>
+          `<i class="${r.eps < 0 ? "neg" : ""}${r.est ? " est" : ""}" title="${r.y} EPS ${Math.round(r.eps).toLocaleString()}${r.est ? " (추정)" : ""}"
+             style="height:${Math.max(8, Math.abs(r.eps) / mx * 100)}%"></i>`).join("")}</span>
+        <i class="sub-note">${epsRows[0].y.slice(2, 4)}→${epsRows[epsRows.length - 1].y.slice(2, 4)}년${epsRows.some((r) => r.est) ? " · 빗금=추정" : ""}</i></div>`;
+    }
+    // 52주 위치(현재가가 1년 밴드의 어디쯤인가)
+    const pr2 = WS_ST[key]?.profile || {};
+    const w52 = pr2.pos52 != null ? pr2.pos52 : null;
     fill("ws-val", `<div class="ws-kv-row"><span>PER</span><b>${m.per ?? "-"}배</b>
-        ${peerAvg ? `<i class="sub-note">동종 ${peerPers.length}사 평균 ${peerAvg.toFixed(1)}배 — ${m.per != null ? (m.per < peerAvg ? "낮음" : "높음") : "-"}</i>` : "<i></i>"}</div>
-      <div class="ws-kv-row"><span>PBR</span><b>${m.pbr ?? "-"}배</b><i class="sub-note">${m.bps ? `BPS ${Math.round(m.bps).toLocaleString()}` : ""}</i></div>
+        ${peerPer ? `<i class="sub-note">동종 평균 ${peerPer.toFixed(1)}배 — ${m.per != null ? (m.per < peerPer ? "낮음" : "높음") : "-"}</i>` : "<i></i>"}</div>
+      <div class="ws-kv-row"><span>PBR</span><b>${m.pbr ?? "-"}배</b>
+        <i class="sub-note">${peerPbr ? `동종 평균 ${peerPbr.toFixed(1)}배` : ""}${m.bps ? ` · BPS ${Math.round(m.bps).toLocaleString()}` : ""}</i></div>
+      ${psr ? `<div class="ws-kv-row"><span>PSR</span><b>${psr.toFixed(2)}배</b><i class="sub-note">시총 ÷ ${lastFin.y.slice(0, 4)} 매출</i></div>` : ""}
       ${fwd ? `<div class="ws-kv-row"><span>선행 PER</span><b>${fwd.toFixed(1)}배</b><i class="sub-note">${est.y} 추정 EPS 기준</i></div>` : ""}
       ${dy ? `<div class="ws-kv-row"><span>배당수익률</span><b>${dy.toFixed(2)}%</b><i class="sub-note">DPS ${Math.round(m.dps).toLocaleString()}원</i></div>` : ""}
+      ${epsBar}
       ${ivLine || `<div class="sub-note">내재가치 데이터 없음</div>`}`);
     // ⑦ 공시·뉴스
     const fe = EXTRAS.feed?.map?.[key] || EXTRAS.feed?.[key] || {};
@@ -5733,9 +5757,33 @@ function wsShow(key) {
       fill("ws-ind", `${gmeta?.icon || ""} <b>${g.name}</b> — 1개월 <b class="${(g.m1 ?? 0) >= 0 ? "pos" : "neg"}">${pct(g.m1 ?? 0, 1)}</b>
         <span class="sub-note">(${groups.length}개 산업 중 ${rank}위 · 시장 대비 ${pct(g.rs_m1 ?? 0, 1)})</span>
         <div class="sub-note">1주 ${pct(g.w1 ?? 0, 1)} · 3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목</div>
+        <div id="ws-ind-met"></div>
         ${plist.length ? `<div class="ws-kv-h">동종 상위</div>` + plist.map((x) =>
           `<div class="ws-kv-row"><span>${x.name}</span><b class="${(x.chg || 0) >= 0 ? "kup" : "kdn"}">${x.chg != null ? (x.chg >= 0 ? "+" : "") + x.chg.toFixed(1) + "%" : "-"}</b>
              <i class="sub-note">${x.price != null ? Math.round(x.price).toLocaleString() + "원" : ""}</i></div>`).join("") : ""}`);
+      // 산업 진단과 같은 소스(sector_metrics) — 이 산업의 실물·프록시 지표 3개(3개월 전 대비)
+      loadSecMet().then((sm) => {
+        if (wsSel !== key) return;
+        const el = document.getElementById("ws-ind-met");
+        const spec = sm?.spec?.[tile?.grp];
+        if (!el || !spec) return;
+        const ids = [...(spec.ecos || []), ...(spec.yf || [])].slice(0, 3);
+        const rows2 = ids.map((id) => {
+          const ser = sm.series?.[id], meta2 = sm.meta?.[id];
+          if (!ser?.length) return "";
+          const lastV = ser[ser.length - 1][1];
+          // ⚠주기 혼재: ECOS 수출지수=월간('2026-04') · 야후 프록시=주간('26-07-13').
+          //   같은 인덱스로 되돌리면 월간이 14개월 전이 되어 "+229%" 같은 허수가 나온다(실측) → 라벨로 구분.
+          const monthly = String(ser[0][0]).length === 7;
+          const back = monthly ? 3 : 13;
+          const ago = ser[Math.max(0, ser.length - 1 - back)][1];
+          const chg2 = ago ? (lastV / ago - 1) * 100 : null;
+          return `<div class="ws-kv-row"><span>${meta2?.name || id}</span>
+            <b>${Math.abs(lastV) >= 1000 ? Math.round(lastV).toLocaleString() : lastV}</b>
+            ${chg2 != null ? `<i class="${chg2 >= 0 ? "pos" : "neg"}">3개월 ${chg2 >= 0 ? "+" : ""}${chg2.toFixed(1)}%</i>` : "<i></i>"}</div>`;
+        }).filter(Boolean).join("");
+        if (rows2) el.innerHTML = `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업 진단과 동일 소스)</span></div>` + rows2;
+      });
     }
   }
 }
