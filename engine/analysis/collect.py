@@ -8,6 +8,7 @@ r"""데이터 수집: 한국(KOSPI 시총상위 200, pykrx) + 미국(대형주 1
 """
 import argparse
 import sys
+import re
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -60,6 +61,9 @@ def cache_fresh(path: Path, days: int = 7) -> bool:
         return False
 
 
+# 스팩(SPAC)·우선주 판별 — 이름 기준(코드 체계로는 구분이 어렵다)
+SKIP_RE = re.compile(r"스팩|제\d+호|우[BC]?$|\d우$")
+
 ETF_PAT = ("KODEX", "TIGER", "PLUS ", "ACE ", "SOL ", "RISE ", "HANARO", "KIWOOM",
            "KOSEF", "WON ", "ETN", "레버리지", "인버스", "선물", "채권", "액티브")
 
@@ -71,7 +75,7 @@ def _scrape_sise(sosok: int, want: int) -> list:
 
     out = []
     seen = set()
-    for page in range(1, 40):  # 50종목/페이지
+    for page in range(1, 60):  # 50종목/페이지 (전 상장 ~1,800종목 → 코스닥 37p 필요)
         url = f"https://finance.naver.com/sise/sise_market_sum.naver?sosok={sosok}&page={page}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         html = urllib.request.urlopen(req, timeout=15).read().decode("euc-kr", "ignore")
@@ -82,6 +86,11 @@ def _scrape_sise(sosok: int, want: int) -> list:
             name = name.strip()
             if code in seen or any(p in name for p in ETF_PAT):
                 continue
+            # v216 전 상장 확장: 스팩(합병 전 껍데기)·우선주는 분석 대상이 아니라 제외한다.
+            #   실측 미포함 1,449종목 중 스팩 41 + 우선주 24 = 65종목(4.5%)뿐이라 손실은 작고
+            #   대신 신호·수급·재무 분석이 무의미한 종목이 유니버스를 오염시키는 것을 막는다.
+            if SKIP_RE.search(name):
+                continue
             seen.add(code)
             out.append((code, name))
         if len(out) >= want:
@@ -90,8 +99,10 @@ def _scrape_sise(sosok: int, want: int) -> list:
     return out[:want]
 
 
-def kr_universe(kospi_n: int = 700, kosdaq_n: int = 500) -> dict:
+def kr_universe(kospi_n: int = 1200, kosdaq_n: int = 2200) -> dict:
     """코스피 상위 kospi_n + 코스닥 상위 kosdaq_n 종목 → {code: name}.
+    v216: **전 상장 종목**(스팩·우선주·ETF 제외 ≈2,580)으로 확장 — 기본값을 실제 상장수보다 크게 잡아
+    스크래핑이 끝까지 훑게 한다(신규 상장이 늘어도 자동 포함).
     kr_names.json(전체) + kr_universe.json(market·mcap_rank 티어) 저장.
     (KRX 목록 API가 로그인 요구로 차단되어 네이버 시총 페이지 스크래핑으로 우회)"""
     import json
@@ -271,7 +282,7 @@ def collect_cloud() -> None:
     start_kr = (_date.today() - timedelta(days=1560)).strftime("%Y%m%d")   # ~4.3년(원칙 게이트 750행 확보)
     start_us = (_date.today() - timedelta(days=1560)).strftime("%Y-%m-%d")
     today = _date.today().strftime("%Y%m%d")
-    names = kr_universe(kospi_n=700, kosdaq_n=500)  # 확장 유니버스 1,200(주식찾기·마켓현황용)
+    names = kr_universe()  # v216: 전 상장(스팩·우선주 제외 ≈2,580) — 클라우드도 동일 유니버스
 
     def _rows(p: Path) -> int:      # 캐시 깊이(행 수) — 얕으면 소급 대상
         try:

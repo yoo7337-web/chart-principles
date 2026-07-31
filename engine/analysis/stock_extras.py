@@ -919,6 +919,7 @@ def build_feed(quick: bool = False) -> dict:
         except Exception:
             cmap = {}
         cut = (date.today() - timedelta(days=365)).strftime("%Y%m%d")   # DART 공시 최근 1년
+        DISC_MAX = 120        # 종목당 보관 상한(1년치 — 대형주는 100건 이상 나온다)
         today_s = date.today().strftime("%Y%m%d")
         done = fetched = fail_streak = 0
         for code in codes:
@@ -927,14 +928,26 @@ def build_feed(quick: bool = False) -> dict:
             if not cc or fail_streak >= 5:
                 continue
             try:
-                d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
-                          f"&bgn_de={cut}&end_de={today_s}&page_count=15")
+                # 🐞⚠page_count=15는 '1년 중 최신 15건'만 가져온다 — 활발한 대형주는
+                #   2~3주치로 끝나 "최근 1년"이라는 설명과 어긋났다(실측: SK하이닉스 7/6~7/22 15건).
+                #   → page_count=100 + 페이지네이션으로 1년 전량을 받고 DISC_MAX개까지 보관한다.
+                rows, page = [], 1
+                while page <= 4:                       # 최대 400건(대형주도 충분)
+                    d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
+                              f"&bgn_de={cut}&end_de={today_s}&page_no={page}&page_count=100")
+                    if d.get("status") != "000" or not d.get("list"):
+                        break
+                    rows += d["list"]
+                    if page >= int(d.get("total_page") or 1):
+                        break
+                    page += 1
+                    time.sleep(0.15)
                 fail_streak = 0
-                if d.get("status") == "000" and d.get("list"):
+                if rows:
                     disc = [{"d": f"{r['rcept_dt'][:4]}-{r['rcept_dt'][4:6]}-{r['rcept_dt'][6:]}",
                              "title": r["report_nm"][:80],
                              "link": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={r['rcept_no']}"}
-                            for r in d["list"][:15]]
+                            for r in rows[:DISC_MAX]]
                     if disc:
                         fmap.setdefault(k, {"news": [], "disc": []})["disc"] = disc
                         fetched += 1

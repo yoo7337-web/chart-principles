@@ -18,7 +18,10 @@ from common import APP_DATA, ROOT, dedupe_positions, load_ruleset
 from indicators import add_indicators
 
 OUT_DIR = APP_DATA / "stocks"
-CHART_BARS = 1250  # 최근 약 5년 (지표는 프런트 taEnrich()가 계산 — OHLCV만 저장해 용량 유지)
+CHART_BARS = 2520  # 최근 약 10년 (지표는 프런트 taEnrich()가 계산 — OHLCV만 저장해 용량 유지)
+# ⚠series는 **압축 배열** [t,o,h,l,c,v]로 저장한다. 구 dict 형식({"t":…,"o":…})은 봉당 ~113B라
+#   10년(2,520봉)이면 종목당 285KB·전체 380MB가 된다. 배열은 ~45B로 10년을 담고도 구 5년보다 작다.
+#   프런트는 로드 직후 normStock()이 객체로 되돌리므로 소비자 코드는 그대로다.
 SUPPLY_BARS = 120  # 수급 표시 구간
 H = 20
 
@@ -67,6 +70,13 @@ def build_supply(mk: str, tk: str, df) -> tuple:
 
 def fv(v, nd=4):
     return None if v is None or (isinstance(v, float) and np.isnan(v)) else round(float(v), nd)
+
+
+def iv(v, nd=2):
+    """차트 series 전용 — 값이 정수면 정수로 쓴다("262500.0"→"262500").
+    ⚠한국 주가·거래량은 대부분 정수라 10년치에서 파일이 약 40% 작아진다(205KB→122KB 실측)."""
+    x = fv(v, nd)
+    return None if x is None else (int(x) if x == int(x) else x)
 
 
 def build_profile_ctx(data: dict) -> dict:
@@ -133,11 +143,10 @@ def main():
         w = d.iloc[-CHART_BARS:]
         cut = len(d) - len(w)  # 차트 시작 위치
 
-        series = [{
-            "t": ts.strftime("%Y-%m-%d"),
-            "o": fv(x.open, 2), "h": fv(x.high, 2), "l": fv(x.low, 2), "c": fv(x.close, 2),
-            "v": float(x.volume),
-        } for ts, x in zip(w.index, w.itertuples())]  # 지표 컬럼은 프런트 taEnrich()가 재계산
+        # 압축 배열 [t,o,h,l,c,v] — 지표 컬럼은 프런트 taEnrich()가 재계산
+        series = [[ts.strftime("%Y-%m-%d"), iv(x.open), iv(x.high), iv(x.low), iv(x.close),
+                   iv(x.volume, 0)]
+                  for ts, x in zip(w.index, w.itertuples())]
 
         markers, stats = [], []
         short_history = len(d) < 750  # 이력 3년 미만 → 원칙 검증 제외(배열은 항상 [] 방출)

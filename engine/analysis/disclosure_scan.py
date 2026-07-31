@@ -25,7 +25,12 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "app" / "data" / "disclosures"
 KST = timezone(timedelta(hours=9))
 RETENTION_DAYS = 180          # 보관 상한(약 6개월 ≈ 16MB)
-MARKETS = ("Y", "K")          # 유가증권·코스닥만(코넥스 N·기타 E는 노이즈라 제외)
+# v215: 시장 필터 제거 — **전체 공시를 그대로 담는다**(사용자 요청).
+#   구 설정 ("Y","K")는 코넥스(N)·기타(E)를 버렸는데, 실측 2026-07-30 기준 824건 중 **324건(39%)**이
+#   그렇게 사라졌다(E 314·N 9). E에는 비상장 지주·SPC뿐 아니라 **상장사 관련 정기보고서**도 섞여 있어
+#   "정기공시가 자꾸 빠진다"는 체감의 원인이 됐다. 화면의 시장 칩으로 걸러 보는 편이 낫다.
+MARKETS = None                # None = 전 시장(Y 유가·K 코스닥·N 코넥스·E 기타)
+MARKET_KO = {"Y": "코스피", "K": "코스닥", "N": "코넥스", "E": "기타"}
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from stock_extras import _dart_key, _getj  # noqa: E402
@@ -158,7 +163,7 @@ def build_day(key: str, d: date) -> dict | None:
         return None
     items, counts = [], {}
     for r in rows:
-        if r.get("corp_cls") not in MARKETS:
+        if MARKETS and r.get("corp_cls") not in MARKETS:
             continue
         nm = re.sub(r"\s+", " ", (r.get("report_nm") or "")).strip()
         cid = categorize(nm)
