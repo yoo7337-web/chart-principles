@@ -1809,3 +1809,5 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-rep-meta { font-size: .8rem; margin-bottom: 7px; }
 .ws-rep-none { margin: 0 0 8px; font-size: .84rem; }
 @media (max-width: 1000px) { .ws-layout { grid-template-columns: 1fr; } .ws-rail { position: static; max-height: none; } }
+/* 관심종목은 하위 탭바가 없는 solo 그룹 — 그룹 nav와 본문 사이 간격을 탭바 높이만큼 보정 */
+#tab-watch { margin-top: 16px; }
