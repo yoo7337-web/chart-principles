@@ -1046,7 +1046,7 @@ function toggleTodayChart(btn, sig) {
   // 범례도 고정폭 필수 — 표 셀은 한 줄 텍스트의 최대폭만큼 늘어나 표 전체를 밀어냄(1,314px 실측)
   tr.after(row);
   fetch(`data/stocks/${sig.market}_${sig.ticker}.json` + _cb)
-    .then((r) => (r.ok ? r.json() : null)).then((st) => {
+    .then((r) => (r.ok ? r.json() : null)).then(normStock).then((st) => {
       const el = row.querySelector(".chart");
       if (!st) { el.textContent = "차트 데이터 없음 (stocks JSON 미생성 종목)"; el.style.padding = "20px"; return; }
       if (!st._ta) { taEnrich(st.series); st._ta = true; }
@@ -1148,8 +1148,18 @@ function initLookup() {
   });
 }
 
+/* v214: stocks/*.json의 series는 용량 때문에 **압축 배열** [t,o,h,l,c,v]로 저장된다.
+   (10년 2,520봉을 담고도 구 dict 5년보다 작다) 로드 직후 여기서 객체로 되돌려
+   기존 소비자 코드(st.series[i].c 등)는 그대로 동작하게 한다. 구 dict 파일도 통과. */
+function normStock(st) {
+  const s = st && st.series;
+  if (Array.isArray(s) && Array.isArray(s[0]))
+    st.series = s.map((r) => ({ t: r[0], o: r[1], h: r[2], l: r[3], c: r[4], v: r[5] }));
+  return st;
+}
+
 function loadLookup(key) {
-  fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => {
+  fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock).then((st) => {
     if (!st) {  // 유니버스엔 있으나 종목 파일이 아직 없음(주1 갱신 지연) — 안내만
       const h = document.getElementById("lookup-head");
       if (h) { h.style.display = ""; h.innerHTML = `<div class="lk-title"><div class="lk-name">데이터 준비 중 <span class="sub-note">이 종목은 곧 수집 예정입니다</span></div></div>`; }
@@ -3576,7 +3586,7 @@ function renderIdxCards() {
 function openStockDialog(mk, t, name, last, chg, unit) {
   const key = `${mk}_${t}`;
   openChartDialog(name, `<p class="mini-note">5년 차트 불러오는 중…</p>`, [], []);
-  fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => {
+  fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock).then((st) => {
     const s = st?.series || [];
     if (!s.length) {
       openChartDialog(name, `현재 <b>${(last ?? 0).toLocaleString()}${unit || ""}</b> · <span class="sub-note">5년 데이터를 찾지 못했습니다</span>`, [], []);
@@ -5362,7 +5372,7 @@ function wsShow(key) {
 
   // 종목 시계열(stocks/{key}.json) 기반 카드들
   const stP = WS_ST[key] ? Promise.resolve(WS_ST[key])
-    : fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => (WS_ST[key] = st));
+    : fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock).then((st) => (WS_ST[key] = st));
   stP.then((st) => {
     if (wsSel !== key) return;
     if (!st) { ["ws-trend", "ws-supply", "ws-rules"].forEach((c) => fill(c, `<p class="mini-note">데이터 준비 중</p>`)); return; }
@@ -7425,7 +7435,7 @@ function drawPeerChartInto(sel, items) {
   Promise.all(list.map((p) => {
     const key = `${p.mk}_${p.ticker}`;
     if (HLD_SERIES[key] !== undefined) return Promise.resolve();
-    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock)
       .then((s) => { HLD_SERIES[key] = s?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
   })).then(() => {
     const got = list.map((p) => ({ ...p, s: HLD_SERIES[`${p.mk}_${p.ticker}`] })).filter((p) => p.s?.length > 30);
@@ -9183,7 +9193,7 @@ function renderHldTimeline(all, mode, host) {
   Promise.all(tickers.map((t) => {
     const key = `${hist.meta[t]?.mk || "kr"}_${t}`;
     if (HLD_SERIES[key] !== undefined) return Promise.resolve();
-    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock)
       .then((st) => { HLD_SERIES[key] = st?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
   })).then(() => {
     // 종목별 날짜→종가 맵(원화 통일: 해외는 환율 적용)
@@ -9300,7 +9310,7 @@ function renderHldAnalytics(all) {
   Promise.all(top8.map((h) => {
     const key = `${h.mk}_${h.ticker}`;
     if (HLD_SERIES[key] !== undefined) return Promise.resolve();
-    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock)
       .then((st) => { HLD_SERIES[key] = st?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
   })).then(() => {
     const W = 680, H = 260, padL = 8, padR = 120, padT = 14, padB = 24;
@@ -9547,7 +9557,7 @@ async function pfRender() {
   await Promise.all(arr.map((h) => {
     const key = h.mk + "_" + h.ticker;
     if (pfStockCache.has(key)) return null;
-    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null))
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock)
       .then((j) => pfStockCache.set(key, j));
   }));
   pfRenderStats(arr);
