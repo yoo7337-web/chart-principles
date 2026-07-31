@@ -95,7 +95,8 @@ jobs:
             echo "변경 없음 — 커밋 생략"
           else
             git commit -m "refresh(cloud) $(date -u '+%Y-%m-%d %H:%M') UTC"
-            git pull --rebase origin main || (git rebase --abort || true)
+            git checkout -- . || true   # copy-back이 남긴 미스테이지 변경이 rebase를 막는다(실측 06:30 런) — 커밋 안 한 건 버려도 됨
+            git pull --rebase --autostash origin main || (git rebase --abort || true)
             git push origin HEAD:main || echo "push 실패(무시, 배포는 진행)"
           fi
 
