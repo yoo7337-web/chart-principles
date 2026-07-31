@@ -15,6 +15,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from collect import load_all, load_research
+
+MIN_STOCKS = 100   # 이 수보다 적으면 '수집이 덜 된 상태'로 보고 기존 결과를 보존한다
 from common import APP_DATA, ROOT, dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
@@ -26,6 +28,13 @@ HIST_DAYS = 120  # 신호 상태(반전/최초/지속) 판정을 위해 되짚�
 def main():
     ruleset = load_ruleset()
     data = load_research()  # 오늘의 신호 ≥750일 유지
+    # 🐞⚠**데이터가 없으면 아무것도 쓰지 않는다.** 클라우드 캐시는 2년(≈520행)이라 ≥750행 게이트를
+    #   통과하는 종목이 0개가 될 수 있는데(실사고 2026-07-31), 그대로 진행하면 '신호 0건' 빈 파일이
+    #   기존 결과(1,192건)를 덮어써 화면이 텅 빈다. 수집 실패와 '신호가 없음'은 전혀 다른 상태다.
+    if len(data) < MIN_STOCKS:
+        print(f"[scan_today] 검증 가능 종목 {len(data)}개(<{MIN_STOCKS}) — 이력 부족으로 중단. "
+              f"기존 today_signals.json을 보존합니다.", file=sys.stderr)
+        return
     names_path = ROOT / "data" / "kr_names.json"
     kr_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {}
 

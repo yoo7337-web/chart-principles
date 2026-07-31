@@ -256,20 +256,36 @@ def refresh_all() -> None:
 
 
 def collect_cloud() -> None:
-    """클라우드(GitHub Actions)용 경량 수집 — 코어 유니버스(코스피300+코스닥150+US) × 최근 2년.
-    캐시(actions/cache) 있으면 refresh만, 없으면 2년치 신규 수집. 마켓 대시보드용(히트맵·시장폭)."""
+    """클라우드(GitHub Actions)용 수집 — 유니버스 1,200 × **최근 약 4.3년**.
+
+    ⚠기간이 2년(≈520거래일)이던 시절 `load_research()`(≥750행)를 쓰는 소비자가 **0종목**을 받아
+      오늘의 신호가 '0건'으로 생성되는 사고가 있었다(2026-07-31). 원칙 게이트를 넘으려면 3년+가 필요하다.
+    ⚠기존 캐시는 얕으므로(≈520행) **한 런에 DEEPEN_BUDGET개씩만 소급**해 여러 런에 걸쳐 채운다
+      (한꺼번에 1,200종목을 다시 받으면 30분 주기 워크플로가 못 끝낸다).
+    """
     from datetime import date as _date
 
     import yfinance as yf
     from pykrx import stock
 
-    start_kr = (_date.today() - timedelta(days=760)).strftime("%Y%m%d")  # ~2년(지표 여유)
-    start_us = (_date.today() - timedelta(days=760)).strftime("%Y-%m-%d")
+    start_kr = (_date.today() - timedelta(days=1560)).strftime("%Y%m%d")   # ~4.3년(원칙 게이트 750행 확보)
+    start_us = (_date.today() - timedelta(days=1560)).strftime("%Y-%m-%d")
     today = _date.today().strftime("%Y%m%d")
     names = kr_universe(kospi_n=700, kosdaq_n=500)  # 확장 유니버스 1,200(주식찾기·마켓현황용)
 
-    # US
-    todo = [t for t in US_TICKERS if not cache_fresh(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")]
+    def _rows(p: Path) -> int:      # 캐시 깊이(행 수) — 얕으면 소급 대상
+        try:
+            return len(pd.read_parquet(p, columns=[]).index)
+        except Exception:
+            return 0
+
+    DEEPEN_BUDGET = 150             # 한 런에서 소급 재수집할 최대 종목 수
+    deepened = 0
+
+    # US (138종목뿐이라 한 번에 소급해도 부담 없음)
+    todo = [t for t in US_TICKERS
+            if not cache_fresh(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
+            or _rows(DATA_DIR / f"us_{t.replace('-', '_')}.parquet") < MIN_ROWS]
     if todo:
         raw = yf.download(todo, start=start_us,
                           group_by="ticker", auto_adjust=True, threads=True, progress=False)
@@ -286,8 +302,11 @@ def collect_cloud() -> None:
     for i, t in enumerate(names, 1):
         path = DATA_DIR / f"kr_{t}.parquet"
         if cache_fresh(path):
-            ok += 1
-            continue
+            # 최신이긴 한데 이력이 얕으면(구 2년 캐시) 예산 안에서 과거를 소급해 채운다
+            if _rows(path) >= MIN_ROWS or deepened >= DEEPEN_BUDGET:
+                ok += 1
+                continue
+            deepened += 1
         try:
             raw = stock.get_market_ohlcv(start_kr, today, t)
             if raw is None or raw.empty:
@@ -296,6 +315,11 @@ def collect_cloud() -> None:
                                       "종가": "close", "거래량": "volume"})
             df = norm_ohlcv(raw)
             if len(df) >= MIN_ROWS_COLLECT:  # 수집 바닥값(신규상장 포함)
+                # ⚠기존 캐시가 더 길 수 있으므로 **병합**한다(덮어쓰면 쌓아둔 과거가 날아간다).
+                if path.exists():
+                    old = pd.read_parquet(path)
+                    df = pd.concat([old, df]).sort_index()
+                    df = df[~df.index.duplicated(keep="last")]   # 겹치면 새 fetch가 이김
                 df.to_parquet(path)
                 ok += 1
         except Exception as e:
