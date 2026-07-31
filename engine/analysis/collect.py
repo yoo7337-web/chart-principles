@@ -291,7 +291,10 @@ def collect_cloud() -> None:
             return 0
 
     DEEPEN_BUDGET = 150             # 한 런에서 소급 재수집할 최대 종목 수
-    deepened = 0
+    # v216 유니버스 2배 확장(1,200→2,566) — 신규 종목을 한 런에 다 받으면 30분 주기를 넘긴다.
+    #   런당 상한을 두고 여러 런에 나눠 채운다(캐시가 남으므로 다음 런이 이어받는다).
+    NEW_BUDGET = 300
+    deepened = added = 0
 
     # US (138종목뿐이라 한 번에 소급해도 부담 없음)
     todo = [t for t in US_TICKERS
@@ -318,6 +321,10 @@ def collect_cloud() -> None:
                 ok += 1
                 continue
             deepened += 1
+        elif not path.exists():
+            if added >= NEW_BUDGET:      # 신규 종목은 런당 상한까지만(나머지는 다음 런)
+                continue
+            added += 1
         try:
             raw = stock.get_market_ohlcv(start_kr, today, t)
             if raw is None or raw.empty:
