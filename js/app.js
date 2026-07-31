@@ -1864,6 +1864,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v211", "2026-07-31", "관심종목 워크스페이스 — 종목별 종합 대시보드", "관심종목 탭을 단순 목록표에서 **종목별 리서치 워크스페이스**로 개편. 왼쪽 목록(현재가·등락·최근 신호·보고서 보유 배지, 등록순/등락률/시총/신호 정렬)에서 종목을 고르면 오른쪽에 그 종목의 사이트 전체 정보가 **8개 카드 한 화면**으로 모입니다: ①심층 보고서(있으면 열기, 없으면 '보고서 요청' 문구 복사) ②추이·신호(6개월 미니차트+최근 신호+국면) ③재무(분기 매출 막대+YoY·이익률·ROE·부채비율) ④밸류에이션(PER·PBR·선행PER+참고 내재가치 괴리) ⑤수급(외국인·기관·개인 20일) ⑥산업 맥락(소속 산업 1개월 수익률·순위) ⑦공시·뉴스 ⑧원칙 성적(이 종목 10년 베스트/워스트 원칙). 각 카드의 '자세히 →'는 해당 탭 상세로 이동. 새 수집 없이 기존 데이터 전부 재사용. 상대 주가 추이 비교는 하단 접이식으로 유지."],
   ["v210", "2026-07-31", "메뉴 재배치 + 공시 스캐너 회사명 잘림 수정", "①**관심종목을 상위 메뉴로 승격** — '내 투자' 오른쪽에 독립 메뉴로 분리했습니다(기존엔 종목 찾기 안의 탭). ②**산업 진단을 '종목 찾기'로 이동** — 산업을 좁혀 종목으로 좁혀가는 흐름이라 종목 찾기의 첫 번째 탭에 배치했습니다(기존엔 시장 보기). ③**공시 스캐너에서 회사명이 '…'로 잘리던 문제 수정** — 원인은 열 너비가 아니라, 이름을 담는 영역이 넓어진 열을 쓰지 못하고 최소 폭으로 눌려 있던 것이었습니다. 501건 전부 온전히 표시되며, 되찾은 공간은 '공시 내용' 열에 돌려줬습니다(285 → 407px)."],
   ["v209", "2026-07-31", "주식찾기 필터 재설계 — 발굴 3단계 + 조건 칩", "상단에 흩어져 있던 산업/테마/기술적 테마 3필터를 **종목 발굴 순서**로 재구성: ① 어디서 찾을까(산업·밸류체인) → ② 어떤 회사를(투자 스타일) → ③ 언제 살까(차트 신호). 카드를 클릭하면 해당 단계만 펼쳐지고(다시 클릭=접힘), 고른 조건은 상단 **조건 칩바**에 색깔 칩으로 모입니다 — 칩의 ×로 바로 해제, 전체 초기화, 결과 종목 수 실시간 표시. 가장 큰 기능 변화는 **투자 스타일과 차트 신호를 동시에 걸 수 있게 된 것**(기존엔 한쪽을 고르면 다른 쪽이 풀렸음): 이제 '저평가 성장주이면서 플래그 패턴이 뜬 종목' 같은 조합 검색이 됩니다. 세 단계는 모두 AND로 겹치고 각 단계는 건너뛰어도 됩니다."],
   ["v207", "2026-07-30", "오늘의 신호 자동화 복구 + 종목별 개인 수급 + 종목조회 3건 수정", "①**오늘의 신호가 7/24에 멈춰 있던 문제 해결**(사용자 제보). 원인은 계산 오류가 아니라 **배치가 아예 실행되지 않은 것** — 노트북이 예정 시각(07:40·12:30·17:40)에 꺼져 있다가 깨어날 때 밀린 작업이 한꺼번에 몰리고 곧 절전에 들어가며 중도 종료됐습니다(로그가 7/26 이후 없음). 살아남는 30분 간격 경량 배치엔 신호 계산이 빠져 있었습니다. → 즉시 재생성(7/24 → **7/29**, 1,393건)하고, 신호 계산을 **클라우드(GitHub Actions)로 이관**해 노트북 전원과 무관하게 30분마다 갱신되도록 했습니다. ②**종목별 수급에 개인 추가** — 시장진단의 개인은 외국인·기관의 반대로 유도한 근사치인데, 종목별로는 네이버에서 **실제 개인 순매매량**을 받을 수 있어 실측치로 넣었습니다(1,200종목 전부, 3주체 합 검산 통과). 프로파일 막대와 누적 순매수 차트 모두 반영. ③**차트 숫자 겹침 해소** — 값 라벨을 그리는 자리에서 바로 찍어 서로 포개지던 것을, 전부 모아 우선순위대로 빈자리를 찾아 배치하도록 바꿨습니다(겹침 30여 건 → 대부분 0, 생략된 숫자 없음). ④**엑셀 다운로드 '로드 실패' 수정** — 라이브러리 문제가 아니라 연결/별도 재무 포맷을 거치지 않아 난 오류였는데, 에러 메시지가 원인을 가리고 있었습니다. 원인별 안내로 분리. ⑤프로파일 '시장 대비' 흰 점의 초과수익을 %p로 함께 표기. ⑥보조지표 선택줄을 차트 안 상단으로 이동."],
@@ -5188,37 +5189,49 @@ function renderDiscTable() {
 
 /* ⭐ 관심종목 탭 — 시세·산업·오늘 신호·메모를 한 표로 */
 let watchRendered = false, watchGroup = "none";
-function renderWatch() {
-  watchRendered = true;
-  const w = watchLoad(), keys = Object.keys(w);
-  const ctx = $("#watch-context");
-  if (ctx) ctx.innerHTML = `⭐는 종목조회 헤더·주식찾기 표·오늘의 신호 어디서든 누르면 담깁니다.
-    <b>이 브라우저에만 저장</b>되며 서버로 전송되지 않습니다 — 기기를 바꾸면 ⬇내보내기로 옮기세요.`;
-  const list = $("#watch-list"), sum = $("#watch-summary"), cnt = $("#watch-count");
-  if (!keys.length) {
-    if (sum) sum.innerHTML = "";
-    if (cnt) cnt.textContent = "";
-    list.innerHTML = `<p class="mini-note" style="padding:26px 0;text-align:center">
-      아직 담은 종목이 없습니다 — 종목조회나 주식찾기에서 <b>☆</b>를 눌러 담아보세요.</p>`;
-    $("#watch-chart").innerHTML = "";
-    bindWatchIO();
-    return;
-  }
-  // 시세·산업·오늘 신호 결합
+/* ── 관심종목 워크스페이스(v211) — 좌 목록 + 우 8카드(사이트 전 탭의 그 종목 정보를 한 화면에) ── */
+let wsSel = localStorage.getItem("cp_ws_sel") || null;
+let wsSort = "added";
+const WS_ST = {}, WS_FIN = {};   // stocks/·financials/ 캐시(lookup과 독립)
+
+function wsRows() {
+  const w = watchLoad();
   const sigByKey = {};
   (TODAY?.signals || []).forEach((s) => {
     const k = `${s.market}_${s.ticker}`;
     if (!sigByKey[k] || s.date > sigByKey[k].date) sigByKey[k] = s;
   });
-  const rows = keys.map((k) => {
+  const rows = Object.keys(w).map((k) => {
     const it = w[k];
     const tile = (MARKET?.heatmap || []).find((t) => `${t.m}_${t.t}` === k);
     const q = MARKET?.quotes?.[k];
     return { k, ...it, name: tile?.name || it.name, grp: tile?.grp || "etc", sector: tile?.sector,
              mcap: tile?.mcap, price: q ? q[0] : null, chg: q ? q[1] : (tile?.chg ?? null),
-             sig: sigByKey[k] };
-  }).sort((a, b) => (b.mcap || 0) - (a.mcap || 0));
-  if (cnt) cnt.textContent = `${rows.length}종목`;
+             sig: sigByKey[k], rep: !!REPORTS_IDX?.reports?.[k] };
+  });
+  const by = { added: (a, b) => (a.added || "").localeCompare(b.added || ""),
+               chg: (a, b) => (b.chg ?? -9) - (a.chg ?? -9),
+               mcap: (a, b) => (b.mcap || 0) - (a.mcap || 0),
+               sig: (a, b) => (!!b.sig - !!a.sig) || (b.chg ?? -9) - (a.chg ?? -9) };
+  return rows.sort(by[wsSort] || by.added);
+}
+
+function renderWatch() {
+  watchRendered = true;
+  const rows = wsRows();
+  const ctx = $("#watch-context");
+  if (ctx) ctx.innerHTML = `⭐는 종목조회 헤더·주식찾기 표·오늘의 신호 어디서든 누르면 담깁니다.
+    각 카드의 <b>→</b>는 해당 탭의 상세 화면으로 이동합니다. 로그인하면 기기 간 자동 동기화됩니다.`;
+  const list = $("#ws-list"), sum = $("#watch-summary"), cnt = $("#watch-count"), main = $("#ws-main");
+  bindWatchIO();
+  if (!rows.length) {
+    if (sum) sum.innerHTML = "";
+    if (cnt) cnt.textContent = "";
+    if (list) list.innerHTML = "";
+    if (main) main.innerHTML = `<p class="mini-note" style="padding:40px 0;text-align:center">
+      아직 담은 종목이 없습니다 — 종목조회나 주식찾기에서 <b>☆</b>를 눌러 담아보세요.</p>`;
+    return;
+  }
   const up = rows.filter((r) => (r.chg ?? 0) > 0).length;
   const buys = rows.filter((r) => r.sig?.side === "buy").length;
   const sells = rows.filter((r) => r.sig?.side === "sell").length;
@@ -5227,54 +5240,248 @@ function renderWatch() {
     ["🟢 매수 신호", `${buys}`, "최근 3영업일"], ["🔴 매도 신호", `${sells}`, "최근 3영업일"]]
     .map(([t, v, s2]) => `<div class="idx-card"><div class="sub-note">${t}</div>
       <b>${v}</b><span class="sub-note">${s2}</span></div>`).join("");
-  const row = (r) => {
-    const col = (r.chg ?? 0) >= 0 ? "#f5445a" : "#4391ff";
-    const sg = r.sig ? `<span class="td-stat ${r.sig.status || ""}">${r.sig.side === "buy" ? "🟢" : "🔴"}
-      ${r.sig.rule}<span class="sub-note"> ${r.sig.date.slice(5)}</span></span>` : `<span class="sub-note">-</span>`;
-    return `<tr class="watch-row" data-key="${r.k}">
-      <td class="scr-name"><img class="mv-logo" src="${logoUrl(r.mk, r.t)}" alt="" loading="lazy"
-        onerror="this.style.visibility='hidden'"><b>${r.name}</b> <span class="sub-note">${r.t}</span></td>
-      <td>${r.mk === "kr" ? "🇰🇷" : "🇺🇸"}</td>
-      <td><span class="sub-note">${indLabel(r.grp)}</span></td>
-      <td class="scr-r">${r.price != null ? fmtPrice(r.price, r.mk) : "-"}</td>
-      <td class="scr-r" style="color:${col}">${r.chg != null ? pct(r.chg, 2) : "-"}</td>
-      <td>${sg}</td>
-      <td><input class="watch-memo" data-key="${r.k}" value="${(r.memo || "").replace(/"/g, "&quot;")}"
-        placeholder="메모"></td>
-      <td class="sub-note">${r.added || ""}</td></tr>`;
-  };
-  // ★ 열 제거(행마다 별은 불필요) — 담기/해제는 종목조회·주식찾기의 ⭐로 한다
-  const head = `<thead><tr><th>종목</th><th></th><th>산업</th>
-    <th class="scr-r">현재가</th><th class="scr-r">등락</th><th>최근 신호</th><th>메모</th><th>담은날</th></tr></thead>`;
-  let body;
-  if (watchGroup === "ind") {
-    const by = {};
-    rows.forEach((r) => (by[r.grp] = by[r.grp] || []).push(r));
-    body = IND_GROUPS.concat([SCR_GROUP_ETC]).filter((g) => by[g.key]).map((g) =>
-      `<tr class="watch-gh"><td colspan="8">${g.icon} <b>${g.name}</b>
-        <span class="sub-note">${by[g.key].length}종목</span></td></tr>` +
-      by[g.key].map(row).join("")).join("");
-  } else {
-    body = rows.map(row).join("");
+  if (cnt) cnt.textContent = `${rows.length}종목`;
+  // 좌 목록 — 카드형(등락·최근 신호·보고서 보유 배지)
+  if (!rows.some((r) => r.k === wsSel)) wsSel = rows[0].k;
+  list.innerHTML = rows.map((r) => {
+    const col = (r.chg ?? 0) >= 0 ? "kup" : "kdn";
+    return `<button class="ws-item ${r.k === wsSel ? "on" : ""}" data-key="${r.k}">
+      <img class="mv-logo" src="${logoUrl(r.mk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <span class="ws-item-body"><b>${r.name}</b>
+        <span class="ws-item-sub">${r.price != null ? fmtPrice(r.price, r.mk) : ""}
+          <span class="${col}">${r.chg != null ? pct(r.chg, 2) : "-"}</span></span></span>
+      <span class="ws-item-badges">${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}</span>
+    </button>`;
+  }).join("");
+  list.querySelectorAll(".ws-item").forEach((b) => b.onclick = () => {
+    wsSel = b.dataset.key;
+    localStorage.setItem("cp_ws_sel", wsSel);
+    list.querySelectorAll(".ws-item").forEach((x) => x.classList.toggle("on", x === b));
+    wsShow(wsSel);
+  });
+  const sel = $("#ws-sort");
+  if (sel && !sel.dataset.bound) {
+    sel.dataset.bound = "1";
+    sel.onchange = () => { wsSort = sel.value; renderWatch(); };
   }
-  list.innerHTML = `<div class="tablewrap"><table class="hld-table watch-table">${head}<tbody>${body}</tbody></table></div>`;
-  list.querySelectorAll(".watch-row").forEach((tr) => tr.onclick = (e) => {
-    if (e.target.closest(".watch-star, .watch-memo")) return;
-    gotoTabFull("lookup");
-    if (!lookupRendered) initLookup();
-    loadLookup(tr.dataset.key);
+  sel.value = wsSort;
+  // 상대 주가 추이 — 접이식(펼칠 때 1회 렌더)
+  const det = $("#watch-chart")?.closest("details");
+  if (det && !det.dataset.bound) {
+    det.dataset.bound = "1";
+    det.addEventListener("toggle", () => {
+      if (det.open) drawPeerChartInto("#watch-chart", wsRows().map((r) => ({ mk: r.mk, ticker: r.t, name: r.name })));
+    });
+  }
+  loadReportsIdx().then(() => {   // 보고서 배지는 index 로드 후 갱신
+    wsRows().forEach((r) => {
+      const el = list.querySelector(`.ws-item[data-key="${r.k}"] .ws-item-badges`);
+      if (el) el.textContent = `${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}`;
+    });
+    wsShow(wsSel);
   });
-  list.querySelectorAll(".watch-memo").forEach((inp) => {
-    inp.onclick = (e) => e.stopPropagation();
-    inp.onchange = () => { const d = watchLoad(); if (d[inp.dataset.key]) { d[inp.dataset.key].memo = inp.value; watchSave(d); } };
+  wsShow(wsSel);
+}
+
+const wsCard = (icon, title, act, body, cls = "") =>
+  `<div class="ws-card ${cls}"><div class="ws-card-h">${icon} ${title}
+    <span style="flex:1"></span>${act ? `<button class="ws-go" data-act="${act}">자세히 →</button>` : ""}</div>
+    <div class="ws-card-b">${body}</div></div>`;
+
+function wsSpark(series, sig) {
+  const s = (series || []).slice(-126);
+  if (s.length < 10) return `<p class="mini-note">차트 데이터 없음</p>`;
+  const cs = s.map((x) => x.c), lo = Math.min(...cs), hi = Math.max(...cs);
+  const W = 300, H = 46;
+  const X = (i) => (i / (s.length - 1)) * W;
+  const Y = (v) => H - 3 - (v - lo) / (hi - lo || 1) * (H - 8);
+  const pts = cs.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const up = cs[cs.length - 1] >= cs[0];
+  let dot = "";
+  if (sig) {   // 최근 신호일을 차트 위에 점으로
+    const i = s.findIndex((x) => x.t === sig.date);
+    if (i >= 0) dot = `<circle cx="${X(i).toFixed(1)}" cy="${Y(cs[i]).toFixed(1)}" r="3.4"
+      fill="${sig.side === "buy" ? "#22c07a" : "#f5445a"}"/>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${up ? "var(--kup)" : "var(--kdn)"}" stroke-width="1.6"/>${dot}</svg>`;
+}
+
+function wsShow(key) {
+  const main = $("#ws-main");
+  if (!main || !key) return;
+  const w = watchLoad()[key] || {};
+  const [mk, tk] = [key.slice(0, 2), key.slice(3)];
+  const tile = (MARKET?.heatmap || []).find((t) => `${t.m}_${t.t}` === key);
+  const q = MARKET?.quotes?.[key];
+  const price = q ? q[0] : null, chg = q ? q[1] : (tile?.chg ?? null);
+  const gmeta = [...IND_GROUPS, SCR_GROUP_ETC].find((g) => g.key === (tile?.grp || "etc"));
+  const col = (chg ?? 0) >= 0 ? "kup" : "kdn";
+  main.innerHTML = `
+    <div class="ws-head">
+      <img class="lk-sticky-logo" src="${logoUrl(mk, tk)}" alt="" onerror="this.style.display='none'">
+      <b class="ws-name">${w.name || tk}</b><span class="sub-note">${tk} · ${mk === "kr" ? "🇰🇷" : "🇺🇸"}
+        ${gmeta ? `${gmeta.icon} ${gmeta.name}` : ""}${tile?.sector ? ` › ${tile.sector}` : ""}</span>
+      ${price != null ? `<span class="ws-price ${col}">${fmtPrice(price, mk)} ${chg != null ? pct(chg, 2) : ""}</span>` : ""}
+      <span style="flex:1"></span>
+      <input class="ws-memo" id="ws-memo" placeholder="메모" value="${(w.memo || "").replace(/"/g, "&quot;")}">
+      <button class="today-chart-btn ws-go" data-act="lookup">종목조회 →</button>
+      <button class="today-chart-btn" id="ws-unstar" title="관심종목에서 빼기">★ 해제</button>
+    </div>
+    <div class="ws-grid" id="ws-grid">
+      ${wsCard("📖", "심층 보고서", null, `<p class="mini-note">확인 중…</p>`, "ws-report")}
+      ${wsCard("📈", "추이 · 신호 (6개월)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-trend")}
+      ${wsCard("📊", "재무 (분기)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-fin")}
+      ${wsCard("⚖️", "밸류에이션", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-val")}
+      ${wsCard("👥", "수급 (20일)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-supply")}
+      ${wsCard("🏭", "산업 맥락", "rotation", `<p class="mini-note">불러오는 중…</p>`, "ws-ind")}
+      ${wsCard("📢", "공시 · 뉴스", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-feed")}
+      ${wsCard("📐", "원칙 성적 (이 종목 10년)", "rank", `<p class="mini-note">불러오는 중…</p>`, "ws-rules")}
+    </div>`;
+  const fill = (cls, html) => { const el = main.querySelector(`.${cls} .ws-card-b`); if (el) el.innerHTML = html; };
+  // 헤더 바인딩
+  $("#ws-memo").onchange = () => { const d = watchLoad(); if (d[key]) { d[key].memo = $("#ws-memo").value; watchSave(d); } };
+  $("#ws-unstar").onclick = () => { watchToggle(key); };
+  main.querySelectorAll(".ws-go").forEach((b) => b.onclick = () => {
+    const act = b.dataset.act;
+    if (act === "lookup") { gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(key); }
+    else gotoTabFull(act);
   });
-  $("#watch-group").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    watchGroup = b.dataset.g;
-    $("#watch-group").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
-    renderWatch();
+
+  // ① 심층 보고서 — 있으면 메타+열기, 없으면 요청 안내(T1 수동 작성 체제)
+  loadReportsIdx().then((idx) => {
+    if (wsSel !== key) return;
+    const meta = idx.reports?.[key];
+    if (meta) {
+      const stale = meta.next_due && kstDay() > meta.next_due;
+      fill("ws-report", `<div class="ws-rep-meta">기준일 <b>${meta.date}</b> · v${meta.version || 1} ·
+          ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"}
+          ${stale ? `<span class="lk-stale">⚠ 분기 경과</span>` : ""}</div>
+        <button class="rep-btn" id="ws-rep-open">📖 보고서 열기</button>`);
+      const b = $("#ws-rep-open"); if (b) b.onclick = () => openReport(key);
+    } else {
+      fill("ws-report", `<p class="ws-rep-none">아직 이 종목의 심층 보고서가 없습니다.<br>
+        <span class="sub-note">Claude 세션에서 아래 문구로 요청하면 DART 검증 절차로 작성해 탑재합니다.</span></p>
+        <button class="today-chart-btn" id="ws-rep-req">📋 "${w.name || tk} 이해 보고서 써줘" 복사</button>`);
+      const b = $("#ws-rep-req");
+      if (b) b.onclick = () => { navigator.clipboard?.writeText(`${w.name || tk} 이해 보고서 써줘`);
+        b.textContent = "✅ 복사됨 — Claude에게 붙여넣으세요"; };
+    }
   });
-  bindWatchIO();
-  drawPeerChartInto("#watch-chart", rows.map((r) => ({ mk: r.mk, ticker: r.t, name: r.name })));
+
+  // 종목 시계열(stocks/{key}.json) 기반 카드들
+  const stP = WS_ST[key] ? Promise.resolve(WS_ST[key])
+    : fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((st) => (WS_ST[key] = st));
+  stP.then((st) => {
+    if (wsSel !== key) return;
+    if (!st) { ["ws-trend", "ws-supply", "ws-rules"].forEach((c) => fill(c, `<p class="mini-note">데이터 준비 중</p>`)); return; }
+    // ② 추이·신호
+    const sigByKey = (TODAY?.signals || []).filter((s) => `${s.market}_${s.ticker}` === key)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const sig = sigByKey[sigByKey.length - 1];
+    const regime = TODAY?.regime?.[mk];
+    const rgKo = { bull: "🚀 급등장", bear: "🐻 하락장", neutral: "일반" }[regime] || "-";
+    fill("ws-trend", `${wsSpark(st.series, sig)}
+      <div class="sub-note">${sig ? `최근 신호: ${sig.side === "buy" ? "🟢" : "🔴"} ${sig.rule} (${sig.date.slice(5)})` : "최근 3영업일 신호 없음"}
+        · 국면 ${rgKo}</div>`);
+    // ⑤ 수급
+    const sup = st.supply_sum;
+    if (mk !== "kr") fill("ws-supply", `<p class="mini-note">미국 종목은 투자자별 수급이 공개되지 않습니다.</p>`);
+    else if (!sup) fill("ws-supply", `<p class="mini-note">수급 데이터 없음</p>`);
+    else {
+      const amt = (v) => v == null ? "-" : `<b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억"}</b>`;
+      fill("ws-supply", `외국인 ${amt(sup.frgn_20)} · 기관 ${amt(sup.inst_20)}${sup.indi_20 != null ? ` · 개인 ${amt(sup.indi_20)}` : ""}
+        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 ${sup.frgn_ratio}%${sup.frgn_ratio_chg != null ? ` (${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준</div>`);
+    }
+    // ⑧ 원칙 성적
+    const stats = (st.stats || []).filter((s) => s.n >= 8);
+    if (!stats.length) fill("ws-rules", `<p class="mini-note">신호 표본이 부족합니다(원칙당 8건 미만).</p>`);
+    else {
+      const best = [...stats].sort((a, b) => (b.win - a.win) || (b.avg_fwd20 - a.avg_fwd20))[0];
+      const worst = [...stats].sort((a, b) => (a.win - b.win) || (a.avg_fwd20 - b.avg_fwd20))[0];
+      const line = (lab, s, cls) => `${lab}: <b class="${cls}">${s.name}</b>
+        <span class="sub-note">승률 ${(s.win * 100).toFixed(0)}% · 20일 ${s.avg_fwd20 >= 0 ? "+" : ""}${(s.avg_fwd20 * 100).toFixed(1)}% · n=${s.n}</span>`;
+      fill("ws-rules", `${line("베스트", best, "pos")}<br>${line("워스트", worst, "neg")}`);
+    }
+  });
+
+  // ③ 재무 (financials lazy) — 분기 매출 막대 + 핵심지표 한 줄
+  loadExtras().then(() => {
+    if (wsSel !== key) return;
+    const co = EXTRAS.company?.map?.[key] || {};
+    const m = co.metrics || {};
+    const finP = WS_FIN[key] ? Promise.resolve(WS_FIN[key])
+      : fetch(`data/financials/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((f) => (WS_FIN[key] = f));
+    finP.then((fin) => {
+      if (wsSel !== key) return;
+      let blk = fin;
+      if (fin && (fin.cfs || fin.ofs))
+        blk = [fin.cfs, fin.ofs].filter(Boolean).sort((a, b) =>
+          Object.keys(b?.annual || {}).length - Object.keys(a?.annual || {}).length)[0];
+      const qs = Object.entries(blk?.quarter || {}).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
+      let bars = "", note = "";
+      if (qs.length >= 2) {
+        const revs = qs.map(([, r]) => r.rev ?? 0), mx = Math.max(...revs.map(Math.abs), 1);
+        bars = `<div class="ws-bars">${qs.map(([lab, r]) =>
+          `<span title="${lab} 매출 ${((r.rev ?? 0)).toLocaleString()}" style="height:${Math.max(6, Math.abs(r.rev ?? 0) / mx * 100)}%"></span>`).join("")}</div>
+          <div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]}</span></div>`;
+        const [ll, lr] = qs[qs.length - 1];   // 전년 동분기 YoY
+        const prev = qs.find(([l2]) => l2 === `${String(+ll.slice(0, 2) - 1).padStart(2, "0")}${ll.slice(2)}`);
+        const yoy = prev && prev[1].rev ? (lr.rev / prev[1].rev - 1) : null;
+        const opm = lr.rev ? (lr.op ?? null) != null ? lr.op / lr.rev : null : null;
+        note = `${ll} 매출${yoy != null ? ` <b class="${yoy >= 0 ? "pos" : "neg"}">${yoy >= 0 ? "+" : ""}${(yoy * 100).toFixed(1)}% YoY</b>` : ""}
+          ${opm != null ? ` · 영업이익률 ${(opm * 100).toFixed(1)}%` : ""}`;
+      }
+      const caps = [m.roe != null && `ROE ${m.roe}%`, m.debtRatio != null && `부채비율 ${m.debtRatio}%`]
+        .filter(Boolean).join(" · ");
+      fill("ws-fin", (bars || `<p class="mini-note">분기 재무 없음</p>`) +
+        `<div class="sub-note">${note}${note && caps ? " · " : ""}${caps}</div>`);
+    });
+    // ④ 밸류에이션 — PER·PBR·선행PER + 참고 내재가치(RIM 기본가정)
+    const est = (co.fin_ext || []).filter((r) => r.est && r.eps).pop();
+    const fwd = est && price ? price / est.eps : null;
+    const rec = VAL?.map?.[key];
+    let ivLine = "";
+    if (rec) {
+      let bps0 = null, roe0 = null;
+      if (mk === "kr" && rec.bps?.length && rec.roe?.length) {
+        const valid = rec.bps.filter((v) => v != null);
+        bps0 = valid.length > 1 ? valid[valid.length - 2] : valid[valid.length - 1];
+        roe0 = rec.roe.filter((v) => v != null).pop();
+      } else if (mk === "us") { bps0 = rec.bps; roe0 = rec.roe; }
+      if (bps0 && roe0 != null) {
+        const iv = rimValue(bps0, roe0, 9, 0.7);
+        const gap = rec.price ? iv / rec.price - 1 : null;
+        ivLine = `<div class="sub-note">참고 내재가치(RIM) ${fmtPrice(iv, mk)}${gap != null ? ` — 현재가 대비 <b class="${gap >= 0 ? "pos" : "neg"}">${pct(gap, 0)}</b>` : ""}</div>`;
+      }
+    }
+    fill("ws-val", `PER <b>${m.per ?? "-"}</b> · PBR <b>${m.pbr ?? "-"}</b>${fwd ? ` · 선행PER <b>${fwd.toFixed(1)}</b>` : ""}
+      ${ivLine || `<div class="sub-note">내재가치 데이터 없음</div>`}`);
+    // ⑦ 공시·뉴스
+    const fe = EXTRAS.feed?.map?.[key] || EXTRAS.feed?.[key] || {};
+    const disc = (fe.disc || []).slice(0, 2), news = (fe.news || []).slice(0, 2);
+    if (!disc.length && !news.length) fill("ws-feed", `<p class="mini-note">최근 공시·뉴스 없음</p>`);
+    else fill("ws-feed",
+      disc.map((d) => `<div class="ws-feed-row">📄 <a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>
+        <span class="sub-note">${d.d?.slice(5) || ""}</span></div>`).join("") +
+      news.map((n) => `<div class="ws-feed-row">📰 <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
+        <span class="sub-note">${n.t || ""}</span></div>`).join(""));
+  });
+
+  // ⑥ 산업 맥락 — 소속 산업군의 1개월 수익률·순위(시장 대비 초과 포함)
+  {
+    const rot = MPRO?.rotation?.[mk];
+    const groups = rot?.groups || [];
+    const g = groups.find((x) => x.grp === (tile?.grp || "etc"));
+    if (!g) fill("ws-ind", `<p class="mini-note">산업 분류 없음</p>`);
+    else {
+      const rank = [...groups].sort((a, b) => (b.m1 ?? -9) - (a.m1 ?? -9)).findIndex((x) => x.grp === g.grp) + 1;
+      const peers = (EXTRAS.company?.map?.[key]?.peers || []).length;
+      fill("ws-ind", `${gmeta?.icon || ""} <b>${g.name}</b> — 1개월 <b class="${(g.m1 ?? 0) >= 0 ? "pos" : "neg"}">${pct(g.m1 ?? 0, 1)}</b>
+        <span class="sub-note">(${groups.length}개 산업 중 ${rank}위 · 시장 대비 ${pct(g.rs_m1 ?? 0, 1)})</span>
+        <div class="sub-note">3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목${peers ? ` · 동종비교 ${peers}사는 종목조회에서` : ""}</div>`);
+    }
+  }
 }
 function bindWatchIO() {
   const ex = $("#watch-export"), im = $("#watch-import"), f = $("#watch-import-file");

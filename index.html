@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=210">
-<script src="firebase-config.js?v=210"></script>
-<script src="js/auth.js?v=210"></script>
+<link rel="stylesheet" href="css/style.css?v=211">
+<script src="firebase-config.js?v=211"></script>
+<script src="js/auth.js?v=211"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=210"></script>
+<script src="js/sync.js?v=211"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -297,25 +297,33 @@
   </section>
 
   <section id="tab-watch" class="panel">
-    <div id="watch-summary" class="idx-cards" style="margin-bottom:14px"></div>
-    <div class="card-flat">
-      <h3 class="lk-h3">⭐ 관심종목 <span class="sub-note" id="watch-count"></span>
-        <span style="flex:1"></span>
-        <span class="mk-toggle" id="watch-group">
-          <button data-g="none" class="active">전체</button>
-          <button data-g="ind">산업별</button>
-        </span>
-        <button class="today-chart-btn" id="watch-export">⬇ 내보내기</button>
-        <button class="today-chart-btn" id="watch-import">⬆ 가져오기</button>
-        <input type="file" id="watch-import-file" accept=".json" style="display:none">
-      </h3>
-      <div id="watch-list"></div>
+    <div id="watch-summary" class="idx-cards" style="margin-bottom:12px"></div>
+    <!-- 워크스페이스(v211): 좌=종목 목록(등락·신호·보고서 배지) / 우=선택 종목 종합 대시보드 8카드 -->
+    <div class="ws-layout">
+      <aside class="ws-rail card-flat">
+        <div class="ws-rail-head">⭐ 관심종목 <span class="sub-note" id="watch-count"></span>
+          <span style="flex:1"></span>
+          <select id="ws-sort" title="정렬">
+            <option value="added">등록순</option>
+            <option value="chg">등락률순</option>
+            <option value="mcap">시가총액순</option>
+            <option value="sig">신호 우선</option>
+          </select>
+        </div>
+        <div id="ws-list"></div>
+        <div class="ws-io">
+          <button class="today-chart-btn" id="watch-export">⬇ 내보내기</button>
+          <button class="today-chart-btn" id="watch-import">⬆ 가져오기</button>
+          <input type="file" id="watch-import-file" accept=".json" style="display:none">
+        </div>
+      </aside>
+      <div class="ws-main" id="ws-main"></div>
     </div>
-    <div class="card-flat" style="margin-top:14px">
-      <h3 class="lk-h3">📈 상대 주가 추이 <span class="sub-note">(관심종목 · 공통 시작일=100)</span></h3>
+    <details class="card-flat" style="margin-top:12px">
+      <summary style="cursor:pointer">📈 관심종목 상대 주가 추이 <span class="sub-note">(공통 시작일=100)</span></summary>
       <div id="watch-chart"></div>
-    </div>
-    <div class="criteria" id="watch-context" style="margin-top:14px"></div>
+    </details>
+    <div class="criteria" id="watch-context" style="margin-top:12px"></div>
   </section>
 
   <section id="tab-lookup" class="panel">
@@ -1060,6 +1068,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=210"></script>
+<script src="js/app.js?v=211"></script>
 </body>
 </html>

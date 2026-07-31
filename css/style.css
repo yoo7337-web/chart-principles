@@ -1765,3 +1765,47 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .draw-rail .draw-swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
 .draw-rail .draw-swatches button { width: 13px; height: 13px; }
 .draw-rail #draw-clear { padding: 2px 6px; font-size: .78rem; }
+
+/* ---------- ⭐ 관심종목 워크스페이스 (v211) — 좌 목록 + 우 8카드 ---------- */
+.ws-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; align-items: start; }
+.ws-rail { padding: 10px 10px 12px; position: sticky; top: 10px; max-height: calc(100vh - 30px);
+  display: flex; flex-direction: column; }
+.ws-rail-head { display: flex; align-items: center; gap: 6px; font-size: .86rem; font-weight: 700;
+  margin-bottom: 8px; }
+.ws-rail-head select { font-size: .74rem; }
+#ws-list { overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.ws-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 9px; padding: 7px 8px;
+  cursor: pointer; color: inherit; font: inherit; }
+.ws-item:hover { background: rgba(255,255,255,.05); }
+.ws-item.on { background: var(--card2); border-color: var(--kdn); }
+.ws-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.ws-item-body b { font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-item-sub { font-size: .72rem; color: var(--muted); }
+.ws-item-sub .kup { color: var(--kup); } .ws-item-sub .kdn { color: var(--kdn); }
+.ws-item-badges { font-size: .72rem; flex: none; }
+.ws-io { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.ws-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 10px; }
+.ws-name { font-size: 1.12rem; }
+.ws-price { font-weight: 700; }
+.ws-price.kup { color: var(--kup); } .ws-price.kdn { color: var(--kdn); }
+.ws-memo { width: 180px; background: rgba(255,255,255,.05); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 9px; color: inherit; font-size: .78rem; }
+.ws-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ws-card { background: var(--card); border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; }
+.ws-card-h { display: flex; align-items: center; gap: 5px; font-size: .8rem; color: var(--muted);
+  margin-bottom: 7px; }
+.ws-go { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit;
+  font-size: .74rem; padding: 0; }
+.ws-go:hover { text-decoration: underline; }
+.ws-card-b { font-size: .86rem; line-height: 1.55; }
+.ws-spark { width: 100%; height: 46px; display: block; margin-bottom: 4px; }
+.ws-bars { display: flex; gap: 3px; align-items: flex-end; height: 40px; margin-bottom: 2px; }
+.ws-bars span { flex: 1; background: var(--kdn); border-radius: 2px 2px 0 0; min-height: 3px; opacity: .85; }
+.ws-bar-lab { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); }
+.ws-feed-row { font-size: .8rem; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-feed-row a { color: var(--ink); text-decoration: none; }
+.ws-feed-row a:hover { color: var(--accent); }
+.ws-rep-meta { font-size: .8rem; margin-bottom: 7px; }
+.ws-rep-none { margin: 0 0 8px; font-size: .84rem; }
+@media (max-width: 1000px) { .ws-layout { grid-template-columns: 1fr; } .ws-rail { position: static; max-height: none; } }
