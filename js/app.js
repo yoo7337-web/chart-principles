@@ -1189,8 +1189,10 @@ function loadLookup(key) {
       tfbar.querySelectorAll("#lookup-tf button").forEach((b) => b.onclick = () => {
         lookupTf = b.dataset.tf;
         tfbar.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x === b));
-        if (lookupTf === "1m") {   // 분봉은 개별 파일 lazy 로드 후 그림
-          loadMinuteBars(LOOKUP_ST).then(() => drawLookupChart());
+        if (TF_INTRA.has(lookupTf)) {   // 분봉은 주기별 개별 파일 lazy 로드 후 그림
+          const tf = lookupTf;
+          (tf === "1m" ? loadMinuteBars(LOOKUP_ST) : loadHistBars(LOOKUP_ST, tf))
+            .then(() => { if (lookupTf === tf) drawLookupChart(); });
           return;
         }
         drawLookupChart();
@@ -1203,16 +1205,24 @@ function loadLookup(key) {
     }
     const oscRail = $("#lookup-osc");
     if (oscRail) oscRail.style.display = "flex";
-    // 당일 분봉 버튼 — 수집된 종목만 노출(유동성 상위). 없으면 일봉으로 되돌림.
-    loadIntradayIndex().then((idx) => {
+    // 분봉 버튼(당일 1분 / 5분 60일 / 60분 2년) — 수집된 종목만 노출. 없으면 일봉으로 되돌림.
+    const key0 = `${st.market}_${st.ticker}`;
+    Promise.all([loadIntradayIndex(), loadIntraHistIndex()]).then(([idx, hidx]) => {
       if (LOOKUP_ST !== st) return;
-      const has = !!idx?.stocks?.[`${st.market}_${st.ticker}`];
-      const btn = document.getElementById("tf-1m");
-      if (btn) btn.style.display = has ? "" : "none";
-      if (lookupTf !== "1m") return;
-      if (has) {           // 분봉 유지 — 새 종목 분봉 로드 후 재그림
-        loadMinuteBars(st).then(() => { if (LOOKUP_ST === st) drawLookupChart(); });
-      } else {             // 이 종목은 분봉 없음 → 일봉으로 복귀
+      const avail = {
+        "1m": !!idx?.stocks?.[key0],
+        "5m": (hidx?.stocks?.[key0] || []).includes("5m"),
+        "60m": (hidx?.stocks?.[key0] || []).includes("60m"),
+      };
+      Object.entries(avail).forEach(([tf, has]) => {
+        const b = document.getElementById(`tf-${tf}`);
+        if (b) b.style.display = has ? "" : "none";
+      });
+      if (!TF_INTRA.has(lookupTf)) return;
+      if (avail[lookupTf]) {   // 분봉 유지 — 새 종목 데이터 로드 후 재그림
+        (lookupTf === "1m" ? loadMinuteBars(st) : loadHistBars(st, lookupTf))
+          .then(() => { if (LOOKUP_ST === st) drawLookupChart(); });
+      } else {                 // 이 종목엔 해당 분봉 없음 → 일봉으로 복귀
         lookupTf = "d";
         document.querySelectorAll("#lookup-tf button").forEach((x) => x.classList.toggle("active", x.dataset.tf === "d"));
         drawLookupChart();
@@ -1288,7 +1298,8 @@ if (!window._railResizeBound) {   // 리사이즈 시 재정렬(1회 바인딩)
 let lookupTf = "d";   // 1m/일/주/월봉
 let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
 let lookupHideSignals = false;   // '전체 해제' — 신호 마커 전부 숨김(캔들만 보기)
-const TF_KO = { "1m": "당일 분봉", d: "일봉", w: "주봉", m: "월봉" };
+const TF_KO = { "1m": "당일 1분", "5m": "5분(60일)", "60m": "60분(2년)", d: "일봉", w: "주봉", m: "월봉" };
+const TF_INTRA = new Set(["1m", "5m", "60m"]);   // 분봉 계열(원칙 신호는 일봉 기준이라 미표시)
 
 // 당일 분봉 (intraday/*.json — yfinance 1m, 유동성 상위만 수집) ─────────────
 let INTRADAY = null;  // index.json {generated, date, stocks:{key:봉수}}
@@ -1318,6 +1329,48 @@ function loadMinuteBars(st) {
       st._min = minuteSeries(j.rows, INTRADAY?.date);
       taEnrich(st._min);   // 분봉 기준 지표(MA·RSI·MACD 등) 재계산
       return st._min;
+    });
+}
+
+/* 과거 분봉(5분 60일 · 60분 2년) — intraday_hist.py 산출물. 유동성 상위 종목만 존재. ────────── */
+let INTRA_HIST = null;
+function loadIntraHistIndex() {
+  if (INTRA_HIST) return Promise.resolve(INTRA_HIST);
+  return fetch("data/intraday/hist_index.json" + _cb)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (INTRA_HIST = j || { stocks: {} }));
+}
+/* rows(["MM-DD HH:MM",o,h,l,c,v]) → 차트 시리즈.
+   ⚠연도가 없다 — 60분봉은 2년치라 월이 되돌아가는 지점(12월→1월)에서 해를 넘겨야 한다.
+     뒤에서부터 훑으며 월이 커지면 연도를 하나 줄이는 방식으로 복원한다. */
+function histSeries(rows) {
+  const now = new Date();
+  let y = now.getFullYear(), prevM = null;
+  const out = [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const [md, hm] = r[0].split(" ");
+    const [M, D] = md.split("-").map(Number);
+    const [hh, mm] = hm.split(":").map(Number);
+    if (prevM != null && M > prevM) y -= 1;     // 역순 주행 중 월이 커짐 = 연말을 넘어감
+    prevM = M;
+    out.push({ t: Date.UTC(y, M - 1, D, hh, mm) / 1000, o: r[1], h: r[2], l: r[3], c: r[4], v: r[5] });
+  }
+  out.reverse();
+  return out;
+}
+function loadHistBars(st, tf) {
+  const key = `${st.market}_${st.ticker}`;
+  st._hist = st._hist || {};
+  if (st._hist[tf]) return Promise.resolve(st._hist[tf]);
+  return fetch(`data/intraday/${key}_${tf}.json` + _cb)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      if (!j?.rows?.length) return null;
+      const s = histSeries(j.rows);
+      taEnrich(s);
+      st._hist[tf] = s;
+      return s;
     });
 }
 const OSC_KO = { rsi: "RSI(14)", macd: "MACD", stoch: "스토캐스틱", obv: "OBV", disp: "이격도" };
@@ -1386,14 +1439,18 @@ function drawLookupChart() {
   appendLiveBar(st);                                    // 잠정 당일봉(있으면) 먼저 — 지표도 포함해 계산
   if (!st._ta) { taEnrich(st.series); st._ta = true; }  // 지표는 클라이언트 계산(OHLCV 슬림 JSON)
   const tf = lookupTf;
-  const isMin = tf === "1m" && st._min?.length;   // 당일 분봉 모드(원칙 신호는 일봉 기준이라 미표시)
-  const s = isMin ? st._min : resampleBars(st.series, tf);
+  // 분봉 계열(1m 당일 / 5m 60일 / 60m 2년) — 원칙 신호는 일봉 기준이라 미표시
+  const minBars = tf === "1m" ? st._min : (TF_INTRA.has(tf) ? st._hist?.[tf] : null);
+  const isMin = TF_INTRA.has(tf) && minBars?.length;
+  const s = isMin ? minBars : resampleBars(st.series, tf);
   const selRule = $("#lookup-rule").value;  // "" = 전체
   $("#lookup-info").innerHTML =
     `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · `
     + (isMin
-      ? `${INTRADAY?.date || ""} 당일 1분봉 · ${INTRADAY?.generated || ""} 수집 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`
-      : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 5년 (좌우로 드래그·스크롤)`
+      ? (tf === "1m"
+          ? `${INTRADAY?.date || ""} 당일 1분봉 · ${INTRADAY?.generated || ""} 수집 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`
+          : `${TF_KO[tf]} · ${s.length.toLocaleString()}봉 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`)
+      : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 10년 (좌우로 드래그·스크롤)`
         + (st._live ? ` · <b>최신 봉=30분 지연 잠정치</b><span class="sub-note">(고저 미확정 · 확정봉은 다음 배치 07:40)</span>` : "")
         + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
 
@@ -1864,6 +1921,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v214", "2026-07-31", "차트 기간 10년 확대 + 분봉 3주기(당일 1분·5분 60일·60분 2년)", "①**일봉 차트를 5년 → 10년으로** 늘렸습니다(2016~2026, 2,520봉). 저장 형식을 압축 배열로 바꿔 기간이 2배가 됐는데도 용량 증가는 17%에 그쳤습니다. ②**분봉을 3가지 주기로 확대** — 기존엔 '당일 1분봉'만 있어 며칠 전 급등이 어떻게 만들어졌는지 볼 수 없었습니다. 이제 **5분봉으로 최근 60일**, **60분봉으로 최근 2년**을 되짚을 수 있습니다(유동성 상위 90종목 대상, 없는 종목은 버튼이 자동으로 숨겨집니다). ⚠1분봉의 과거 소급은 데이터 제공처가 최근 7일까지만 주기 때문에 불가능하며, 그래서 5분·60분으로 과거를 덮는 방식을 택했습니다."],
   ["v213", "2026-07-31", "종목조회 헤더 중복 제거 + 공시 스캐너 회사명 복구", "①**종목조회 상단의 고정 바와 아래 종목 헤더가 같은 정보**(종목명·현재가·등락)를 두 번 보여주던 것을 정리했습니다. 위쪽 중복 표시를 없애고 **아래 종목 헤더 자체를 고정 영역**으로 만들었으며, 원칙 선택 드롭다운도 그 헤더 안으로 합쳤습니다(검색창은 맨 위 유지). ②**공시 스캐너에서 회사명이 아예 안 보이던 문제 수정** — 앞선 수정에서 최소 너비를 제거하자, 회사 칸이 표의 열 너비(244px)를 따르지 않고 내용 크기(44px)로 줄어들며 이름이 사라졌습니다. 원인은 그 칸에 걸린 flex 배치가 표의 열 너비 계산에서 빠지는 것이었고, 일반 표 셀 배치로 되돌려 해결했습니다(689건 전부 정상 표시)."],
   ["v211", "2026-07-31", "관심종목 워크스페이스 — 종목별 종합 대시보드", "관심종목 탭을 단순 목록표에서 **종목별 리서치 워크스페이스**로 개편. 왼쪽 목록(현재가·등락·최근 신호·보고서 보유 배지, 등록순/등락률/시총/신호 정렬)에서 종목을 고르면 오른쪽에 그 종목의 사이트 전체 정보가 **8개 카드 한 화면**으로 모입니다: ①심층 보고서(있으면 열기, 없으면 '보고서 요청' 문구 복사) ②추이·신호(6개월 미니차트+최근 신호+국면) ③재무(분기 매출 막대+YoY·이익률·ROE·부채비율) ④밸류에이션(PER·PBR·선행PER+참고 내재가치 괴리) ⑤수급(외국인·기관·개인 20일) ⑥산업 맥락(소속 산업 1개월 수익률·순위) ⑦공시·뉴스 ⑧원칙 성적(이 종목 10년 베스트/워스트 원칙). 각 카드의 '자세히 →'는 해당 탭 상세로 이동. 새 수집 없이 기존 데이터 전부 재사용. 상대 주가 추이 비교는 하단 접이식으로 유지."],
   ["v210", "2026-07-31", "메뉴 재배치 + 공시 스캐너 회사명 잘림 수정", "①**관심종목을 상위 메뉴로 승격** — '내 투자' 오른쪽에 독립 메뉴로 분리했습니다(기존엔 종목 찾기 안의 탭). ②**산업 진단을 '종목 찾기'로 이동** — 산업을 좁혀 종목으로 좁혀가는 흐름이라 종목 찾기의 첫 번째 탭에 배치했습니다(기존엔 시장 보기). ③**공시 스캐너에서 회사명이 '…'로 잘리던 문제 수정** — 원인은 열 너비가 아니라, 이름을 담는 영역이 넓어진 열을 쓰지 못하고 최소 폭으로 눌려 있던 것이었습니다. 501건 전부 온전히 표시되며, 되찾은 공간은 '공시 내용' 열에 돌려줬습니다(285 → 407px)."],
