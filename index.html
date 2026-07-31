@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=209">
-<script src="firebase-config.js?v=209"></script>
-<script src="js/auth.js?v=209"></script>
+<link rel="stylesheet" href="css/style.css?v=210">
+<script src="firebase-config.js?v=210"></script>
+<script src="js/auth.js?v=210"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=209"></script>
+<script src="js/sync.js?v=210"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -23,6 +23,7 @@
   <button class="group" data-group="discover">🔍 종목 찾기</button>
   <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
+  <button class="group" data-group="watch">⭐ 관심종목</button>
   <!-- 관리자 전용(yoo7337@gmail.com) — 그룹 메뉴 라인 오른쪽 끝 -->
   <button class="group admin-group" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠 개발일지</button>
 </nav>
@@ -32,12 +33,17 @@
   <button class="tab" data-tab="apply">실전 검증</button>
 </nav>
 <nav class="tabs" data-group-tabs="discover" style="display:none">
+  <!-- 산업 진단은 '시장 보기'에서 이동(v210) — 산업을 좁혀 종목으로 가는 흐름이라 종목 찾기 첫 탭 -->
+  <button class="tab" data-tab="rotation">산업 진단</button>
   <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="today">오늘의 신호</button>
   <button class="tab" data-tab="lookup">종목 조회</button>
   <button class="tab" data-tab="value">내재가치</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
   <button class="tab" data-tab="disc">📢 공시 스캐너</button>
+</nav>
+<!-- 관심종목은 상위 그룹으로 승격(v210) — 탭이 하나뿐이라 `solo` nav(항상 숨김)로 그룹↔탭을 잇는다 -->
+<nav class="tabs solo" data-group-tabs="watch" style="display:none">
   <button class="tab" data-tab="watch">⭐ 관심종목</button>
 </nav>
 <nav class="tabs" data-group-tabs="journal" style="display:none">
@@ -49,7 +55,6 @@
   <button class="tab active" data-tab="heatmap">홈</button>
   <button class="tab" data-tab="macro">매크로</button>
   <button class="tab" data-tab="internals">시장 진단</button>
-  <button class="tab" data-tab="rotation">산업 진단</button>
   <button class="tab" data-tab="crypto">₿ 크립토</button>
   <button class="tab" data-tab="assets">🏙 자산시장</button>
   <button class="tab" data-tab="trends">🔥 트렌드</button>
@@ -1055,6 +1060,6 @@
   <p>⚠️ 과거 10년(2016~2026) 데이터의 통계적 경향이며, 생존 편향·거래비용 미반영. 투자 판단의 참고 자료일 뿐 수익을 보장하지 않습니다.</p>
 </footer>
 
-<script src="js/app.js?v=209"></script>
+<script src="js/app.js?v=210"></script>
 </body>
 </html>
