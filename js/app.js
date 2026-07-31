@@ -5063,6 +5063,8 @@ document.addEventListener("click", (e) => {
    데이터: disclosure_scan.py → data/disclosures/{날짜}.json (+ index.json).
    날짜별 파일이라 **선택한 날만 lazy 로드**한다(전체를 한 번에 받으면 수 MB). */
 let discRendered = false, discIdx = null, discDate = null, discCat = "", discMk = "", discQ = "";
+// v215: 전 시장 수집 — 코스피/코스닥 외에 코넥스(N)·기타(E, 비상장 지주·SPC 등)도 포함
+const DISC_MK_KO = { Y: "코스피", K: "코스닥", N: "코넥스", E: "기타" };
 // 정렬: time=접수순(DART 기본) · mcap/price/chg=헤더 클릭 정렬(첫 클릭 내림차순 → 다시 클릭 오름차순)
 let discSortKey = "time", discSortDir = "desc";
 const DISC_SORTABLE = { mcap: "시가총액", price: "주가", chg: "변동" };
@@ -5210,7 +5212,7 @@ function renderDiscTable() {
     return `<tr>
       <td class="hld-name">${code ? `<img class="mv-logo" src="${logoUrl("kr", code)}" onerror="this.style.visibility='hidden'">` : ""}
         <span>${code ? `<b class="dsc-go" data-goto="kr_${code}">${name}</b>` : `<b>${name}</b>`}
-        <span class="sub-note">${mk === "Y" ? "코스피" : "코스닥"}</span></span></td>
+        <span class="sub-note">${DISC_MK_KO[mk] || mk || ""}</span></span></td>
       <td class="num">${q2?.mcap != null ? fmtMcap(q2.mcap, "kr") : "-"}</td>
       <td class="num">${q2?.price != null ? Math.round(q2.price).toLocaleString() : "-"}</td>
       <td class="num" style="color:${dAmt == null ? "inherit" : col}">${dAmt == null ? "-"
@@ -7386,7 +7388,7 @@ function renderLookupStability(st) {
   const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * (H - padT - padB);
   let lines = "", labels = "", legend = "";
   series.forEach(([k, lab, c], j) => {
-    const pts = sq.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
+    const pts = sq.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
     if (pts.length > 1) {
       lines += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="${c}" stroke-width="2"/>` +
         pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.3" fill="${c}"/>
@@ -7913,9 +7915,11 @@ function ftRows(st) {
   return ps.map((p, i) => {
     const d = data[p], prev = i > 0 ? data[ps[i - 1]] : null;
     const r = { p: ftMode === "annual" ? p : p, ...d };
-    r.opm = d.rev ? (d.op / d.rev) * 100 : null;
-    r.npm = d.rev ? (d.np / d.rev) * 100 : null;
-    r.revG = prev && prev.rev ? (d.rev / prev.rev - 1) * 100 : null;  // 연간=전년比, 분기=직전분기比(QoQ)
+    // 🐞⚠분자도 반드시 확인할 것 — `undefined / 5`는 **NaN**이고 NaN은 `!= null` 필터를 통과해
+    //   차트 축 계산(max/min)을 통째로 오염시킨다(실사고: 대한항공 순이익 1개년 결측 → 성장률 차트 전체 실종).
+    r.opm = d.rev && d.op != null ? (d.op / d.rev) * 100 : null;
+    r.npm = d.rev && d.np != null ? (d.np / d.rev) * 100 : null;
+    r.revG = prev && prev.rev && d.rev != null ? (d.rev / prev.rev - 1) * 100 : null;  // 연간=전년比, 분기=직전분기比(QoQ)
     r.roe = d.equity && d.np != null ? (d.np * (ftMode === "quarter" ? 4 : 1)) / d.equity * 100 : null;  // 분기=연환산
     r.debt = d.equity && d.liab != null ? (d.liab / d.equity) * 100 : null;
     r.cur = d.cl && d.ca != null ? (d.ca / d.cl) * 100 : null;
@@ -8031,7 +8035,8 @@ function renderFinTrends(st) {
 
   // ---- 막대+라인 콤보 도우미 ----
   const barGroup = (keys, colors, labels, withLabel = false) => {
-    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
+    // ⚠`!= null`만으로는 NaN이 통과해 max/min이 NaN이 되고 전 좌표가 깨진다 → 유한값만 남긴다
+    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => Number.isFinite(v));
     if (!vals.length) return "";
     const maxV = Math.max(...vals, 0), minV = Math.min(...vals, 0);
     const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * plotH;
@@ -8042,7 +8047,7 @@ function renderFinTrends(st) {
       const cx = padL + gw * i + gw / 2;
       keys.forEach((k, j) => {
         const v = r[k];
-        if (v == null) return;
+        if (!Number.isFinite(v)) return;   // NaN 방어(값 결측 연도)
         const x = cx + (j - (keys.length - 1) / 2) * (bw + 2) - bw / 2;
         const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
         svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
@@ -8056,14 +8061,15 @@ function renderFinTrends(st) {
     return { svg, legend, yS };
   };
   const lineOn = (keys, colors, labels, dash = []) => {
-    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v != null);
+    // ⚠`!= null`만으로는 NaN이 통과해 max/min이 NaN이 되고 전 좌표가 깨진다 → 유한값만 남긴다
+    const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => Number.isFinite(v));
     if (!vals.length) return { svg: "", legend: "" };
     const maxV = Math.max(...vals), minV = Math.min(...vals, 0);
     const pad2 = (maxV - minV) * 0.15 || 5;
     const yS = (v) => padT + (maxV + pad2 - v) / (maxV - minV + pad2 * 2 || 1) * plotH;
     let svg = "";
     keys.forEach((k, j) => {
-      const pts = rows.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
+      const pts = rows.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
       if (pts.length < 2) return;
       svg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
         fill="none" stroke="${colors[j]}" stroke-width="2"${dash[j] ? ` stroke-dasharray="${dash[j]}"` : ""}/>`
@@ -8090,7 +8096,7 @@ function renderFinTrends(st) {
       const mMax = Math.max(...mVals, 1), mMin = Math.min(...mVals, 0);
       const yM = (v) => padT + (mMax - v) / (mMax - mMin || 1) * plotH * 0.6;  // 위 60% 영역에 라인
       [["opm", "#f0b34c"], ["npm", "#ff8c9a"]].forEach(([k, c], j) => {
-        const pts = rows.map((r, i) => (r[k] != null ? [padL + gw * i + gw / 2, yM(r[k]), r[k]] : null)).filter(Boolean);
+        const pts = rows.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yM(r[k]), r[k]] : null)).filter(Boolean);
         if (pts.length < 2) return;
         lineSvg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="${j ? "4 3" : ""}"/>`;
         pts.forEach((p) => pushLbl(p[0], p[1] - 5, p[2].toFixed(1) + "%", c, 9, j ? 1 : -1, 1));
