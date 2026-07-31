@@ -329,10 +329,11 @@
   <section id="tab-lookup" class="panel">
     <!-- 스크롤해도 상단 고정: 좌=현재 종목(명·현재가) / 우=다른 종목 검색 -->
     <!-- empty 클래스: 종목 미선택 시 검색창을 안내문 바로 옆에(선택 후엔 우측 고정) -->
+    <!-- v213: 위·아래 헤더가 같은 정보였다 → 위 sticky 바는 제거하고, 검색·원칙 선택을
+         아래 종목 헤더(#lookup-head)로 합쳐 **그 영역을 고정**한다. 미선택 시엔 안내+검색만 보인다. -->
     <div id="lk-sticky" class="lk-sticky empty">
-      <span id="lk-sticky-info" class="lk-sticky-info"><span class="sub-note">종목을 검색하세요</span></span>
+      <span class="sub-note" id="lk-sticky-hint">종목을 검색하세요</span>
       <span class="lk-sticky-gap"></span>
-      <label id="lookup-rule-wrap" style="display:none">원칙 <select id="lookup-rule"></select></label>
       <label class="lk-sticky-search">🔍 <input type="text" id="lookup-q" placeholder="종목 검색 (예: 현대차, NVDA)" list="lookup-list" autocomplete="off">
       <datalist id="lookup-list"></datalist></label>
     </div>
