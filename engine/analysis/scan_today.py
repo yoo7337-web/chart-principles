@@ -16,7 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from collect import load_all, load_research
 
-MIN_STOCKS = 100   # 이 수보다 적으면 '수집이 덜 된 상태'로 보고 기존 결과를 보존한다
+# ⚠100으로 뒀다가 소급 1런째(150종목)가 게이트를 넘어 **부분 유니버스 329건**이 전체 1,192건을
+#   덮었다(2026-07-31 2차 사고). 정상 유니버스는 ~1,250종목 — '거의 다 모였을 때'만 쓰게 800으로.
+MIN_STOCKS = 800
 from common import APP_DATA, ROOT, dedupe_positions, is_active, load_ruleset
 from indicators import add_indicators
 from regimes import regime_map
