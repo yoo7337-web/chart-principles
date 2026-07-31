@@ -1412,9 +1412,13 @@ dialog { background: var(--card); color: var(--ink); }
 .lk-side .lk-cap b { font-size: .9rem; }        /* 좁은 레일: 값이 카드 제목(.95rem)보다 크지 않게 */
 .lk-side .lk-cap > div { min-width: 108px; padding: 6px 10px; }
 .lk-side .card-flat { padding-left: 14px; padding-right: 14px; }
-/* 주가 헤더 — 스크롤 시 상단 고정(회사 정보 항상 보이게) */
-.lk-main .lookup-head { position: sticky; top: 0; z-index: 6; background: var(--bg);
+/* 주가 헤더 — 스크롤 시 고정(v213: 위 sticky 바의 중복 종목정보를 없애고 이 영역을 고정 헤더로 씀).
+   ⚠검색 바(.lk-sticky)가 top:0을 이미 쓰므로 그 높이만큼 내려서 겹치지 않게 한다(--lk-bar). */
+.lk-main .lookup-head { position: sticky; top: var(--lk-bar, 48px); z-index: 6; background: var(--bg);
   margin: 0 0 10px; padding: 8px 0 8px; border-bottom: 1px solid var(--line); }
+.lk-head-gap { flex: 1 1 auto; }
+.lk-head-rule { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+.lk-head-rule select { max-width: 230px; }
 .lk-main { min-width: 0; }
 .lk-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; }  /* 레일이 길어져 sticky 해제(하단 도달 가능) */
 .lk-side > :first-child { margin-top: 0; }   /* 첫 카드 상단 마진 제거 → 차트 박스 상단과 정확히 정렬 */
@@ -1705,10 +1709,14 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 #dsc-table th:nth-child(6), #dsc-table td:nth-child(6) { width: 30%; }   /* 공시 내용(회사 폭을 되돌려 확대) */
 #dsc-table th:nth-child(7), #dsc-table td:nth-child(7) { width: 8%; }    /* 반응(거래량 배율) */
 #dsc-table th:nth-child(8), #dsc-table td:nth-child(8) { width: 5%; }    /* 원본 */
-/* ⚠텍스트를 담는 span은 flex 아이템이라 기본이 '내용 최소폭'이다 → flex:1 + min-width:0을 줘야
-   넓어진 열을 실제로 쓴다(안 주면 열만 넓어지고 이름은 그대로 잘린다). */
-#dsc-table td.hld-name { min-width: 0; }
-#dsc-table td.hld-name > span { flex: 1; min-width: 0; }
+/* 🐞⚠`td`에 `display:flex`(공용 .hld-name)를 쓰면 **테이블 열 너비 계산에서 빠진다** —
+   table-layout:fixed의 18%(244px)를 무시하고 내용폭(44px)으로 줄어 이름이 통째로 사라졌다.
+   (구 코드는 min-width:150px가 이를 가리고 있었고, 그 값을 지우자 증상이 드러났다)
+   → 이 표에서는 td를 **정상 table-cell로 되돌리고** 로고·텍스트를 인라인으로 배치한다. */
+#dsc-table td.hld-name { display: table-cell; vertical-align: middle; min-width: 0; }
+#dsc-table td.hld-name .mv-logo { vertical-align: middle; margin-right: 7px; }
+#dsc-table td.hld-name > span { display: inline-block; vertical-align: middle;
+  max-width: calc(100% - 30px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #dsc-table .dsc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 #dsc-table .hld-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

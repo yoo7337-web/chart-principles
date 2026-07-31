@@ -1158,19 +1158,14 @@ function loadLookup(key) {
     }
     LOOKUP_ST = st;
     ["lookup-info", "lookup-chart", "lookup-legend", "lookup-stats-title", "lookup-stats-wrap",
-     "lookup-rule-wrap", "lookup-filter", "lookup-profile", "draw-tools"]
+     "lookup-filter", "lookup-profile", "draw-tools"]
       .forEach((id) => { document.getElementById(id).style.display = ""; });
-    $("#lookup-rule-wrap").style.display = "inline";
     $("#lookup-filter").style.display = "flex";
     $("#lookup-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
-    // 고정 바 좌측: 현재 종목 요약(명·현재가·등락) — 스크롤해도 상단 유지
-    $("#lk-sticky").classList.remove("empty");   // 종목 선택됨 → 검색창 우측 고정
-    const q = freshQuote(st);
-    const price = q?.cur, chg = q?.chg;
-    const col = chg == null ? "" : chg >= 0 ? "kup" : "kdn";
-    $("#lk-sticky-info").innerHTML = `<img class="lk-sticky-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
-      <b>${st.market === "kr" ? st.name : st.ticker}</b><span class="sub-note"> ${st.ticker}</span>
-      ${price != null ? `<span class="lk-sticky-price ${col}">${fmtPrice(price, st.market)}${chg != null ? ` ${chg >= 0 ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>` : ""}`;
+    // v213: 위 sticky 바의 종목 요약은 아래 헤더(#lookup-head)와 같은 정보라 제거 — 헤더 자체를 고정한다.
+    $("#lk-sticky").classList.remove("empty");
+    const hint = $("#lk-sticky-hint");
+    if (hint) hint.style.display = "none";       // 종목 선택 후엔 안내문 숨김(검색창만 남김)
     renderLookupLinks(st);                     // 외부 심층 정보 링크
     renderLookupProfile(st);                   // 종목 프로파일(자체 계산)+참고 내재가치
     renderLookupStory(st);                     // 원칙 내러티브
@@ -1247,12 +1242,7 @@ function loadLookup(key) {
     };
     $("#sig-none").onclick = () => { lookupHideSignals = true; drawLookupChart(); };
 
-    // 원칙 드롭다운: 전체 + 이 종목에 신호가 있는 원칙만
-    const present = st.stats.filter((s) => st.markers.some((m) => m.rule_id === s.rule_id));
-    $("#lookup-rule").innerHTML =
-      `<option value="">전체 신호 (화살표만)</option>` +
-      present.map((s) => `<option value="${s.rule_id}">${s.side === "buy" ? "🟢" : "🔴"} ${s.name}</option>`).join("");
-    $("#lookup-rule").onchange = drawLookupChart;
+    fillRuleSelect(st);   // 원칙 드롭다운(헤더 안) — 전체 + 이 종목에 신호가 있는 원칙만
     drawLookupChart();
     bindDrawTools();            // 그리기 도구(추세선·박스권) 1회 바인딩
     setDrawMode("");            // 종목 전환 시 이동 모드로 초기화(+저장된 그림 재배치)
@@ -1864,6 +1854,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v213", "2026-07-31", "종목조회 헤더 중복 제거 + 공시 스캐너 회사명 복구", "①**종목조회 상단의 고정 바와 아래 종목 헤더가 같은 정보**(종목명·현재가·등락)를 두 번 보여주던 것을 정리했습니다. 위쪽 중복 표시를 없애고 **아래 종목 헤더 자체를 고정 영역**으로 만들었으며, 원칙 선택 드롭다운도 그 헤더 안으로 합쳤습니다(검색창은 맨 위 유지). ②**공시 스캐너에서 회사명이 아예 안 보이던 문제 수정** — 앞선 수정에서 최소 너비를 제거하자, 회사 칸이 표의 열 너비(244px)를 따르지 않고 내용 크기(44px)로 줄어들며 이름이 사라졌습니다. 원인은 그 칸에 걸린 flex 배치가 표의 열 너비 계산에서 빠지는 것이었고, 일반 표 셀 배치로 되돌려 해결했습니다(689건 전부 정상 표시)."],
   ["v211", "2026-07-31", "관심종목 워크스페이스 — 종목별 종합 대시보드", "관심종목 탭을 단순 목록표에서 **종목별 리서치 워크스페이스**로 개편. 왼쪽 목록(현재가·등락·최근 신호·보고서 보유 배지, 등록순/등락률/시총/신호 정렬)에서 종목을 고르면 오른쪽에 그 종목의 사이트 전체 정보가 **8개 카드 한 화면**으로 모입니다: ①심층 보고서(있으면 열기, 없으면 '보고서 요청' 문구 복사) ②추이·신호(6개월 미니차트+최근 신호+국면) ③재무(분기 매출 막대+YoY·이익률·ROE·부채비율) ④밸류에이션(PER·PBR·선행PER+참고 내재가치 괴리) ⑤수급(외국인·기관·개인 20일) ⑥산업 맥락(소속 산업 1개월 수익률·순위) ⑦공시·뉴스 ⑧원칙 성적(이 종목 10년 베스트/워스트 원칙). 각 카드의 '자세히 →'는 해당 탭 상세로 이동. 새 수집 없이 기존 데이터 전부 재사용. 상대 주가 추이 비교는 하단 접이식으로 유지."],
   ["v210", "2026-07-31", "메뉴 재배치 + 공시 스캐너 회사명 잘림 수정", "①**관심종목을 상위 메뉴로 승격** — '내 투자' 오른쪽에 독립 메뉴로 분리했습니다(기존엔 종목 찾기 안의 탭). ②**산업 진단을 '종목 찾기'로 이동** — 산업을 좁혀 종목으로 좁혀가는 흐름이라 종목 찾기의 첫 번째 탭에 배치했습니다(기존엔 시장 보기). ③**공시 스캐너에서 회사명이 '…'로 잘리던 문제 수정** — 원인은 열 너비가 아니라, 이름을 담는 영역이 넓어진 열을 쓰지 못하고 최소 폭으로 눌려 있던 것이었습니다. 501건 전부 온전히 표시되며, 되찾은 공간은 '공시 내용' 열에 돌려줬습니다(285 → 407px)."],
   ["v209", "2026-07-31", "주식찾기 필터 재설계 — 발굴 3단계 + 조건 칩", "상단에 흩어져 있던 산업/테마/기술적 테마 3필터를 **종목 발굴 순서**로 재구성: ① 어디서 찾을까(산업·밸류체인) → ② 어떤 회사를(투자 스타일) → ③ 언제 살까(차트 신호). 카드를 클릭하면 해당 단계만 펼쳐지고(다시 클릭=접힘), 고른 조건은 상단 **조건 칩바**에 색깔 칩으로 모입니다 — 칩의 ×로 바로 해제, 전체 초기화, 결과 종목 수 실시간 표시. 가장 큰 기능 변화는 **투자 스타일과 차트 신호를 동시에 걸 수 있게 된 것**(기존엔 한쪽을 고르면 다른 쪽이 풀렸음): 이제 '저평가 성장주이면서 플래그 패턴이 뜬 종목' 같은 조합 검색이 됩니다. 세 단계는 모두 AND로 겹치고 각 단계는 건너뛰어도 됩니다."],
@@ -6935,6 +6926,9 @@ function renderLookupHead(st) {
   const up = (chg ?? 0) >= 0;
   const col = chg == null ? "" : (up ? "#f5445a" : "#4391ff");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
   const shortBadge = st.short_history ? `<span class="lk-short-badge">이력 부족 · 원칙 검증 제외</span>` : "";
+  // v213: 위 sticky 바를 없애고 이 헤더를 고정 영역으로 씀 → 원칙 드롭다운도 여기로 합친다.
+  //   ⚠innerHTML을 새로 쓰므로 select 옵션은 이 함수 뒤(loadLookup)에서 다시 채워진다(순서 의존).
+  const prevSel = document.getElementById("lookup-rule")?.value || "";
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
@@ -6942,7 +6936,21 @@ function renderLookupHead(st) {
         ${starBtn(`${st.market}_${st.ticker}`, st.name)}${shortBadge}</div>
       <div class="lk-price"><span${col ? ` style="color:${col}"` : ""}>${fmtPrice(cur, st.market)}${chg != null ? ` ${up ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>
         <span class="sub-note">${src}</span></div>
-    </div>`;
+    </div>
+    <span class="lk-head-gap"></span>
+    <label id="lookup-rule-wrap" class="lk-head-rule">원칙 <select id="lookup-rule"></select></label>`;
+  fillRuleSelect(st, prevSel);   // ⚠헤더는 두 번 렌더된다(즉시+EXTRAS 후) → 옵션도 매번 다시 채운다
+}
+
+/* 원칙 드롭다운 채우기 — 전체 + 이 종목에 신호가 있는 원칙만. 헤더 재렌더 시 선택값 유지. */
+function fillRuleSelect(st, keep) {
+  const rs = document.getElementById("lookup-rule");
+  if (!rs || !st?.stats) return;
+  const present = st.stats.filter((s) => (st.markers || []).some((m) => m.rule_id === s.rule_id));
+  rs.innerHTML = `<option value="">전체 신호 (화살표만)</option>` +
+    present.map((s) => `<option value="${s.rule_id}">${s.side === "buy" ? "🟢" : "🔴"} ${s.name}</option>`).join("");
+  if (keep) rs.value = keep;
+  rs.onchange = drawLookupChart;
 }
 
 // 기업개요 카드
