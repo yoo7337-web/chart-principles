@@ -1838,3 +1838,37 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .cr-bulk { display: inline-flex; gap: 5px; margin-right: 8px; padding-right: 8px;
   border-right: 1px solid var(--line); }
 .cr-bulk button { font-size: .72rem; padding: 3px 8px; }
+/* 종목조회 공시 — 1년치 전량을 담되 기본 12건만 노출(나머지는 접기) */
+.lk-feed-more { margin-top: 4px; }
+.lk-feed-more summary { cursor: pointer; font-size: .78rem; color: var(--accent); padding: 3px 0; }
+.lk-feed-more[open] summary { color: var(--muted); }
+/* 관심종목 카드 확장(v217) — 정보 밀도 상향 */
+.ws-card { padding: 12px 14px; }
+.ws-card-b { font-size: .84rem; }
+.ws-spark { height: 64px; }
+.ws-caps { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; }
+.ws-cap { display: inline-flex; flex-direction: column; align-items: center; min-width: 52px;
+  background: rgba(255,255,255,.05); border-radius: 7px; padding: 3px 7px; line-height: 1.25; }
+.ws-cap i { font-style: normal; font-size: .66rem; color: var(--muted); }
+.ws-cap b { font-size: .8rem; }
+.ws-cap .kup { color: var(--kup); } .ws-cap .kdn { color: var(--kdn); }
+.ws-kv { display: flex; flex-direction: column; gap: 2px; }
+.ws-kv-h { font-size: .74rem; color: var(--muted); margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.ws-kv-row { display: flex; align-items: baseline; gap: 8px; padding: 1.5px 0; }
+.ws-kv-row > span { flex: 0 0 88px; color: var(--muted); font-size: .78rem; }
+.ws-kv-row > b { min-width: 74px; }
+.ws-kv-row > i { font-style: normal; font-size: .74rem; }
+.ws-kv-row .pos { color: var(--kup); } .ws-kv-row .neg { color: var(--kdn); }
+.ws-kv-row .kup { color: var(--kup); } .ws-kv-row .kdn { color: var(--kdn); }
+.ws-sup-tb { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+.ws-sup-tb th { font-weight: 400; color: var(--muted); font-size: .72rem; text-align: right; padding: 2px 4px; }
+.ws-sup-tb td { text-align: right; padding: 2px 4px; font-size: .82rem; }
+.ws-sup-tb td:first-child, .ws-sup-tb th:first-child { text-align: left; color: var(--muted); font-size: .74rem; }
+.ws-sup-tb .kup { color: var(--kup); } .ws-sup-tb .kdn { color: var(--kdn); }
+.ws-rep-body { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.ws-rep-light { display: flex; justify-content: space-between; gap: 8px; font-size: .8rem;
+  background: rgba(255,255,255,.04); border-radius: 7px; padding: 4px 9px; }
+.ws-rep-light span { color: var(--muted); }
+.ws-rep-concl { margin: 5px 0 0; font-size: .8rem; line-height: 1.5; }
+.ws-rule-row { padding: 2.5px 0; }
+.ws-rule-div { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 6px; }

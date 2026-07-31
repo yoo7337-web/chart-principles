@@ -2056,6 +2056,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v217", "2026-08-01", "유니버스 전 상장 확장 + 관심종목 카드 정보 확대 + 공시 1년 전량", "①**한국 유니버스를 1,200 → 2,564종목(전 상장, 스팩·우선주 제외)으로 확장** — 이제 코스피·코스닥 거의 모든 종목이 조회됩니다(10년 일봉·원칙 신호 포함). 신규 종목의 재무·기업개요는 며칠에 걸쳐 자동 충전됩니다. ②**관심종목 카드 정보 확대** — 심층 보고서 카드에 신호등 3개+한 줄 결론, 추이 카드에 기간 수익률 4구간·신호 이력·베타/변동성, 재무 카드에 최근 분기 매출/영업이익/순이익 YoY 표, 밸류에이션에 동종업계 평균 대비·배당수익률, 수급을 5일/20일 2단 표로, 산업 카드에 동종 상위 3사 등락, 공시 4건+뉴스 3건, 원칙 성적 상위 3+워스트. ③**종목별 공시가 실제 1년치로** — 기존엔 최신 15건에서 끊겨 활발한 대형주는 2~3주치만 보였습니다(SK하이닉스 실측 15건 → 400건). 기본 12건 표시 + '더 보기'로 펼침. ④동종업계 비교에 기준 종목의 주가·등락률 표시."],
   ["v216", "2026-07-31", "그리기 도구 대폭 개선 + 크립토 전체선택 + 공시 전량 수집", "①**차트 그리기 도구 개편** — 그린 선을 지우기 어렵던 문제를 해결했습니다. 얇은 선도 쉽게 집도록 **투명한 두꺼운 클릭 영역**을 깔았고, 그림을 클릭하면 선택(강조)된 뒤 **Delete 키·✕ 버튼·우클릭** 어느 쪽으로도 지울 수 있습니다. **Ctrl+Z 되돌리기**(최근 30단계, 전체삭제도 복구)도 넣었습니다. 도구는 추세선·박스권에 더해 **수평선(지지·저항, 가격 라벨 자동)·수직선(날짜)·화살표·피보나치 되돌림(23.6~78.6% 자동)·텍스트 메모** 5종을 추가했습니다. 수평선·수직선·텍스트는 클릭 한 번으로 그려집니다. ②**크립토 차트에 전체 선택/해제 버튼** 추가(코인 12개를 하나씩 끄던 수고 제거). ③**공시 스캐너가 전체 공시를 담도록** 변경 — 코스피·코스닥만 남기던 필터 때문에 전체의 39%(기타·코넥스)가 빠져 정기공시가 누락돼 보였습니다. 하루 평균 501건 → 729건. ④종목조회 고정 헤더 위 빈틈 제거. ⑤재무 차트가 통째로 사라지던 버그 수정(대한항공 등 37종목 — 값이 없는 해에서 계산이 깨지며 차트 전체 좌표가 무효화되던 문제)."],
   ["v214", "2026-07-31", "차트 기간 10년 확대 + 분봉 3주기(당일 1분·5분 60일·60분 2년)", "①**일봉 차트를 5년 → 10년으로** 늘렸습니다(2016~2026, 2,520봉). 저장 형식을 압축 배열로 바꿔 기간이 2배가 됐는데도 용량 증가는 17%에 그쳤습니다. ②**분봉을 3가지 주기로 확대** — 기존엔 '당일 1분봉'만 있어 며칠 전 급등이 어떻게 만들어졌는지 볼 수 없었습니다. 이제 **5분봉으로 최근 60일**, **60분봉으로 최근 2년**을 되짚을 수 있습니다(유동성 상위 90종목 대상, 없는 종목은 버튼이 자동으로 숨겨집니다). ⚠1분봉의 과거 소급은 데이터 제공처가 최근 7일까지만 주기 때문에 불가능하며, 그래서 5분·60분으로 과거를 덮는 방식을 택했습니다."],
   ["v213", "2026-07-31", "종목조회 헤더 중복 제거 + 공시 스캐너 회사명 복구", "①**종목조회 상단의 고정 바와 아래 종목 헤더가 같은 정보**(종목명·현재가·등락)를 두 번 보여주던 것을 정리했습니다. 위쪽 중복 표시를 없애고 **아래 종목 헤더 자체를 고정 영역**으로 만들었으며, 원칙 선택 드롭다운도 그 헤더 안으로 합쳤습니다(검색창은 맨 위 유지). ②**공시 스캐너에서 회사명이 아예 안 보이던 문제 수정** — 앞선 수정에서 최소 너비를 제거하자, 회사 칸이 표의 열 너비(244px)를 따르지 않고 내용 크기(44px)로 줄어들며 이름이 사라졌습니다. 원인은 그 칸에 걸린 flex 배치가 표의 열 너비 계산에서 빠지는 것이었고, 일반 표 셀 배치로 되돌려 해결했습니다(689건 전부 정상 표시)."],
@@ -5564,8 +5565,20 @@ function wsShow(key) {
       fill("ws-report", `<div class="ws-rep-meta">기준일 <b>${meta.date}</b> · v${meta.version || 1} ·
           ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"}
           ${stale ? `<span class="lk-stale">⚠ 분기 경과</span>` : ""}</div>
-        <button class="rep-btn" id="ws-rep-open">📖 보고서 열기</button>`);
+        <div id="ws-rep-sum" class="sub-note">요약 불러오는 중…</div>
+        <button class="rep-btn" id="ws-rep-open">📖 전체 보고서 열기</button>`);
       const b = $("#ws-rep-open"); if (b) b.onclick = () => openReport(key);
+      // 0장 신호등 3개 + '한 줄 결론'을 카드에 바로 보여준다(열지 않아도 판정이 보이게)
+      fetch(`data/reports/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((rep) => {
+        if (wsSel !== key || !rep?.md) return;
+        const el = document.getElementById("ws-rep-sum"); if (!el) return;
+        const lights = [...rep.md.matchAll(/\|\s*([^|\n]+?)\s*\|\s*((?:🟢|🟡|🔴)[^|\n]*?)\s*\|/g)]
+          .filter((m) => !/신호등|판정/.test(m[1])).slice(0, 3);
+        const concl = rep.md.match(/\*\*한 줄 결론\*\*[:：]?\s*([^\n]+)/);
+        el.className = "ws-rep-body";
+        el.innerHTML = lights.map((m) => `<div class="ws-rep-light"><span>${m[1]}</span><b>${m[2].split("·")[0].trim()}</b></div>`).join("")
+          + (concl ? `<p class="ws-rep-concl">${concl[1].replace(/\*\*/g, "").slice(0, 150)}</p>` : "");
+      });
     } else {
       fill("ws-report", `<p class="ws-rep-none">아직 이 종목의 심층 보고서가 없습니다.<br>
         <span class="sub-note">Claude 세션에서 아래 문구로 요청하면 DART 검증 절차로 작성해 탑재합니다.</span></p>
@@ -5583,32 +5596,43 @@ function wsShow(key) {
     if (wsSel !== key) return;
     if (!st) { ["ws-trend", "ws-supply", "ws-rules"].forEach((c) => fill(c, `<p class="mini-note">데이터 준비 중</p>`)); return; }
     // ② 추이·신호
-    const sigByKey = (TODAY?.signals || []).filter((s) => `${s.market}_${s.ticker}` === key)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    const sig = sigByKey[sigByKey.length - 1];
+    const sigs = (TODAY?.signals || []).filter((s) => `${s.market}_${s.ticker}` === key)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const sig = sigs[0];
     const regime = TODAY?.regime?.[mk];
     const rgKo = { bull: "🚀 급등장", bear: "🐻 하락장", neutral: "일반" }[regime] || "-";
+    const pr = st.profile || {};
+    const cap = (lab, v) => v == null ? "" :
+      `<span class="ws-cap"><i>${lab}</i><b class="${v >= 0 ? "kup" : "kdn"}">${pct(v, 1)}</b></span>`;
+    // 마커(원칙 신호 이력)에서도 최근 2건 — TODAY(3영업일)보다 긴 맥락
+    const mks = (st.markers || []).slice(-2).reverse();
     fill("ws-trend", `${wsSpark(st.series, sig)}
-      <div class="sub-note">${sig ? `최근 신호: ${sig.side === "buy" ? "🟢" : "🔴"} ${sig.rule} (${sig.date.slice(5)})` : "최근 3영업일 신호 없음"}
-        · 국면 ${rgKo}</div>`);
+      <div class="ws-caps">${cap("1주", pr.ret_w1)}${cap("1개월", pr.ret_m1)}${cap("3개월", pr.ret_m3)}${cap("1년", pr.ret_y1)}</div>
+      <div class="ws-kv">${sig ? `<div>최근 신호 <b>${sig.side === "buy" ? "🟢" : "🔴"} ${sig.rule}</b> <span class="sub-note">${sig.date.slice(5)}</span></div>`
+        : `<div class="sub-note">최근 3영업일 신호 없음</div>`}
+      ${mks.map((m2) => `<div class="sub-note">이력: ${m2.side === "buy" ? "🟢" : "🔴"} ${m2.name || m2.rule_id} (${String(m2.t).slice(5)})</div>`).join("")}
+      <div class="sub-note">현재 국면 ${rgKo} · 베타 ${pr.beta ?? "-"} · 변동성 ${pr.vol20 != null ? pr.vol20 + "%" : "-"}</div></div>`);
     // ⑤ 수급
     const sup = st.supply_sum;
     if (mk !== "kr") fill("ws-supply", `<p class="mini-note">미국 종목은 투자자별 수급이 공개되지 않습니다.</p>`);
     else if (!sup) fill("ws-supply", `<p class="mini-note">수급 데이터 없음</p>`);
     else {
       const amt = (v) => v == null ? "-" : `<b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억"}</b>`;
-      fill("ws-supply", `외국인 ${amt(sup.frgn_20)} · 기관 ${amt(sup.inst_20)}${sup.indi_20 != null ? ` · 개인 ${amt(sup.indi_20)}` : ""}
-        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 ${sup.frgn_ratio}%${sup.frgn_ratio_chg != null ? ` (${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준</div>`);
+      fill("ws-supply", `<table class="ws-sup-tb"><tr><th></th><th>외국인</th><th>기관</th><th>개인</th></tr>
+        <tr><td>5일</td><td>${amt(sup.frgn_5)}</td><td>${amt(sup.inst_5)}</td><td>${amt(sup.indi_5)}</td></tr>
+        <tr><td>20일</td><td>${amt(sup.frgn_20)}</td><td>${amt(sup.inst_20)}</td><td>${amt(sup.indi_20)}</td></tr></table>
+        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 <b>${sup.frgn_ratio}%</b>${sup.frgn_ratio_chg != null ? ` (20일 ${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준(순매매량×종가)</div>`);
     }
     // ⑧ 원칙 성적
     const stats = (st.stats || []).filter((s) => s.n >= 8);
     if (!stats.length) fill("ws-rules", `<p class="mini-note">신호 표본이 부족합니다(원칙당 8건 미만).</p>`);
     else {
-      const best = [...stats].sort((a, b) => (b.win - a.win) || (b.avg_fwd20 - a.avg_fwd20))[0];
-      const worst = [...stats].sort((a, b) => (a.win - b.win) || (a.avg_fwd20 - b.avg_fwd20))[0];
-      const line = (lab, s, cls) => `${lab}: <b class="${cls}">${s.name}</b>
-        <span class="sub-note">승률 ${(s.win * 100).toFixed(0)}% · 20일 ${s.avg_fwd20 >= 0 ? "+" : ""}${(s.avg_fwd20 * 100).toFixed(1)}% · n=${s.n}</span>`;
-      fill("ws-rules", `${line("베스트", best, "pos")}<br>${line("워스트", worst, "neg")}`);
+      const ranked = [...stats].sort((a, b) => (b.win - a.win) || (b.avg_fwd20 - a.avg_fwd20));
+      const row = (s, cls) => `<div class="ws-rule-row"><b class="${cls}">${s.side === "buy" ? "🟢" : "🔴"} ${s.name}</b>
+        <span class="sub-note">승률 ${(s.win * 100).toFixed(0)}% · 20일 ${s.avg_fwd20 >= 0 ? "+" : ""}${(s.avg_fwd20 * 100).toFixed(1)}% · n=${s.n}</span></div>`;
+      fill("ws-rules", ranked.slice(0, 3).map((s) => row(s, "pos")).join("")
+        + `<div class="ws-rule-div sub-note">이 종목에서 안 통한 원칙</div>`
+        + row(ranked[ranked.length - 1], "neg"));
     }
   });
 
@@ -5639,10 +5663,25 @@ function wsShow(key) {
         note = `${ll} 매출${yoy != null ? ` <b class="${yoy >= 0 ? "pos" : "neg"}">${yoy >= 0 ? "+" : ""}${(yoy * 100).toFixed(1)}% YoY</b>` : ""}
           ${opm != null ? ` · 영업이익률 ${(opm * 100).toFixed(1)}%` : ""}`;
       }
-      const caps = [m.roe != null && `ROE ${m.roe}%`, m.debtRatio != null && `부채비율 ${m.debtRatio}%`]
-        .filter(Boolean).join(" · ");
-      fill("ws-fin", (bars || `<p class="mini-note">분기 재무 없음</p>`) +
-        `<div class="sub-note">${note}${note && caps ? " · " : ""}${caps}</div>`);
+      // 최근 분기 3행(매출·영업이익·순이익 + YoY) — 카드에서 바로 실적 레벨이 읽히게
+      let tb = "";
+      if (qs.length) {
+        const [ll, lr] = qs[qs.length - 1];
+        const prevY = qs.find(([l2]) => l2 === `${String(+ll.slice(0, 2) - 1).padStart(2, "0")}${ll.slice(2)}`);
+        const u = mk === "kr" ? "억" : "M$";
+        const rowf = (lab, cur, pv) => {
+          if (cur == null) return "";
+          const yy = pv ? (cur / pv - 1) * 100 : null;
+          return `<div class="ws-kv-row"><span>${lab}</span><b>${Math.round(cur).toLocaleString()}${u}</b>
+            ${yy != null && isFinite(yy) ? `<i class="${yy >= 0 ? "pos" : "neg"}">${yy >= 0 ? "+" : ""}${yy.toFixed(1)}%</i>` : "<i>-</i>"}</div>`;
+        };
+        tb = `<div class="ws-kv-h">${ll} <span class="sub-note">(YoY)</span></div>`
+          + rowf("매출", lr.rev, prevY?.[1]?.rev) + rowf("영업이익", lr.op, prevY?.[1]?.op) + rowf("순이익", lr.np, prevY?.[1]?.np);
+      }
+      const caps = [m.roe != null && `ROE ${m.roe}%`, m.debtRatio != null && `부채비율 ${m.debtRatio}%`,
+                    m.quickRatio != null && `당좌비율 ${m.quickRatio}%`].filter(Boolean).join(" · ");
+      fill("ws-fin", (bars || `<p class="mini-note">분기 재무 없음</p>`) + tb +
+        `<div class="sub-note">${caps}</div>`);
     });
     // ④ 밸류에이션 — PER·PBR·선행PER + 참고 내재가치(RIM 기본가정)
     const est = (co.fin_ext || []).filter((r) => r.est && r.eps).pop();
@@ -5662,11 +5701,18 @@ function wsShow(key) {
         ivLine = `<div class="sub-note">참고 내재가치(RIM) ${fmtPrice(iv, mk)}${gap != null ? ` — 현재가 대비 <b class="${gap >= 0 ? "pos" : "neg"}">${pct(gap, 0)}</b>` : ""}</div>`;
       }
     }
-    fill("ws-val", `PER <b>${m.per ?? "-"}</b> · PBR <b>${m.pbr ?? "-"}</b>${fwd ? ` · 선행PER <b>${fwd.toFixed(1)}</b>` : ""}
+    const dy = m.dps && price ? (m.dps / price * 100) : null;
+    const peerPers = (co.peers || []).map((x) => EXTRAS.company?.map?.[`kr_${x.ticker}`]?.metrics?.per).filter((v) => Number.isFinite(v));
+    const peerAvg = peerPers.length ? peerPers.reduce((a, b) => a + b, 0) / peerPers.length : null;
+    fill("ws-val", `<div class="ws-kv-row"><span>PER</span><b>${m.per ?? "-"}배</b>
+        ${peerAvg ? `<i class="sub-note">동종 ${peerPers.length}사 평균 ${peerAvg.toFixed(1)}배 — ${m.per != null ? (m.per < peerAvg ? "낮음" : "높음") : "-"}</i>` : "<i></i>"}</div>
+      <div class="ws-kv-row"><span>PBR</span><b>${m.pbr ?? "-"}배</b><i class="sub-note">${m.bps ? `BPS ${Math.round(m.bps).toLocaleString()}` : ""}</i></div>
+      ${fwd ? `<div class="ws-kv-row"><span>선행 PER</span><b>${fwd.toFixed(1)}배</b><i class="sub-note">${est.y} 추정 EPS 기준</i></div>` : ""}
+      ${dy ? `<div class="ws-kv-row"><span>배당수익률</span><b>${dy.toFixed(2)}%</b><i class="sub-note">DPS ${Math.round(m.dps).toLocaleString()}원</i></div>` : ""}
       ${ivLine || `<div class="sub-note">내재가치 데이터 없음</div>`}`);
     // ⑦ 공시·뉴스
     const fe = EXTRAS.feed?.map?.[key] || EXTRAS.feed?.[key] || {};
-    const disc = (fe.disc || []).slice(0, 2), news = (fe.news || []).slice(0, 2);
+    const disc = (fe.disc || []).slice(0, 4), news = (fe.news || []).slice(0, 3);
     if (!disc.length && !news.length) fill("ws-feed", `<p class="mini-note">최근 공시·뉴스 없음</p>`);
     else fill("ws-feed",
       disc.map((d) => `<div class="ws-feed-row">📄 <a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>
@@ -5683,10 +5729,13 @@ function wsShow(key) {
     if (!g) fill("ws-ind", `<p class="mini-note">산업 분류 없음</p>`);
     else {
       const rank = [...groups].sort((a, b) => (b.m1 ?? -9) - (a.m1 ?? -9)).findIndex((x) => x.grp === g.grp) + 1;
-      const peers = (EXTRAS.company?.map?.[key]?.peers || []).length;
+      const plist = (EXTRAS.company?.map?.[key]?.peers || []).slice(0, 3);
       fill("ws-ind", `${gmeta?.icon || ""} <b>${g.name}</b> — 1개월 <b class="${(g.m1 ?? 0) >= 0 ? "pos" : "neg"}">${pct(g.m1 ?? 0, 1)}</b>
         <span class="sub-note">(${groups.length}개 산업 중 ${rank}위 · 시장 대비 ${pct(g.rs_m1 ?? 0, 1)})</span>
-        <div class="sub-note">3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목${peers ? ` · 동종비교 ${peers}사는 종목조회에서` : ""}</div>`);
+        <div class="sub-note">1주 ${pct(g.w1 ?? 0, 1)} · 3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목</div>
+        ${plist.length ? `<div class="ws-kv-h">동종 상위</div>` + plist.map((x) =>
+          `<div class="ws-kv-row"><span>${x.name}</span><b class="${(x.chg || 0) >= 0 ? "kup" : "kdn"}">${x.chg != null ? (x.chg >= 0 ? "+" : "") + x.chg.toFixed(1) + "%" : "-"}</b>
+             <i class="sub-note">${x.price != null ? Math.round(x.price).toLocaleString() + "원" : ""}</i></div>`).join("") : ""}`);
     }
   }
 }
@@ -7711,15 +7760,21 @@ function renderLookupPeers(st) {
     // 비교 기준을 맞추려고 조회 종목(self) 행을 맨 위에 함께 넣는다.
     const met = (tk) => EXTRAS.company?.map?.[`kr_${tk}`]?.metrics || {};
     const nf1 = (v) => (v == null || !isFinite(v) ? "-" : v.toFixed(1) + "배");
+    /* 🐞기준 종목(self) 행의 주가·등락률이 비어 있었다(사용자 제보).
+       원인 2가지: ①freshQuote()의 반환 키는 `cur/chg`인데 `price`로 읽었고
+                  ②등락률을 아예 null로 넣었다. 또 chg 단위가 다르다 —
+                  freshQuote는 **비율**(0.0123), 피어 API는 **퍼센트**(1.23) → self만 ×100 해서 맞춘다. */
+    const fq = freshQuote(st);
     const all = [{ ticker: st.ticker, name: st.name, self: true,
-                   price: freshQuote(st)?.price ?? null, chg: null }, ...peers];
+                   price: fq?.cur ?? null,
+                   chg: fq?.chg != null ? +(fq.chg * 100).toFixed(2) : null }, ...peers];
     const rows = all.map((p) => {
       const m = met(p.ticker);
       return `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("kr", p.ticker)}>
       <td class="hld-name"><img class="mv-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${p.ticker}.svg" onerror="this.style.visibility='hidden'">
         <span><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></span></td>
       <td class="scr-r">${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
-      <td class="scr-r ${(p.chg || 0) >= 0 ? "pos" : "neg"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg + "%" : "-"}</td>
+      <td class="scr-r ${p.chg == null ? "" : p.chg >= 0 ? "kup" : "kdn"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg.toFixed(2) + "%" : "-"}</td>
       <td class="scr-r">${nf1(m.per)}</td>
       <td class="scr-r">${nf1(m.pbr)}</td></tr>`;
     }).join("");
@@ -8468,10 +8523,17 @@ function renderLookupFeed(st) {
   const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
   if (!fd || (!fd.disc?.length && !fd.news?.length)) { wrap.style.display = "none"; return; }
   wrap.style.display = "grid";
-  $("#lookup-disc").innerHTML = fd.disc?.length
-    ? fd.disc.map((d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(5)}</span>
-        ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>` : `<span>${d.title}</span>`}</div>`).join("")
-    : `<p class="mini-note">최근 6개월 공시 없음</p>`;
+  // 공시는 1년 전량(최대 120건)을 담는다 → 기본 12건만 보이고 나머지는 '더 보기'로 펼친다
+  const discRow = (d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(2)}</span>
+        ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>` : `<span>${d.title}</span>`}</div>`;
+  const dl = fd.disc || [];
+  $("#lookup-disc").innerHTML = dl.length
+    ? dl.slice(0, 12).map(discRow).join("")
+      + (dl.length > 12
+        ? `<details class="lk-feed-more"><summary>+ ${dl.length - 12}건 더 보기 <span class="sub-note">(최근 1년)</span></summary>
+             ${dl.slice(12).map(discRow).join("")}</details>`
+        : "")
+    : `<p class="mini-note">최근 1년 공시 없음</p>`;
   $("#lookup-news").innerHTML = fd.news?.length
     ? fd.news.map((n) => `<div class="lk-feed-row"><span class="lk-feed-date">${n.t}</span>
         <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
