@@ -2050,6 +2050,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v219", "2026-08-01", "관심종목 재무 그래프를 추이형 스파크라인으로 교체", "막대 방식은 분기 간 값 차이가 작으면 전부 비슷한 높이로 보여 추이가 읽히지 않았습니다(사용자 피드백). **매출·영업이익·순이익 각각을 면적 스파크라인**(자기 범위로 증폭, 높이 확대)으로 바꿔 방향과 굴곡이 한눈에 보이게 했고, 각 줄 오른쪽에 최근 분기 값을 붙였습니다. 적자 구간이 있으면 0선(점선)이 표시되고 점에 커서를 올리면 분기별 값이 나옵니다. 함께: 전년 동분기가 0에 가까울 때 YoY가 '-5,815%' 같은 허수로 표시되던 것을 **흑자전환/적자전환** 표기로 정리했습니다."],
   ["v218", "2026-08-01", "관심종목 카드 심화(재무 3종 그래프·밸류 확장·산업지표) + UI 정리", "①**관심종목 재무 카드** — 매출만 있던 분기 그래프를 **매출·영업이익·순이익 3줄 미니 막대**로 확장(각자 스케일, 적자 분기는 파란 막대). ②**밸류에이션 카드 보강** — PBR도 동종 평균과 비교, **PSR**(시총÷최근 연매출), **EPS 4개년 추이 막대**(추정치는 빗금) 추가. ③**산업 맥락 카드에 산업 진단의 실물 지표 연동** — 소속 산업의 수출금액지수(한국은행)·글로벌 프록시(SOX 등) 3종을 3개월 변화율과 함께 표시. 월간·주간 시계열의 주기가 섞여 있어 잘못 계산되던 문제(+229%로 표시)도 함께 수정. ④**종목조회 검색창을 맨 왼쪽으로** 이동, '전체 적용' 버튼 제거(라디오 '전체 신호'와 중복) 후 '신호 끄기' 버튼을 주변 요소와 같은 크기로 정리."],
   ["v217", "2026-08-01", "유니버스 전 상장 확장 + 관심종목 카드 정보 확대 + 공시 1년 전량", "①**한국 유니버스를 1,200 → 2,564종목(전 상장, 스팩·우선주 제외)으로 확장** — 이제 코스피·코스닥 거의 모든 종목이 조회됩니다(10년 일봉·원칙 신호 포함). 신규 종목의 재무·기업개요는 며칠에 걸쳐 자동 충전됩니다. ②**관심종목 카드 정보 확대** — 심층 보고서 카드에 신호등 3개+한 줄 결론, 추이 카드에 기간 수익률 4구간·신호 이력·베타/변동성, 재무 카드에 최근 분기 매출/영업이익/순이익 YoY 표, 밸류에이션에 동종업계 평균 대비·배당수익률, 수급을 5일/20일 2단 표로, 산업 카드에 동종 상위 3사 등락, 공시 4건+뉴스 3건, 원칙 성적 상위 3+워스트. ③**종목별 공시가 실제 1년치로** — 기존엔 최신 15건에서 끊겨 활발한 대형주는 2~3주치만 보였습니다(SK하이닉스 실측 15건 → 400건). 기본 12건 표시 + '더 보기'로 펼침. ④동종업계 비교에 기준 종목의 주가·등락률 표시."],
   ["v216", "2026-07-31", "그리기 도구 대폭 개선 + 크립토 전체선택 + 공시 전량 수집", "①**차트 그리기 도구 개편** — 그린 선을 지우기 어렵던 문제를 해결했습니다. 얇은 선도 쉽게 집도록 **투명한 두꺼운 클릭 영역**을 깔았고, 그림을 클릭하면 선택(강조)된 뒤 **Delete 키·✕ 버튼·우클릭** 어느 쪽으로도 지울 수 있습니다. **Ctrl+Z 되돌리기**(최근 30단계, 전체삭제도 복구)도 넣었습니다. 도구는 추세선·박스권에 더해 **수평선(지지·저항, 가격 라벨 자동)·수직선(날짜)·화살표·피보나치 되돌림(23.6~78.6% 자동)·텍스트 메모** 5종을 추가했습니다. 수평선·수직선·텍스트는 클릭 한 번으로 그려집니다. ②**크립토 차트에 전체 선택/해제 버튼** 추가(코인 12개를 하나씩 끄던 수고 제거). ③**공시 스캐너가 전체 공시를 담도록** 변경 — 코스피·코스닥만 남기던 필터 때문에 전체의 39%(기타·코넥스)가 빠져 정기공시가 누락돼 보였습니다. 하루 평균 501건 → 729건. ④종목조회 고정 헤더 위 빈틈 제거. ⑤재무 차트가 통째로 사라지던 버그 수정(대한항공 등 37종목 — 값이 없는 해에서 계산이 깨지며 차트 전체 좌표가 무효화되던 문제)."],
@@ -5647,22 +5648,36 @@ function wsShow(key) {
       const qs = Object.entries(blk?.quarter || {}).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
       let bars = "";
       if (qs.length >= 2) {
-        // 매출·영업이익·순이익을 각자 줄로(스케일이 크게 달라 한 축에 못 섞는다). 음수는 아래쪽·파랑.
-        const row = (lab2, k2, color) => {
-          const vals = qs.map(([, r]) => r[k2]);
-          if (!vals.some((v) => Number.isFinite(v))) return "";
-          const mx = Math.max(...vals.filter(Number.isFinite).map(Math.abs), 1);
+        /* v219(사용자 피드백): 막대는 값 차이가 작으면 전부 비슷한 높이라 추이가 안 읽힌다
+           → 시리즈별 **면적 스파크라인**(자기 min~max로 증폭, 0선 점선)으로 교체 + 높이 확대. */
+        const spark = (lab2, k2, color) => {
+          const pts = qs.map(([lab3, r], i) => ({ i, lab: lab3, v: r[k2] })).filter((x) => Number.isFinite(x.v));
+          if (pts.length < 2) return "";
+          const vs = pts.map((x) => x.v);
+          let lo = Math.min(...vs), hi = Math.max(...vs);
+          if (lo > 0) lo = Math.min(lo * 0.92, lo);          // 살짝 여백 — 추이는 min~max로 증폭
+          if (hi === lo) { hi += 1; lo -= 1; }
+          const W = 300, H = 44;
+          const X = (i) => 6 + (i / (qs.length - 1)) * (W - 12);
+          const Y = (v) => 5 + (hi - v) / (hi - lo) * (H - 12);
+          const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
+          const area = `${X(pts[0].i).toFixed(1)},${H - 3} ${line} ${X(pts[pts.length - 1].i).toFixed(1)},${H - 3}`;
+          const zero = (lo < 0 && hi > 0)
+            ? `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8b8b93" stroke-dasharray="3 3" stroke-width="0.8"/>` : "";
+          const last = pts[pts.length - 1];
+          const u2 = mk === "kr" ? "억" : "M$";
           return `<div class="ws-fin-row"><span class="ws-fin-lab">${lab2}</span>
-            <span class="ws-fin-bars">${qs.map(([lab3, r]) => {
-              const v = r[k2];
-              if (!Number.isFinite(v)) return `<i class="nil"></i>`;
-              const h = Math.max(8, Math.abs(v) / mx * 100);
-              return `<i class="${v < 0 ? "neg" : ""}" title="${lab3} ${lab2} ${Math.round(v).toLocaleString()}"
-                style="height:${h}%;background:${v < 0 ? "var(--kdn)" : color}"></i>`;
-            }).join("")}</span></div>`;
+            <svg viewBox="0 0 ${W} ${H}" class="ws-fin-spark" preserveAspectRatio="none">
+              ${zero}
+              <polygon points="${area}" fill="${color}" opacity="0.14"/>
+              <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.8"/>
+              ${pts.map((x) => `<circle cx="${X(x.i).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="2"
+                 fill="${x.v < 0 ? "var(--kdn)" : color}"><title>${x.lab} ${lab2} ${Math.round(x.v).toLocaleString()}${u2}</title></circle>`).join("")}
+            </svg>
+            <b class="ws-fin-last ${last.v < 0 ? "kdn" : ""}">${Math.round(last.v).toLocaleString()}${u2}</b></div>`;
         };
-        bars = row("매출", "rev", "#4391ff") + row("영업이익", "op", "#22c07a") + row("순이익", "np", "#9d7bff")
-          + `<div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]}</span></div>`;
+        bars = spark("매출", "rev", "#4391ff") + spark("영업이익", "op", "#22c07a") + spark("순이익", "np", "#9d7bff")
+          + `<div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]} · 점에 커서=값</span></div>`;
       }
       // 최근 분기 3행(매출·영업이익·순이익 + YoY) — 카드에서 바로 실적 레벨이 읽히게
       let tb = "";
@@ -5672,9 +5687,17 @@ function wsShow(key) {
         const u = mk === "kr" ? "억" : "M$";
         const rowf = (lab, cur, pv) => {
           if (cur == null) return "";
-          const yy = pv ? (cur / pv - 1) * 100 : null;
-          return `<div class="ws-kv-row"><span>${lab}</span><b>${Math.round(cur).toLocaleString()}${u}</b>
-            ${yy != null && isFinite(yy) ? `<i class="${yy >= 0 ? "pos" : "neg"}">${yy >= 0 ? "+" : ""}${yy.toFixed(1)}%</i>` : "<i>-</i>"}</div>`;
+          // ⚠기저(전년 동분기)가 0 근처거나 부호가 바뀌면 %는 허수가 된다(실측 "-5815%") → 흑전/적전으로
+          let yTxt = "<i>-</i>";
+          if (pv != null && isFinite(pv)) {
+            if (pv < 0 && cur >= 0) yTxt = `<i class="pos">흑자전환</i>`;
+            else if (pv >= 0 && cur < 0) yTxt = `<i class="neg">적자전환</i>`;
+            else if (Math.abs(pv) > Math.abs(cur) * 0.02) {
+              const yy = (cur / pv - 1) * 100;
+              yTxt = `<i class="${yy >= 0 ? "pos" : "neg"}">${yy >= 0 ? "+" : ""}${yy.toFixed(1)}%</i>`;
+            }
+          }
+          return `<div class="ws-kv-row"><span>${lab}</span><b>${Math.round(cur).toLocaleString()}${u}</b>${yTxt}</div>`;
         };
         tb = `<div class="ws-kv-h">${ll} <span class="sub-note">(YoY)</span></div>`
           + rowf("매출", lr.rev, prevY?.[1]?.rev) + rowf("영업이익", lr.op, prevY?.[1]?.op) + rowf("순이익", lr.np, prevY?.[1]?.np);

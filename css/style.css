@@ -1883,3 +1883,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-fin-bars i.nil { background: rgba(255,255,255,.08); height: 3px; }
 .ws-fin-bars.eps i { background: #f0b34c; }
 .ws-fin-bars.eps i.est { background: repeating-linear-gradient(45deg, #f0b34c, #f0b34c 3px, rgba(240,179,76,.35) 3px, rgba(240,179,76,.35) 6px); }
+/* 관심종목 재무 — 면적 스파크라인(v219): 추이 증폭 + 높이 확대 */
+.ws-fin-spark { flex: 1; height: 44px; display: block; }
+.ws-fin-last { flex: 0 0 74px; text-align: right; font-size: .8rem; }
+.ws-fin-last.kdn { color: var(--kdn); }
