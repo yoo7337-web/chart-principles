@@ -13,7 +13,9 @@
  *   관심종목 하나 바꿔도 포트폴리오까지 다시 쓰게 된다.
  */
 (() => {
-  const KEYS = ["cp_watch_v1", "cp_devlog_v1", "cp_memo_v1", "cp_journal_v1",
+  // ⚠새 개인 데이터 키를 만들면 **여기에도 반드시 추가**할 것. app.js의 BACKUP_KEYS(파일 백업)와
+  //   별개라, 여기 빠지면 다른 기기에서 그 데이터만 비어 보인다(2026-08-01 투자 다이어리 실사고).
+  const KEYS = ["cp_watch_v1", "cp_devlog_v1", "cp_memo_v1", "cp_journal_v1", "cp_diary_v1",
                 "cp_portfolio_v2", "cp_portfolio_v1", "cp_toss_v1", "cp_pf_hist_v1", "cp_draw_v1"];
   const META = "cp_sync_meta_v1";      // {키: 로컬 최종수정 ms}
   const COL = "marketApp";             // To-Do의 boards/backups와 분리된 컬렉션
