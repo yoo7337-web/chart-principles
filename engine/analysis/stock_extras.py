@@ -331,6 +331,116 @@ def kr_company(code: str) -> dict:
     return out
 
 
+
+def kr_dart_profile(corp_code: str, key: str, year: str) -> dict:
+    """DART 기업개황+직원+배당 → profile (v221 기업개요 보강). 3콜/종목·연 1회 갱신(yr 스탬프)."""
+    out = {"yr": year}
+    try:  # 기업개황: 대표/설립일/주소/홈페이지/결산월
+        c = _getj(f"https://opendart.fss.or.kr/api/company.json?crtfc_key={key}&corp_code={corp_code}")
+        if c.get("status") == "020":
+            raise RuntimeError("DART_LIMIT")
+        if c.get("status") == "000":
+            if c.get("ceo_nm"):
+                out["ceo"] = c["ceo_nm"].strip()[:40]
+            est = (c.get("est_dt") or "").strip()
+            if len(est) == 8:
+                out["est"] = f"{est[:4]}-{est[4:6]}-{est[6:]}"
+            adr = (c.get("adres") or "").strip()
+            if adr:
+                out["addr"] = adr[:60]
+            hm = (c.get("hm_url") or "").strip().rstrip("/")
+            if hm and "." in hm:
+                out["url"] = hm if hm.startswith("http") else "http://" + hm
+            if c.get("acc_mt"):
+                out["acc_mt"] = c["acc_mt"].strip()
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+    time.sleep(0.25)
+    try:  # 직원 현황(사업보고서): 총원·1인 평균급여(백만원)·평균 근속연수 — 성별/부문 행을 인원 가중 평균
+        e = _getj(f"https://opendart.fss.or.kr/api/empSttus.json?crtfc_key={key}"
+                  f"&corp_code={corp_code}&bsns_year={year}&reprt_code=11011")
+        if e.get("status") == "020":
+            raise RuntimeError("DART_LIMIT")
+        if e.get("status") == "000":
+            tot = 0
+            sal_w = sal_n = ten_w = ten_n = 0.0
+            for r in e.get("list", []):
+                n = _num(str(r.get("sm", "")).replace(",", ""))
+                if not n or n <= 0:
+                    continue
+                tot += int(n)
+                s = _num(str(r.get("jan_salary_am", "")).replace(",", ""))
+                if s and s > 1e6:  # 원 단위(연봉)만 — '-'·백만원 표기 혼재 방어
+                    sal_w += s * n
+                    sal_n += n
+                mten = re.search(r"[\d.]+", str(r.get("avrg_cnwk_sdytrn", "")))
+                if mten and mten.group() != ".":
+                    ten_w += float(mten.group()) * n
+                    ten_n += n
+            if tot:
+                out["emp"] = tot
+            if sal_n:
+                out["salary_mn"] = round(sal_w / sal_n / 1e6)   # 1인 평균급여(백만원)
+            if ten_n:
+                out["tenure_y"] = round(ten_w / ten_n, 1)       # 평균 근속(년)
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+    time.sleep(0.25)
+    try:  # 배당(사업보고서): 주당배당금 3개년·배당성향·시가배당률 — 보통주 행만
+        a = _getj(f"https://opendart.fss.or.kr/api/alotMatter.json?crtfc_key={key}"
+                  f"&corp_code={corp_code}&bsns_year={year}&reprt_code=11011")
+        if a.get("status") == "020":
+            raise RuntimeError("DART_LIMIT")
+        if a.get("status") == "000":
+            def _v(row, kk):
+                return _num(str(row.get(kk, "")).replace(",", "").replace("%", ""))
+            for r in a.get("list", []):
+                se = (r.get("se") or "").replace(" ", "")
+                knd = (r.get("stock_knd") or "")
+                if "우선" in knd:
+                    continue
+                if "주당현금배당금" in se and "dps_y" not in out:
+                    ys = [_v(r, "lwfr"), _v(r, "frmtrm"), _v(r, "thstrm")]
+                    if any(v for v in ys):
+                        out["dps_y"] = ys      # [전전기, 전기, 당기]
+                elif "현금배당성향" in se and _v(r, "thstrm") is not None:
+                    out["payout"] = _v(r, "thstrm")
+                elif "현금배당수익률" in se and _v(r, "thstrm") is not None:
+                    out["yld"] = _v(r, "thstrm")
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+    time.sleep(0.25)
+    return out if len(out) > 1 else {}
+
+
+def us_profile(tk: str) -> dict:
+    """yfinance .info 확장 필드 → profile (직원수·본사·섹터·경영진)."""
+    import yfinance as yf
+    out = {}
+    try:
+        i = yf.Ticker(tk).info
+        if i.get("fullTimeEmployees"):
+            out["emp"] = i["fullTimeEmployees"]
+        loc = ", ".join(x for x in [i.get("city"), i.get("state"), i.get("country")] if x)
+        if loc:
+            out["hq"] = loc[:60]
+        if i.get("sector"):
+            out["sector"] = i["sector"]
+        offs = [{"name": o.get("name", "")[:40], "title": (o.get("title") or "")[:60]}
+                for o in (i.get("companyOfficers") or [])[:5] if o.get("name")]
+        if offs:
+            out["officers"] = offs
+    except Exception:
+        pass
+    return out
+
+
 def us_company(tk: str) -> dict:
     import yfinance as yf
     out = {}
@@ -602,6 +712,9 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
     for i, tk in enumerate(tickers, 1):
         d = us_company(tk)
         if d:
+            up = us_profile(tk)
+            if up:
+                d["profile"] = up
             cmap[f"us_{tk}"] = d
         if i % 25 == 0:
             print(f"  [US company] {i}/{len(tickers)}")
@@ -641,6 +754,10 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
                 continue
             old = prev.get(k, {})
             est = [r for r in cmap[k].get("fin", []) if r.get("est")]
+            op = old.get("profile") or {}
+            prof_ok = op.get("yr") == target_year
+            if prof_ok:
+                cmap[k]["profile"] = op
             if old.get("fin_src") == "DART" and any(r["y"] == target_year for r in old.get("fin", [])):
                 cmap[k]["fin"] = ([r for r in old["fin"] if not r.get("est")] + est)[-6:]
                 cmap[k]["fin_src"] = "DART"
@@ -648,7 +765,8 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
                     cmap[k]["holders"] = old["holders"]
                     if old.get("minor_pct") is not None:
                         cmap[k]["minor_pct"] = old["minor_pct"]
-                    continue  # 최신 사업연도 fin+주주 모두 보유
+                    if prof_ok:
+                        continue  # 최신 사업연도 fin+주주+프로필 모두 보유
             if fail_streak >= 5:
                 continue  # 쿨다운 감지 — 남은 종목은 다음 실행에서
             try:
@@ -679,6 +797,12 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
                     mp = _num(str(mr["list"][0].get("hold_stock_rate", "")).replace("%", ""))
                     if mp is not None:
                         cmap[k]["minor_pct"] = round(mp, 2)
+                if not prof_ok:  # 기업개황·직원·배당 (연 1회, yr 스탬프)
+                    prof = kr_dart_profile(_DART[1][code], _DART[0], target_year)
+                    if prof:
+                        cmap[k]["profile"] = prof
+                    elif op:
+                        cmap[k]["profile"] = op
                 fail_streak = 0
             except Exception:
                 fail_streak += 1
@@ -970,13 +1094,71 @@ def build_feed(quick: bool = False) -> dict:
     return fmap
 
 
+
+def run_profile_only():
+    """company.json 읽기→profile만 증분 보강→쓰기. generated 스탬프는 유지(주1 갱신 주기 불변).
+    ⚠동시 실행 금지: build_company(--company-only)가 도는 동안 실행하면 서로 덮어쓴다."""
+    global _DART
+    from datetime import date as _date
+    cur = _load(COMPANY)
+    cmap = cur.get("map") or {}
+    if not cmap:
+        print("company.json 없음 — 먼저 company 수집 필요")
+        return
+    target_year = str(_date.today().year - 1)
+    n_new = 0
+
+    def _save():
+        COMPANY.write_text(json.dumps({"generated": cur.get("generated"), "map": _scrub(cmap)},
+                                      ensure_ascii=False, allow_nan=False), encoding="utf-8")
+
+    key = _dart_key()
+    if key:
+        _DART = (key, _corp_codes(key))
+        todo = [k for k in cmap if k.startswith("kr_")
+                and (cmap[k].get("profile") or {}).get("yr") != target_year
+                and k[3:] in _DART[1]]
+        print(f"KR profile 대상 {len(todo)}종목 (3콜/종목)")
+        for i, k in enumerate(todo, 1):
+            try:
+                prof = kr_dart_profile(_DART[1][k[3:]], key, target_year)
+            except RuntimeError:
+                print(f"DART 일일 한도(020) — {i - 1}까지 저장 후 중단, 다음 실행에서 이어감")
+                break
+            if prof:
+                cmap[k]["profile"] = prof
+                n_new += 1
+            if i % 100 == 0:
+                print(f"  [KR profile] {i}/{len(todo)} (수집 {n_new})")
+                _save()  # 중간 저장 — 중단 대비
+    else:
+        print("DART_API_KEY 없음 — KR 건너뜀")
+    us_todo = [k for k in cmap if k.startswith("us_") and not cmap[k].get("profile")]
+    print(f"US profile 대상 {len(us_todo)}종목")
+    for i, k in enumerate(us_todo, 1):
+        up = us_profile(k[3:])
+        if up:
+            cmap[k]["profile"] = up
+            n_new += 1
+        if i % 25 == 0:
+            print(f"  [US profile] {i}/{len(us_todo)}")
+        time.sleep(0.2)
+    _save()
+    print(f"profile 보강 완료: 신규 {n_new}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--company-only", action="store_true")
     ap.add_argument("--feed-only", action="store_true")
     ap.add_argument("--quick", action="store_true", help="KR 20 + US 5 (검증용)")
+    ap.add_argument("--profile-only", action="store_true",
+                    help="company.json에 profile(개황·직원·배당/US 확장)만 증분 보강")
     args = ap.parse_args()
+    if args.profile_only:
+        run_profile_only()
+        return
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
 
     if not args.feed_only:
