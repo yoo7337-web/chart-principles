@@ -2366,6 +2366,7 @@ function initAiPanel() {
 }
 
 const DEV_HISTORY = [
+  ["v241", "2026-08-01", "💰 배당 섹션 — 배당수익률 추이까지 (한국 종목 신규 지원)", "배당 카드가 미국 종목의 분기 지급 이력만 보여주던 것을 전면 개편했습니다. ①**한국 종목도 지원** — 주당배당금 연도별 추이(추정 연도 포함). ②**배당수익률 시계열** — 저장된 값은 최신 1개뿐이라, 보유한 10년 일봉으로 **그해 배당÷그해 평균주가**를 직접 계산해 5~6개년 추이를 그립니다. '지금이 역사적으로 배당 매력이 높은 구간인가'를 판단할 수 있고, 현재값이 평균 대비 높/낮은지 한 줄로 짚어줍니다. ③**요약 타일 3개** — 시가배당률(기간 평균 대비), 배당성향, 연속 증액 연수. 미국 배당 이력도 3년 → 6년으로 늘려 재수집했습니다(94종목). 무배당 종목은 카드가 숨겨집니다."],
   ["v240", "2026-08-01", "AI 답변에 근거 원문 링크 + 후속 질문 + 모델 자동 전환", "①**근거 링크** — AI가 인용한 뉴스·공시에 번호(#3)가 붙고, 답변 아래 목록에서 눌러 **원문 기사·DART 공시로 바로 이동**합니다. 모델이 URL을 직접 쓰면 없는 주소를 지어내므로, 자료에 번호를 매겨 인용시키고 코드가 실제 링크로 바꿉니다. ②**후속 질문** — 답변 뒤 이어서 물으면 같은 구간·맥락을 유지한 채 대화가 쌓입니다('그때 수급은?' 식). 🗑로 초기화. ③**모델 자동 전환** — 무료 등급은 모델마다 한도가 따로라(gemini-3.5-flash는 하루 20회) 한도에 걸리면 다음 모델로 자동 전환해 계속 쓸 수 있게 했습니다. ④보조지표 툴바 테두리가 차트 오른쪽 끝까지 늘어나던 것을 내용 폭에 맞췄습니다."],
   ["v236", "2026-08-01", "실적발표 위젯 기본값을 '전체'로 — 미국 종목이 안 보이던 문제", "홈 화면 실적발표 목록의 시장 필터 기본값이 '한국'이라, META처럼 미국 종목의 발표 일정이 달력에는 있는데도 화면에 안 보였습니다(사용자 제보). **기본을 '전체'로 바꿔 한·미를 국기와 함께 한 목록에 날짜순으로** 보여주고, 선택한 필터는 브라우저에 기억되도록 했습니다."],
   ["v231", "2026-08-01", "🤖 AI 어시스턴트 — 어느 화면에서나 종목·시장 전반 질문", "우측 아래 🤖 버튼을 누르면 어디서든 질문할 수 있는 AI 패널이 열립니다. 질문에서 **종목과 의도를 자동으로 인식**해 필요한 자료만 찾아 답합니다 — 실적 발표 일정, 분기 실적·EPS 서프라이즈, 목표주가·애널리스트 분포, 최근 뉴스, 공시, 재무·밸류에이션, 배당, 사업 개요·매출 구성, 수급, 원칙 신호, 그리고 종목 없이 물으면 지수·업종·경제지표 일정까지. 예) \"META 실적발표 언제야\" · \"삼성전자 실적 정리해줘\" · \"SK하이닉스 목표주가\" · \"오늘 시장 어때\". 보유 자료에 없으면 지어내지 않고 '자료에 없다'고 답하도록 강제했습니다."],
@@ -8110,26 +8111,112 @@ function renderLookupStability(st) {
 }
 
 // 배당 이력 (미국): 분기 배당금 막대
+/* ---------- 💰 배당 섹션 (v241) — 스냅샷 안, DPS 막대 + 배당수익률/배당성향 라인 ----------
+   배당수익률은 저장값(최신 1개)뿐이라 추이를 못 봤다 → **그해 DPS ÷ 그해 평균 종가**로 직접 계산해
+   "지금이 역사적으로 배당 매력이 높은 구간인가"를 볼 수 있게 한다.
+   KR = fin_ext[].dps(연도별) + profile(배당성향·시가배당률) / US = dividend.history(분기 지급) 연 합계. */
+function divRows(st, co) {
+  const out = [];
+  if (st.market === "kr") {
+    (co.fin_ext || []).forEach((r) => {
+      if (r.dps == null || !r.dps) return;
+      out.push({ y: String(r.y).slice(0, 4), dps: r.dps, est: !!r.est });
+    });
+  } else {
+    const h = co.dividend?.history || [];
+    const byY = {};
+    h.forEach((x) => { const y = x.d.slice(0, 4); byY[y] = (byY[y] || 0) + (x.amt || 0); });
+    const cntY = {};
+    h.forEach((x) => { const y = x.d.slice(0, 4); cntY[y] = (cntY[y] || 0) + 1; });
+    const years = Object.keys(byY).sort();
+    // 지급 횟수가 그 종목의 최빈 횟수보다 적은 해 = 자료가 잘린 해 → 제외(연 배당을 과소 표시하지 않기 위해)
+    const mode = Math.max(...Object.values(cntY));
+    years.forEach((y) => { if (cntY[y] >= mode) out.push({ y, dps: +byY[y].toFixed(4), est: false }); });
+  }
+  return out.slice(-6);
+}
+
+/* 그해 평균 종가 — 배당수익률 계산용. 해당 연도 일봉이 20개 미만이면 null(부분 연도 왜곡 방지). */
+function yearAvgClose(series, y) {
+  const v = (series || []).filter((x) => x.t.startsWith(y)).map((x) => x.c);
+  return v.length >= 20 ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+
 function renderLookupDividend(st) {
   const host = $("#lookup-dividend");
-  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
-  const h = co?.dividend?.history;
-  if (!h || h.length < 2) { host.style.display = "none"; return; }
+  if (!host) return;
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
+  const rows = divRows(st, co);
+  const pr = co.profile || {};
+  const curYld = st.market === "kr" ? pr.yld : null;
+  const curPayout = st.market === "kr" ? pr.payout : (co.dividend?.payout ?? co.metrics?.payout);
+  if (rows.length < 2 && curYld == null && !co.dividend?.dps) { host.style.display = "none"; return; }
   host.style.display = "";
-  const total = h.reduce((s, x) => s + (x.amt || 0), 0);
-  const W = 660, H = 130, padL = 8, padT = 12, padB = 30;
-  const n = h.length, gw = (W - padL * 2) / n;
-  const maxV = Math.max(...h.map((x) => x.amt || 0), 0.01);
-  let bars = "", labels = "";
-  h.forEach((x, i) => {
-    const cx = padL + gw * i + gw / 2, bw = Math.min(20, gw * 0.5);
-    const bh = (x.amt || 0) / maxV * (H - padT - padB);
-    bars += `<rect x="${cx - bw / 2}" y="${H - padB - bh}" width="${bw}" height="${Math.max(1, bh)}" fill="#8b5cf6" rx="1.5"/>
-      <text x="${cx}" y="${H - padB - bh - 3}" font-size="8" text-anchor="middle" fill="#6b21a8">$${x.amt}</text>`;
-    if (i % 2 === 0 || n <= 8) labels += `<text x="${cx}" y="${H - 14}" font-size="8" text-anchor="middle" fill="#6b7280">${x.d.slice(2, 7)}</text>`;
+  const cur = st.market === "kr" ? "원" : "$";
+  const fmtD = (v) => (st.market === "kr" ? Math.round(v).toLocaleString() : v.toFixed(2));
+
+  // 연도별 배당수익률(그해 DPS ÷ 그해 평균 종가)
+  rows.forEach((r) => {
+    const avg = yearAvgClose(st.series, r.y);
+    r.yld = avg && r.dps ? (r.dps / avg) * 100 : null;
   });
-  host.innerHTML = `<h3 class="lk-h3">💰 배당금 지급 이력 <span class="sub-note">(최근 ${n}회 · 주당 총 $${total.toFixed(2)})</span></h3>
-    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${labels}</svg>`;
+  const yldRows = rows.filter((r) => r.yld != null);
+  const avgYld = yldRows.length ? yldRows.reduce((a, b) => a + b.yld, 0) / yldRows.length : null;
+
+  // 연속 증액 연수(추정 연도 제외)
+  const act = rows.filter((r) => !r.est);
+  let streak = 0;
+  for (let i = act.length - 1; i > 0; i--) { if (act[i].dps > act[i - 1].dps) streak++; else break; }
+
+  // ---- SVG: DPS 막대 + 배당수익률 라인(우축) ----
+  const W = 660, H = 190, padL = 10, padB = 30, padT = 26;
+  const n = rows.length, gw = (W - padL * 2) / Math.max(1, n);
+  const maxD = Math.max(...rows.map((r) => r.dps), 1);
+  const yB = (v) => padT + (1 - v / maxD) * (H - padT - padB);
+  const yl = yldRows.map((r) => r.yld);
+  const ylMin = Math.min(...yl, 0), ylMax = Math.max(...yl, 1);
+  const yL = (v) => padT + 4 + (ylMax - v) / (ylMax - ylMin || 1) * (H - padT - padB - 30);
+  let bars = "", labels = "", pts = [];
+  rows.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(38, gw * 0.5);
+    const y = yB(r.dps), h0 = padT + (H - padT - padB) - y;
+    bars += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${Math.max(1, h0)}"
+      fill="${r.est ? "#c9b26a" : "#e0a93f"}" rx="2"/>
+      <text x="${cx}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#a37a1c">${fmtD(r.dps)}</text>`;
+    if (r.yld != null) pts.push([cx, yL(r.yld), r.yld]);
+    labels += `<text x="${cx}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.y}${r.est ? "(E)" : ""}</text>`;
+  });
+  const line = pts.length > 1
+    ? `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#4391ff" stroke-width="2"/>` +
+      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.4" fill="#4391ff"/>
+        <text x="${p[0]}" y="${p[1] + (i % 2 ? 13 : -6)}" font-size="8.5" text-anchor="middle" fill="#2b6ed4">${p[2].toFixed(1)}%</text>`).join("")
+    : "";
+
+  // ---- 요약 타일 ----
+  const lastYld = yldRows.length ? yldRows[yldRows.length - 1].yld : null;
+  const vs = (lastYld != null && avgYld) ? lastYld - avgYld : null;
+  const tiles = [
+    ["시가배당률", curYld != null ? curYld.toFixed(1) + "%" : (lastYld != null ? lastYld.toFixed(1) + "%" : "-"),
+      avgYld != null ? `${rows.length}년 평균 ${avgYld.toFixed(1)}%` : ""],
+    ["배당성향", curPayout != null ? Number(curPayout).toFixed(1) + "%" : "-", "순이익 중 배당 비중"],
+    ["연속 증액", streak > 0 ? streak + "년" : "없음",
+      act.length >= 2 ? `직전 ${fmtD(act[act.length - 2].dps)} → ${fmtD(act[act.length - 1].dps)}${cur}` : ""],
+  ];
+  const verdict = vs == null ? "" :
+    `<p class="sub-note" style="margin-top:6px">${vs >= 0.3
+      ? `📌 현재 배당수익률이 최근 평균보다 <b class="pos">${vs.toFixed(1)}%p 높습니다</b> — 주가가 배당 대비 낮은 구간(배당 매력↑).`
+      : vs <= -0.3
+        ? `📌 현재 배당수익률이 최근 평균보다 <b class="neg">${Math.abs(vs).toFixed(1)}%p 낮습니다</b> — 주가 상승 또는 배당 축소로 배당 매력↓.`
+        : `📌 현재 배당수익률은 최근 평균과 비슷한 수준입니다.`}</p>`;
+
+  host.innerHTML = `<h3 class="lk-h3">💰 배당 <span class="sub-note">(주당배당금 ${cur} · 배당수익률=그해 배당÷그해 평균주가로 산출${
+    st.market === "kr" ? " · 출처 DART·네이버" : " · 출처 Yahoo"}${rows.some((r) => r.est) ? " · (E)=추정" : ""})</span></h3>
+    <div class="div-tiles">${tiles.map(([k, v, s]) =>
+      `<div class="div-tile"><span class="sub-note">${k}</span><b>${v}</b>${s ? `<span class="sub-note">${s}</span>` : ""}</div>`).join("")}</div>
+    ${rows.length >= 2 ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${line}${labels}</svg>
+    <p class="legend" style="margin-top:2px"><span style="color:#e0a93f">■</span> 주당배당금 ·
+      <span style="color:#4391ff">●─</span> 배당수익률(%)</p>` : `<p class="mini-note">연도별 배당 이력이 부족해 추이 그래프는 생략했습니다.</p>`}
+    ${verdict}`;
 }
 
 // 실적 서프라이즈 (미국): EPS 발표치 vs 예상치 + 서프라이즈%

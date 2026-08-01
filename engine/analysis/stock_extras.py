@@ -636,7 +636,7 @@ def us_company(tk: str) -> dict:
                 out["surprise"] = {"eps": eps}
     except Exception:
         pass
-    try:  # 배당 이력 (최근 3년)
+    try:  # 배당 이력 (최근 6년 — 연도별 배당수익률 시계열용, v241)
         i = t.info
         dv = {}
         if i.get("dividendRate"):
@@ -646,11 +646,12 @@ def us_company(tk: str) -> dict:
         try:
             ds = t.dividends
             if ds is not None and len(ds):
-                cut = datetime.now(timezone.utc) - timedelta(days=1100)
+                # 6년치를 담아야 '완결된 연도' 5개가 남아 연도별 배당수익률 추이를 그릴 수 있다
+                cut = datetime.now(timezone.utc) - timedelta(days=2200)
                 hist = [{"d": idx.strftime("%Y-%m-%d"), "amt": round(float(v), 4)}
                         for idx, v in ds.items() if idx.to_pydatetime().replace(tzinfo=timezone.utc) >= cut]
                 if hist:
-                    dv["history"] = hist[-12:]
+                    dv["history"] = hist[-30:]
         except Exception:
             pass
         if dv:
