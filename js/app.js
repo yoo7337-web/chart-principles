@@ -161,6 +161,7 @@ function activateTab(tabId) {
   if (tabId === "screener" && !screenerRendered) initScreener();
   if (tabId === "value" && !valRendered) initValue();
   if (tabId === "journal" && !journalRendered) initJournal();
+  if (tabId === "diary" && !diaryRendered) initDiary();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
@@ -2365,7 +2366,185 @@ function initAiPanel() {
   });
 }
 
+
+/* ---------- 📔 투자 다이어리 (v242) — 느낀 점·궁금한 것을 그때그때 적는 공간 ----------
+   매매일지가 '거래 기록'이라면 이건 '생각 기록'이다. 종목·수익률과 무관하게 써도 되고,
+   ❓궁금 유형은 답을 찾으면 해결 표시를 해 **미해결 질문만 따로 모아본다**(질문이 묻히지 않게).
+   ⚠개인 기록이라 localStorage(+로그인 시 개인 Firestore)에만 저장 — 공개 저장소로 나가지 않는다. */
+const DI_KEY = "cp_diary_v1";
+const DI_TYPES = [
+  { k: "think", ico: "💭", name: "생각" },
+  { k: "ask", ico: "❓", name: "궁금" },
+  { k: "learn", ico: "📌", name: "배움" },
+  { k: "regret", ico: "⚠️", name: "반성" },
+];
+let diFilter = "all";
+let diEditId = null;
+let diaryRendered = false;
+
+function diLoad() { try { return JSON.parse(localStorage.getItem(DI_KEY)) || []; } catch (e) { return []; } }
+function diSave(a) { localStorage.setItem(DI_KEY, JSON.stringify(a)); }
+const diMeta = (k) => DI_TYPES.find((x) => x.k === k) || DI_TYPES[0];
+const diEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function initDiary() {
+  diaryRendered = true;
+  if (!LOOKUP_INDEX) initLookup();          // 종목 자동완성 datalist 재사용
+  $("#di-types").innerHTML = DI_TYPES.map((t, i) =>
+    `<button type="button" class="chip${i === 0 ? " active" : ""}" data-t="${t.k}">${t.ico} ${t.name}</button>`).join("");
+  $("#di-types").querySelectorAll(".chip").forEach((b) => b.onclick = () =>
+    $("#di-types").querySelectorAll(".chip").forEach((x) => x.classList.toggle("active", x === b)));
+  $("#di-filter").querySelectorAll(".chip").forEach((b) => b.onclick = () => {
+    diFilter = b.dataset.f;
+    $("#di-filter").querySelectorAll(".chip").forEach((x) => x.classList.toggle("active", x === b));
+    diRender();
+  });
+  $("#di-save").onclick = diSubmit;
+  $("#di-cancel").onclick = () => diReset();
+  // Ctrl+Enter 저장 — 길게 쓰다 마우스로 옮기지 않게
+  $("#di-body").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); diSubmit(); }
+  });
+  $("#di-search").addEventListener("input", diRender);
+  $("#di-export").onclick = () => {
+    const blob = new Blob([JSON.stringify(diLoad(), null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `투자다이어리_${kstDay()}.json`;
+    a.click();
+  };
+  $("#di-import").onclick = () => $("#di-import-file").click();
+  $("#di-import-file").onchange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const inc = JSON.parse(rd.result);
+        if (!Array.isArray(inc)) throw new Error("형식 오류");
+        const cur = diLoad(), byId = new Map(cur.map((x) => [x.id, x]));
+        inc.forEach((x) => { if (x?.id) byId.set(x.id, x); });
+        diSave([...byId.values()]);
+        alert(`가져오기 완료 — 총 ${byId.size}건`);
+        diRender();
+      } catch (err) { alert("가져오기 실패: " + err.message); }
+    };
+    rd.readAsText(f);
+    e.target.value = "";
+  };
+  diRender();
+}
+
+function diReset() {
+  diEditId = null;
+  $("#di-body").value = "";
+  $("#di-tags").value = "";
+  $("#di-ticker").value = "";
+  $("#di-types").querySelectorAll(".chip").forEach((x, i) => x.classList.toggle("active", i === 0));
+  $("#di-save").textContent = "＋ 기록";
+  $("#di-cancel").style.display = "none";
+}
+
+function diSubmit() {
+  const body = $("#di-body").value.trim();
+  if (!body) { $("#di-body").focus(); return; }
+  const type = $("#di-types .chip.active")?.dataset.t || "think";
+  const tags = $("#di-tags").value.split(/[,#\s]+/).map((s) => s.trim()).filter(Boolean).slice(0, 6);
+  const tkRaw = $("#di-ticker").value.trim();
+  let tk = null;
+  if (tkRaw) {
+    const hit = (LOOKUP_INDEX || []).find((s) =>
+      tkRaw === s.ticker || tkRaw === s.name || tkRaw === `${s.name} (${s.ticker})`);
+    if (hit) tk = { key: `${hit.market}_${hit.ticker}`, name: hit.name };
+  }
+  const all = diLoad();
+  if (diEditId) {
+    const it = all.find((x) => x.id === diEditId);
+    if (it) Object.assign(it, { type, body, tags, tk, updated: kstDay() });
+  } else {
+    all.unshift({ id: "d" + Date.now().toString(36), d: kstDay(), type, body, tags, tk, resolved: false });
+  }
+  diSave(all);
+  diReset();
+  diRender();
+}
+
+function diRender() {
+  const host = $("#di-list");
+  if (!host) return;
+  const q = ($("#di-search")?.value || "").trim().toLowerCase();
+  let all = diLoad();
+  // 미해결 질문 배너 — 답을 못 찾은 궁금증이 묻히지 않게 맨 위에
+  const openQ = all.filter((x) => x.type === "ask" && !x.resolved);
+  const bn = $("#di-open-q");
+  if (bn) {
+    bn.style.display = openQ.length ? "" : "none";
+    bn.innerHTML = openQ.length
+      ? `<b>❓ 아직 답을 못 찾은 질문 ${openQ.length}건</b>` +
+        openQ.slice(0, 5).map((x) => `<div class="di-openq-row" data-id="${x.id}">
+          <span class="sub-note">${x.d}</span> ${diEsc(x.body).slice(0, 70)}${x.body.length > 70 ? "…" : ""}</div>`).join("")
+      : "";
+    bn.querySelectorAll(".di-openq-row").forEach((r) => r.onclick = () => {
+      const el = host.querySelector(`[data-card="${r.dataset.id}"]`);
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("di-flash"); setTimeout(() => el.classList.remove("di-flash"), 1200); }
+    });
+  }
+  if (diFilter === "ask-open") all = all.filter((x) => x.type === "ask" && !x.resolved);
+  else if (diFilter !== "all") all = all.filter((x) => x.type === diFilter);
+  if (q) all = all.filter((x) => (x.body + " " + (x.tags || []).join(" ") + " " + (x.tk?.name || "")).toLowerCase().includes(q));
+  $("#di-count").textContent = `${all.length}건`;
+  if (!all.length) {
+    host.innerHTML = `<p class="mini-note">${q || diFilter !== "all" ? "조건에 맞는 기록이 없습니다." :
+      "아직 기록이 없습니다. 위에 오늘의 생각을 적어보세요 — 종목·수익률과 무관해도 됩니다."}</p>`;
+    return;
+  }
+  host.innerHTML = all.map((x) => {
+    const m = diMeta(x.type);
+    return `<div class="di-card" data-card="${x.id}">
+      <div class="di-head"><span class="di-type t-${x.type}">${m.ico} ${m.name}</span>
+        <span class="sub-note">${x.d}${x.updated && x.updated !== x.d ? ` (수정 ${x.updated})` : ""}</span>
+        ${x.tk ? `<button class="di-tk" data-go="${x.tk.key}">${diEsc(x.tk.name)} →</button>` : ""}
+        <span style="flex:1"></span>
+        ${x.type === "ask" ? `<button class="di-mini" data-res="${x.id}">${x.resolved ? "✅ 해결됨" : "☐ 해결 표시"}</button>` : ""}
+        <button class="di-mini" data-edit="${x.id}">수정</button>
+        <button class="di-mini" data-del="${x.id}">삭제</button></div>
+      <div class="di-body${x.resolved ? " done" : ""}">${diEsc(x.body).replace(/\n/g, "<br>")}</div>
+      ${(x.tags || []).length ? `<div class="di-tags">${x.tags.map((t) =>
+        `<span class="badge" data-tag="${diEsc(t)}">#${diEsc(t)}</span>`).join("")}</div>` : ""}
+    </div>`;
+  }).join("");
+  host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
+  });
+  host.querySelectorAll("[data-res]").forEach((b) => b.onclick = () => {
+    const all2 = diLoad(), it = all2.find((x) => x.id === b.dataset.res);
+    if (it) { it.resolved = !it.resolved; diSave(all2); diRender(); }
+  });
+  host.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    if (!confirm("이 기록을 삭제할까요?")) return;
+    diSave(diLoad().filter((x) => x.id !== b.dataset.del));
+    diRender();
+  });
+  host.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
+    const it = diLoad().find((x) => x.id === b.dataset.edit);
+    if (!it) return;
+    diEditId = it.id;
+    $("#di-body").value = it.body;
+    $("#di-tags").value = (it.tags || []).join(", ");
+    $("#di-ticker").value = it.tk?.name || "";
+    $("#di-types").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.t === it.type));
+    $("#di-save").textContent = "저장";
+    $("#di-cancel").style.display = "";
+    $("#di-body").focus();
+    window.scrollTo({ top: $("#di-body").getBoundingClientRect().top + scrollY - 120, behavior: "smooth" });
+  });
+  host.querySelectorAll("[data-tag]").forEach((b) => b.onclick = () => {
+    $("#di-search").value = b.dataset.tag; diRender();
+  });
+}
+
 const DEV_HISTORY = [
+  ["v242", "2026-08-01", "📔 투자 다이어리 — 생각·궁금증을 그때그때 적는 공간", "내 투자에 **투자 다이어리** 탭을 새로 만들었습니다. 매매일지가 '거래 기록'이라면 이건 '생각 기록'으로, 종목이나 수익률과 무관하게 자유롭게 씁니다. 유형을 💭생각·❓궁금·📌배움·⚠️반성으로 구분하고, **❓궁금은 답을 찾으면 해결 표시**를 할 수 있어 **아직 답 못 찾은 질문만 맨 위 배너에 모아** 보여줍니다 — 궁금증이 묻히지 않게. 태그(#반도체 등)로 묶어 클릭 검색, 종목을 연결하면 종목조회로 바로 이동, Ctrl+Enter로 빠르게 저장, JSON 내보내기/가져오기도 됩니다. 모든 기록은 이 브라우저(로그인 시 개인 계정)에만 저장되며 공개되지 않습니다."],
   ["v241", "2026-08-01", "💰 배당 섹션 — 배당수익률 추이까지 (한국 종목 신규 지원)", "배당 카드가 미국 종목의 분기 지급 이력만 보여주던 것을 전면 개편했습니다. ①**한국 종목도 지원** — 주당배당금 연도별 추이(추정 연도 포함). ②**배당수익률 시계열** — 저장된 값은 최신 1개뿐이라, 보유한 10년 일봉으로 **그해 배당÷그해 평균주가**를 직접 계산해 5~6개년 추이를 그립니다. '지금이 역사적으로 배당 매력이 높은 구간인가'를 판단할 수 있고, 현재값이 평균 대비 높/낮은지 한 줄로 짚어줍니다. ③**요약 타일 3개** — 시가배당률(기간 평균 대비), 배당성향, 연속 증액 연수. 미국 배당 이력도 3년 → 6년으로 늘려 재수집했습니다(94종목). 무배당 종목은 카드가 숨겨집니다."],
   ["v240", "2026-08-01", "AI 답변에 근거 원문 링크 + 후속 질문 + 모델 자동 전환", "①**근거 링크** — AI가 인용한 뉴스·공시에 번호(#3)가 붙고, 답변 아래 목록에서 눌러 **원문 기사·DART 공시로 바로 이동**합니다. 모델이 URL을 직접 쓰면 없는 주소를 지어내므로, 자료에 번호를 매겨 인용시키고 코드가 실제 링크로 바꿉니다. ②**후속 질문** — 답변 뒤 이어서 물으면 같은 구간·맥락을 유지한 채 대화가 쌓입니다('그때 수급은?' 식). 🗑로 초기화. ③**모델 자동 전환** — 무료 등급은 모델마다 한도가 따로라(gemini-3.5-flash는 하루 20회) 한도에 걸리면 다음 모델로 자동 전환해 계속 쓸 수 있게 했습니다. ④보조지표 툴바 테두리가 차트 오른쪽 끝까지 늘어나던 것을 내용 폭에 맞췄습니다."],
   ["v236", "2026-08-01", "실적발표 위젯 기본값을 '전체'로 — 미국 종목이 안 보이던 문제", "홈 화면 실적발표 목록의 시장 필터 기본값이 '한국'이라, META처럼 미국 종목의 발표 일정이 달력에는 있는데도 화면에 안 보였습니다(사용자 제보). **기본을 '전체'로 바꿔 한·미를 국기와 함께 한 목록에 날짜순으로** 보여주고, 선택한 필터는 브라우저에 기억되도록 했습니다."],
@@ -2467,6 +2646,7 @@ const BACKUP_KEYS = [
   ["cp_devlog_v1", "🛠 개발일지 아이디어"],
   ["cp_memo_v1", "📝 종목 메모"],
   ["cp_journal_v1", "📒 매매일지"],
+  ["cp_diary_v1", "📔 투자 다이어리"],
   ["cp_portfolio_v2", "💼 보유 포트폴리오"],
   ["cp_portfolio_v1", "💼 보유(구버전)"],
   ["cp_toss_v1", "🔗 토스 스냅샷"],
