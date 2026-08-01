@@ -2050,7 +2050,336 @@ function adminSetup() {
 adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
+
+/* ==========================================================================
+   🤖 전역 AI 어시스턴트 (v231) — 어느 탭에서나 종목·시장 전반 질문에 답한다.
+   설계: 질문에서 ①종목 ②의도를 규칙으로 뽑아 **필요한 JSON만** 로드→컨텍스트 조립→Gemini.
+   무료 등급이라 라우팅을 LLM에 맡기지 않는다(호출 2배). 컨텍스트는 8k자 예산으로 압축.
+   ⚠검색 그라운딩·모델 지식은 못 쓴다(2026-08-01 실측) → 자료에 없으면 "자료 없음"이라 답하게 강제.
+   ========================================================================== */
+const AI_ALIAS = {   // 한글 통칭 → 티커 (US는 LOOKUP_INDEX에 한글명이 없다)
+  메타: "META", 페북: "META", 페이스북: "META", 애플: "AAPL", 테슬라: "TSLA", 엔비디아: "NVDA",
+  구글: "GOOGL", 알파벳: "GOOGL", 아마존: "AMZN", 마소: "MSFT", 마이크로소프트: "MSFT",
+  넷플릭스: "NFLX", 브로드컴: "AVGO", 팔란티어: "PLTR", 버크셔: "BRK-B", 인텔: "INTC",
+  삼전: "005930", 하닉: "000660", 삼바: "207940",
+  // 영문 사명 KR 종목(94개) — 한글로 부르는 통칭을 티커로 이어준다
+  네이버: "035420", 에스오일: "010950", 에쓰오일: "010950", 엘지: "003550", 엘지전자: "066570",
+  현대글로비스: "086280", 하이브: "352820", 케이티: "030200", 에이치엠엠: "011200",
+};
+let AI_LOG = [];          // [{role:"user"|"ai", text}]
+let AI_BUSY = false;
+
+function aiIndexReady() {
+  if (LOOKUP_INDEX) return Promise.resolve(LOOKUP_INDEX);
+  return fetch("data/stocks/index.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (LOOKUP_INDEX = j?.stocks || [], LOOKUP_INDEX));
+}
+
+/* 질문에서 종목 찾기 — 별칭 → 한글명(긴 것 우선) → 티커(대문자 토큰) → 6자리 코드 */
+function aiResolveStock(q) {
+  const idx = LOOKUP_INDEX || [];
+  for (const [k, v] of Object.entries(AI_ALIAS)) {
+    if (q.includes(k)) {
+      const hit = idx.find((s) => s.ticker === v);
+      if (hit) return hit;
+    }
+  }
+  /* KR 종목명 매칭은 **점수제**로 한다. 단순 `q.includes(name)`만 쓰면 짧은 사명이 긴 사명 안에 박혀
+     오답이 난다(실측: "하이닉스 실적" → SK하이닉스가 아니라 '이닉스'가 잡힘).
+     또 사용자는 이름을 줄여 쓴다("와이지엔터"→와이지엔터테인먼트) → 토큰 접두사 매칭도 함께 본다. */
+  const STOP = new Set(["최근", "뉴스", "공시", "실적", "주가", "목표", "목표주가", "컨센서스", "배당", "재무",
+    "사업", "시장", "오늘", "어때", "정리", "언제", "발표", "수급", "신호", "분기", "매출", "영업이익", "알려줘",
+    "어떻게", "얼마야", "뭐야", "무슨", "회사", "지표", "전망", "이슈", "어떤가", "괜찮나"]);
+  const toks = (q.match(/[가-힣A-Za-z0-9]{2,}/g) || []).filter((x) => !STOP.has(x));
+  let best = null, bestScore = 0;
+  for (const s of idx) {
+    if (s.market !== "kr" || s.name.length < 2) continue;
+    const nm = s.name.replace(/\s/g, "");
+    let sc = 0;
+    if (q.includes(s.name)) sc = nm.length;                       // 사명이 질문에 통째로 등장
+    for (const tk of toks) {
+      if (tk.length < 3) continue;
+      if (nm.startsWith(tk)) sc = Math.max(sc, tk.length + 0.5);  // 접두사 = 약칭일 확률 높음
+      else if (nm.includes(tk)) sc = Math.max(sc, tk.length);
+    }
+    if (sc > bestScore) { bestScore = sc; best = s; }
+  }
+  if (best) return best;
+  const code = q.match(/\b(\d{6})\b/);
+  if (code) { const h = idx.find((s) => s.ticker === code[1]); if (h) return h; }
+  for (const m of q.toUpperCase().match(/\b[A-Z][A-Z.\-]{1,5}\b/g) || []) {
+    const h = idx.find((s) => s.market === "us" && s.ticker === m);
+    if (h) return h;
+  }
+  return null;
+}
+
+const AI_INTENT = [
+  ["edate", /실적\s*발표|발표\s*일|어닝\s*콜|컨콜|실적\s*일정|언제/],
+  ["earn", /실적|어닝|매출|영업이익|순이익|EPS|서프라이즈|잠정|분기/i],
+  ["cons", /목표\s*주가|목표가|컨센서스|애널리스트|투자\s*의견|적정\s*주가/],
+  ["news", /뉴스|이슈|소식|왜|무슨 일|배경|호재|악재/],
+  ["disc", /공시|DART|정정|증자|자사주|배당\s*결정/i],
+  ["fin", /재무|부채|자산|현금흐름|ROE|PER|PBR|밸류|저평가|고평가|지표/i],
+  ["biz", /사업|무슨\s*회사|뭐\s*하는|제품|매출\s*구성|경쟁|사업부/],
+  ["div", /배당|시가배당|배당성향/],
+  ["supply", /수급|외국인|기관|개인|순매수|순매도/],
+  ["sig", /신호|매수|매도|원칙|타이밍/],
+  ["price", /주가|등락|올랐|내렸|하락|상승|추이|차트/],
+  ["market", /시장|코스피|코스닥|나스닥|S&P|다우|환율|금리|지수|증시|오늘/i],
+  ["econ", /경제\s*지표|CPI|FOMC|고용|금리\s*결정|일정/i],
+  ["sector", /업종|섹터|산업/],
+];
+function aiIntents(q) {
+  const s = new Set();
+  AI_INTENT.forEach(([k, re]) => { if (re.test(q)) s.add(k); });
+  return s;
+}
+
+const aiNum = (v, d = 0) => (v == null ? "-" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d }));
+
+/* 컨텍스트 조립 — 의도에 걸린 항목만 넣는다(토큰 예산). 종목 없으면 시장 요약. */
+async function aiBuildContext(q) {
+  const it = aiIntents(q);
+  const st = aiResolveStock(q);
+  const parts = [];
+  const today = kstDay();
+  parts.push(`[오늘] ${today}`);
+
+  if (st) {
+    const key = `${st.market}_${st.ticker}`;
+    await loadExtras();
+    const co = EXTRAS.company?.map?.[key] || {};
+    const label = `${st.name}${st.market === "kr" ? `(${st.ticker})` : ""}`;
+    parts.push(`[종목] ${label} · ${st.market === "kr" ? "한국" : "미국"} 시장`);
+
+    // 실적 발표 일정
+    if (it.has("edate") || it.size === 0) {
+      const rows = (CAL?.earnings?.[st.market] || []).filter((e) => e.t === st.ticker || e.name === st.name);
+      parts.push(rows.length
+        ? `[실적 발표 일정] ${rows.map((e) => `${e.date}${e.eps_est != null ? ` (EPS 컨센 ${e.eps_est})` : ""}`).join(" / ")}` +
+          `\n  ※ 일정 데이터 보유 범위: ${(CAL?.earnings?.[st.market] || []).map((e) => e.date).sort()[0] || "-"} ~ ${(CAL?.earnings?.[st.market] || []).map((e) => e.date).sort().slice(-1)[0] || "-"}`
+        : `[실적 발표 일정] 보유 일정(${(CAL?.earnings?.[st.market] || []).length}건) 안에 이 종목 없음 — 해당 기간 발표 예정 없음`);
+    }
+    // 분기 실적 + 서프라이즈
+    if (it.has("earn") || it.has("edate") || it.size === 0) {
+      const fq = co.fin_q || [];
+      if (fq.length) {
+        parts.push(`[분기 실적] 단위 ${co.fin_unit || (st.market === "kr" ? "억원" : "백만달러")}\n` +
+          fq.slice(-6).map((x) => `  ${x.q}${x.est ? "(추정)" : ""} 매출 ${aiNum(x.rev)} · 영업익 ${aiNum(x.op)}` +
+            `${x.opm != null ? `(OPM ${x.opm}%)` : ""} · 순이익 ${aiNum(x.np)}`).join("\n"));
+      }
+      const sp = co.surprise?.eps;
+      if (sp?.length) {
+        parts.push(`[EPS 서프라이즈] ` + sp.slice(-6).map((x) =>
+          `${x.q} 실제 ${x.actual} vs 예상 ${x.est} (${x.pct >= 0 ? "+" : ""}${x.pct}%)`).join(" / "));
+      }
+      const fin = co.fin || [];
+      if (fin.length && it.has("earn")) {
+        parts.push(`[연간 실적] ` + fin.map((x) => `${x.y}${x.est ? "(추정)" : ""} 매출 ${aiNum(x.rev)}·영업익 ${aiNum(x.op)}`).join(" / "));
+      }
+    }
+    // 컨센서스
+    if (it.has("cons") || it.has("earn") || it.size === 0) {
+      if (co.cons?.target) {
+        const a = co.analyst;
+        parts.push(`[컨센서스] 목표주가 ${aiNum(co.cons.target)} · 투자의견 ${co.cons.opinion ?? co.cons.opinion_key ?? "-"}` +
+          `${co.cons.at ? ` (${co.cons.at} 기준)` : ""}${a ? ` · 애널리스트 ${a.n}명(최고 ${aiNum(a.targetHigh)}/최저 ${aiNum(a.targetLow)})` : ""}`);
+      }
+    }
+    // 주가·수급·신호
+    if (it.has("price") || it.has("supply") || it.has("sig") || it.size === 0) {
+      try {
+        const sd = await fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock);
+        if (sd?.series?.length) {
+          const s = sd.series, l = s[s.length - 1];
+          const back = (n) => s[Math.max(0, s.length - 1 - n)];
+          const pc = (n) => ((l.c / back(n).c - 1) * 100).toFixed(1);
+          parts.push(`[주가] 최근 ${l.t} 종가 ${aiNum(l.c)} · 5일 ${pc(5)}% · 20일 ${pc(20)}% · 60일 ${pc(60)}% · 1년 ${pc(250)}%`);
+          if (it.has("sig")) {
+            const mk = (sd.markers || []).slice(-5).reverse()
+              .map((m) => `${m.t} ${m.side === "buy" ? "매수" : "매도"}(${m.rule_id})`);
+            if (mk.length) parts.push(`[최근 원칙 신호] ${mk.join(" / ")}`);
+          }
+          if (it.has("supply") && sd.supply?.length >= 21) {
+            const sp = sd.supply, a = sp[sp.length - 1], b = sp[sp.length - 21];
+            const d = (x, y) => (x == null || y == null ? "-" : `${Math.round(x - y) >= 0 ? "+" : ""}${aiNum(Math.round(x - y))}억`);
+            parts.push(`[수급 20일] 외국인 ${d(a.fc, b.fc)} · 기관 ${d(a.ic, b.ic)} · 개인 ${d(a.pc, b.pc)}`);
+          }
+        }
+      } catch (e) { /* 주가 없으면 생략 */ }
+    }
+    // 뉴스
+    if (it.has("news") || it.has("earn") || it.size === 0) {
+      const arc = await loadStockNews(key);
+      if (arc?.length) parts.push(`[최근 뉴스 헤드라인]\n` + arc.slice(0, 18).map((x) => `  ${x[0]} [${x[1]}] ${x[2]}`).join("\n"));
+      else {
+        const fd = EXTRAS.feed?.map?.[key];
+        if (fd?.news?.length) parts.push(`[최근 뉴스] ` + fd.news.slice(0, 8).map((n) => `${n.t} ${n.title}`).join(" | "));
+      }
+    }
+    // 공시
+    if (it.has("disc")) {
+      const fd = EXTRAS.feed?.map?.[key];
+      if (fd?.disc?.length) parts.push(`[공시 최근]\n` + fd.disc.slice(0, 15).map((d) => `  ${d.d} ${d.title.trim()}`).join("\n"));
+    }
+    // 재무·밸류
+    if (it.has("fin") || it.has("div")) {
+      if (co.metrics) parts.push(`[투자지표] ` + Object.entries(co.metrics).map(([k, v]) => `${k} ${v}`).join(" · "));
+      if (co.fin_ext?.length) parts.push(`[연간 재무] ` + co.fin_ext.slice(-4).map((x) =>
+        `${x.y} 순익 ${aiNum(x.net)}·ROE ${x.roe ?? "-"}·부채비율 ${x.debt ?? "-"}`).join(" / "));
+      const pr = co.profile;
+      if (it.has("div") && pr?.dps_y) parts.push(`[배당] 주당배당 3년 ${pr.dps_y.join(" → ")} · 배당성향 ${pr.payout ?? "-"}% · 시가배당률 ${pr.yld ?? "-"}%`);
+    }
+    // 사업 개요
+    if (it.has("biz") || it.size === 0) {
+      if (co.overview) parts.push(`[사업 개요] ${co.overview.slice(0, 400)}`);
+      if (co.sales_mix?.length) parts.push(`[매출 구성] ` + co.sales_mix.map((x) => `${x.name} ${x.pct}%`).join(" · "));
+      if (it.has("biz")) {
+        const bd = await fetchBizDeep(key);
+        if (bd?.sections?.length) parts.push(`[사업보고서 발췌] ${bd.src}\n  ` + bd.sections[0].t.slice(0, 700));
+      }
+    }
+    // 기업 정보
+    if (co.profile && (it.has("biz") || it.size === 0)) {
+      const p = co.profile;
+      const f = [p.ceo && `대표 ${p.ceo}`, p.est && `설립 ${p.est.slice(0, 7)}`, p.emp && `직원 ${aiNum(p.emp)}명`,
+        p.hq, p.sector].filter(Boolean);
+      if (f.length) parts.push(`[기업 정보] ${f.join(" · ")}`);
+    }
+  } else {
+    // ---- 종목이 특정되지 않은 질문: 시장·일정 ----
+    if (MARKET?.macro?.length) {   // chg는 **비율**(0.0179=1.79%) — pct()와 같은 단위 규칙
+      // ⚠chg는 '직전 보유 데이터 대비'라 시계열에 결측이 있으면 하루치가 아니다(코스피 +17.9% 실측).
+      //   지수가 ±8%를 넘으면 신뢰 표시를 붙여 AI가 '오늘 폭등'으로 단정하지 않게 한다.
+      parts.push(`[주요 지수·매크로] 기준일 ${MARKET.asof || "-"} · 등락은 **직전 보유 데이터 대비**\n` +
+        MARKET.macro.slice(0, 10).map((x) =>
+          `  ${x.name} ${aiNum(x.last, 2)}${x.unit || ""} (${pct(x.chg, 2)}` +
+          `${Math.abs(x.chg ?? 0) > 0.08 ? " ⚠비정상적으로 큼 — 데이터 결측 가능, 단정 금지" : ""})`).join("\n"));
+    }
+    if (MPRO?.risk) parts.push(`[리스크온/오프] ${JSON.stringify(MPRO.risk).slice(0, 200)}`);
+    if (MPRO?.brief) parts.push(`[시장 브리핑${MPRO.brief_at ? ` ${MPRO.brief_at}` : ""}] ${String(MPRO.brief).slice(0, 600)}`);
+    if (it.has("econ") || it.has("edate") || it.has("market")) {
+      const ec = (CAL?.econ || []).filter((e) => e.d >= today).slice(0, 12);
+      if (ec.length) parts.push(`[다가오는 경제지표]\n` + ec.map((e) => `  ${e.d} ${e.c} ${e.t}${e.f != null ? ` (예상 ${e.f}${e.u || ""})` : ""}`).join("\n"));
+      const ea = [["us", "미국"], ["kr", "한국"]].flatMap(([m, lb]) =>
+        (CAL?.earnings?.[m] || []).filter((e) => e.date >= today).slice(0, 10).map((e) => `${e.date} ${lb} ${e.name || e.t}`));
+      if (ea.length) parts.push(`[다가오는 실적 발표] ${ea.join(" / ")}`);
+    }
+    if (it.has("sector")) {
+      for (const mk of ["kr", "us"]) {
+        const g = (MPRO?.rotation?.[mk]?.groups || []).slice(0, 10)
+          .map((x) => `${x.name} 1M ${pct(x.m1, 1)}`);
+        if (g.length) parts.push(`[${mk === "kr" ? "한국" : "미국"} 업종 1개월] ${g.join(" · ")}`);
+      }
+    }
+    if (TODAY?.signals?.length) parts.push(`[오늘의 원칙 신호] 총 ${TODAY.signals.length}건`);
+  }
+  return { text: parts.join("\n\n"), stock: st, intents: [...it] };
+}
+
+async function aiAsk(qRaw) {
+  const q = (qRaw ?? document.getElementById("ai-q").value).trim();
+  if (!q || AI_BUSY) return;
+  const key = geminiKey();
+  const log = document.getElementById("ai-log");
+  if (!key) {
+    aiPush("ai", "🔑 버튼으로 Gemini API 키를 먼저 등록하세요. aistudio.google.com/apikey 에서 무료 발급됩니다.");
+    return;
+  }
+  AI_BUSY = true;
+  document.getElementById("ai-q").value = "";
+  aiPush("user", q);
+  aiPush("ai", "…자료 찾는 중");
+  try {
+    await aiIndexReady();
+    const ctx = await aiBuildContext(q);
+    const hist = AI_LOG.slice(-7, -2).map((m) => `${m.role === "user" ? "질문" : "답변"}: ${m.text.slice(0, 200)}`).join("\n");
+    const prompt = `당신은 개인 투자자용 리서치 어시스턴트다. 아래 [보유 자료]만 근거로 한국어로 답하라.
+
+규칙
+① 자료에 있는 수치·날짜는 그대로 인용해 **구체적으로** 답한다(에두르지 말 것).
+② 자료에 없으면 "보유 자료에 없습니다"라고 명확히 말하고, 어떤 자료가 있으면 답할 수 있는지 한 줄로 덧붙인다.
+   추측으로 지어내지 말 것(특히 발표 일정·수치).
+③ 답은 결론부터. 필요하면 짧은 불릿. 표는 쓰지 말 것. 3~8문장 분량.
+④ 투자 권유·단정적 예측 금지.
+${hist ? `\n[직전 대화]\n${hist}\n` : ""}
+[보유 자료]
+${ctx.text}
+
+[질문] ${q}`;
+    let ans = null;
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingBudget: 0 } } }),
+      });
+      if (res.status === 429) { await new Promise((r) => setTimeout(r, 3000 * (i + 1))); continue; }
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error?.message || res.status);
+      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join("") || "";
+      break;
+    }
+    AI_LOG.pop();                       // "자료 찾는 중" 제거
+    aiPush("ai", ans || "응답을 받지 못했습니다(한도 초과). 잠시 후 다시 시도하세요.",
+      ctx.stock ? `${ctx.stock.name} · ${ctx.intents.join(",") || "종합"}` : (ctx.intents.join(",") || "시장"));
+  } catch (e) {
+    AI_LOG.pop();
+    aiPush("ai", `오류: ${String(e.message || e).slice(0, 140)}`);
+  }
+  AI_BUSY = false;
+}
+
+function aiPush(role, text, tag) {
+  AI_LOG.push({ role, text, tag });
+  aiRender();
+}
+function aiRender() {
+  const log = document.getElementById("ai-log");
+  if (!log) return;
+  const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  log.innerHTML = AI_LOG.map((m) => `<div class="ai-msg ai-${m.role}">${
+    m.tag ? `<div class="ai-tag">📎 ${esc(m.tag)}</div>` : ""}${esc(m.text)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/^[-*•]\s+(.+)$/gm, "• $1")
+      .replace(/\n/g, "<br>")}</div>`).join("");
+  log.scrollTop = log.scrollHeight;
+}
+
+function initAiPanel() {
+  const fab = document.getElementById("ai-fab");
+  const panel = document.getElementById("ai-panel");
+  if (!fab || !panel || fab.dataset.bound) return;
+  fab.dataset.bound = "1";
+  const open = (v) => {
+    panel.style.display = v ? "flex" : "none";
+    fab.style.display = v ? "none" : "";
+    if (v) setTimeout(() => document.getElementById("ai-q")?.focus(), 50);
+  };
+  fab.onclick = () => {
+    open(true);
+    if (!AI_LOG.length) {
+      aiPush("ai", "무엇이든 물어보세요. 보유한 시세·실적·공시·뉴스·일정 자료를 찾아 답합니다.\n" +
+        "예) META 실적발표 언제야 · 삼성전자 실적 정리해줘 · SK하이닉스 목표주가 · 오늘 시장 어때");
+    }
+  };
+  document.getElementById("ai-close").onclick = () => open(false);
+  document.getElementById("ai-go").onclick = () => aiAsk();
+  document.getElementById("ai-key").onclick = () => {
+    const v = prompt("Gemini API 키 (aistudio.google.com/apikey 무료 발급 · 이 브라우저에만 저장)", geminiKey() || "");
+    if (v != null && v.trim()) { localStorage.setItem("gemini_key", v.trim()); alert("저장됨"); }
+  };
+  document.getElementById("ai-q").addEventListener("keydown", (e) => { if (e.key === "Enter") aiAsk(); });
+  panel.querySelectorAll(".ai-eg").forEach((b) => b.onclick = () => aiAsk(b.textContent.trim()));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && panel.style.display === "flex") open(false);
+  });
+}
+
 const DEV_HISTORY = [
+  ["v236", "2026-08-01", "실적발표 위젯 기본값을 '전체'로 — 미국 종목이 안 보이던 문제", "홈 화면 실적발표 목록의 시장 필터 기본값이 '한국'이라, META처럼 미국 종목의 발표 일정이 달력에는 있는데도 화면에 안 보였습니다(사용자 제보). **기본을 '전체'로 바꿔 한·미를 국기와 함께 한 목록에 날짜순으로** 보여주고, 선택한 필터는 브라우저에 기억되도록 했습니다."],
+  ["v231", "2026-08-01", "🤖 AI 어시스턴트 — 어느 화면에서나 종목·시장 전반 질문", "우측 아래 🤖 버튼을 누르면 어디서든 질문할 수 있는 AI 패널이 열립니다. 질문에서 **종목과 의도를 자동으로 인식**해 필요한 자료만 찾아 답합니다 — 실적 발표 일정, 분기 실적·EPS 서프라이즈, 목표주가·애널리스트 분포, 최근 뉴스, 공시, 재무·밸류에이션, 배당, 사업 개요·매출 구성, 수급, 원칙 신호, 그리고 종목 없이 물으면 지수·업종·경제지표 일정까지. 예) \"META 실적발표 언제야\" · \"삼성전자 실적 정리해줘\" · \"SK하이닉스 목표주가\" · \"오늘 시장 어때\". 보유 자료에 없으면 지어내지 않고 '자료에 없다'고 답하도록 강제했습니다."],
   ["v230", "2026-08-01", "종목조회 레이아웃 정리 — 보조지표 위치 이동 + 투자지표 압축", "①**보조지표(RSI·MACD 등)를 차트 바로 아래**로 옮겼습니다. 이전에는 'AI 왜 움직였나' 카드 아래에 생겨 가격 차트와 떨어져 있었는데, 이제 x축이 이어져 함께 읽힙니다. ②**투자 지표 카드를 2열로 압축** — 우측 레일에서 4개 항목이 세로로 쌓여 577px까지 늘어지던 것을 351px로 줄여 한 화면에 들어옵니다(값 잘림 없음, 한국·미국 종목 모두 확인)."],
   ["v228", "2026-08-01", "🤔 AI 변동 사유 — 당시 뉴스·실적·업종을 근거로 '진짜 이유'를 답한다", "답변이 [추정]만 늘어놓아 쓸모없다는 지적을 반영해 **근거 자료 자체를 대폭 보강**했습니다. ①**종목별 과거 뉴스 아카이브**(최근 1년 헤드라인, 네이버 종목뉴스)를 새로 수집해, 질문한 기간의 실제 기사 제목·매체·날짜를 근거로 제공합니다(급락·급등일 전후 기사 우선). ②**분기 실적**을 구간 직전·중·직후로 나눠 제공 — 실적이 좋았는데 왜 빠졌는지, 이후 실적 둔화를 선반영한 것인지 판단할 수 있습니다. ③**동종업계 같은 기간 등락**으로 업종 이슈인지 개별 이슈인지 구분합니다. ④컨센서스·밸류에이션 추가. 예: YG 2025년 11월 → '3분기 영업익 311억(+270%)으로 좋았으나 블랙핑크 MD 매출이 기대 미달, 11/10 iM·NH·유진 목표가 일제 하향 + 한한령 해제 기대 소멸로 엔터 업종 동반 급락'처럼 매체·날짜를 인용해 답합니다."],
   ["v227", "2026-08-01", "AI 변동 사유 — 무료 등급 검색 한계 확인 및 대체 설계", "구글 검색 그라운딩이 무료 등급에서 전 모델 429(쿼터 0)로 막혀 있고, 무료 Gemini 모델들의 학습 데이터가 최근 국내 이슈를 담지 못한다는 점을 실측으로 확인했습니다(2025년 11월을 '미래'로 인식). 그래서 검색에 의존하지 않고 **우리가 보유한 데이터로 답하는 구조**로 전환했습니다 — 그 결과가 v228입니다."],
@@ -3914,7 +4243,9 @@ function _weekRange() {
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 0);
   return [mon, sun];
 }
-let schEarnMk = "kr";
+/* 실적발표 시장 필터. 기본이 "kr"이라 미국 종목(META 등)이 안 보여 "왜 없냐"는 혼선이 있었다
+   → 기본을 'all'(한·미 통합)로 두고 선택을 브라우저에 기억한다. */
+let schEarnMk = localStorage.getItem("cp_sch_mk") || "all";
 function renderHomeSchedule() {
   const eHost = $("#home-earnings"), cHost = $("#home-econ");
   if (!eHost || !cHost) return;
@@ -3926,22 +4257,24 @@ function renderHomeSchedule() {
   const yo = (ds) => "일월화수목금토"[new Date(ds + "T00:00:00").getDay()];
 
   // 실적발표 — 상단 한국/미국 토글로 구분
-  const er = (CAL?.earnings?.[schEarnMk] || []).map((e) => ({ ...e, mk: schEarnMk }))
+  const mks = schEarnMk === "all" ? ["kr", "us"] : [schEarnMk];
+  const er = mks.flatMap((m) => (CAL?.earnings?.[m] || []).map((e) => ({ ...e, mk: m })))
     .filter((e) => inWeek(e.date))
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
+    .sort((a, b) => a.date.localeCompare(b.date) || a.mk.localeCompare(b.mk) ||
+      (a.time || "").localeCompare(b.time || ""));
   eHost.innerHTML = er.length ? er.slice(0, 60).map((e) => `
     <div class="sch-row${e.t ? " clickable" : ""}${e.date === today ? " today" : ""}" ${e.t ? `data-t="${e.mk}_${e.t}"` : ""}>
       <span class="sch-date">${md(e.date)}<span class="sub-note">(${yo(e.date)})</span></span>
       ${e.t ? `<img class="sch-logo" src="${logoUrl(e.mk, e.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sch-logo"></span>`}
-      <span class="sch-name"><b>${esc(e.name)}</b></span>
+      <span class="sch-name">${schEarnMk === "all" ? (e.mk === "kr" ? "🇰🇷 " : "🇺🇸 ") : ""}<b>${esc(e.name)}</b></span>
       <span class="sch-info sub-note">${e.mk === "kr" ? esc((e.event || "").slice(0, 16)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
-    </div>`).join("") : `<p class="mini-note">이번 주 예정된 ${schEarnMk === "kr" ? "국내" : "미국"} 실적발표가 없습니다.</p>`;
+    </div>`).join("") : `<p class="mini-note">이번 주 예정된 ${schEarnMk === "all" ? "" : schEarnMk === "kr" ? "국내 " : "미국 "}실적발표가 없습니다.</p>`;
   eHost.querySelectorAll(".sch-row.clickable").forEach((el) => el.onclick = () => {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.t);
   });
   $("#sch-earn-mk").querySelectorAll("button").forEach((b) => {
     b.classList.toggle("active", b.dataset.m === schEarnMk);
-    b.onclick = () => { schEarnMk = b.dataset.m; renderHomeSchedule(); };
+    b.onclick = () => { schEarnMk = b.dataset.m; localStorage.setItem("cp_sch_mk", schEarnMk); renderHomeSchedule(); };
   });
 
   // 경제지표 — 이번 주 중요도 중·상(글로벌 매크로라 시장 토글과 무관, 모든 국가)
@@ -11162,6 +11495,7 @@ Promise.all([
     TOSSM = tm; INVESTOR = iv;
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     renderMetaFooter();   // 최하단 데이터 출처(탭 무관 전역)
+    initAiPanel();        // 🤖 전역 AI 어시스턴트(플로팅)
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
       if (!prev) return;

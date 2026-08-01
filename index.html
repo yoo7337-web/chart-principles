@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=230">
-<script src="firebase-config.js?v=230"></script>
-<script src="js/auth.js?v=230"></script>
+<link rel="stylesheet" href="css/style.css?v=236">
+<script src="firebase-config.js?v=236"></script>
+<script src="js/auth.js?v=236"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=230"></script>
+<script src="js/sync.js?v=236"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -652,7 +652,8 @@
         <div class="home-rblock">
           <h2 class="home-h">📢 금주 실적발표
             <span class="mk-toggle sch-mk" id="sch-earn-mk" style="margin-left:8px">
-              <button data-m="kr" class="active">🇰🇷 한국</button>
+              <button data-m="all" class="active">전체</button>
+              <button data-m="kr">🇰🇷 한국</button>
               <button data-m="us">🇺🇸 미국</button>
             </span>
             <a href="#" id="home-sch-more" class="home-more" style="margin-left:auto">달력 →</a></h2>
@@ -1098,6 +1099,25 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=230"></script>
+<script src="js/app.js?v=236"></script>
+<!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
+<button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
+<div id="ai-panel">
+  <div class="ai-head"><b>🤖 AI 어시스턴트</b>
+    <span class="sub-note">보유 자료 기반</span><span style="flex:1"></span>
+    <button class="today-chart-btn" id="ai-key" title="Gemini API 키 등록/변경">🔑</button>
+    <button class="jr-x" id="ai-close">✕</button></div>
+  <div id="ai-log" class="ai-log"></div>
+  <div class="ai-egs">
+    <button class="ai-eg">META 실적발표 언제야?</button>
+    <button class="ai-eg">삼성전자 실적 정리해줘</button>
+    <button class="ai-eg">SK하이닉스 목표주가</button>
+    <button class="ai-eg">오늘 시장 어때?</button>
+  </div>
+  <div class="ai-ask">
+    <input type="text" id="ai-q" placeholder="종목·실적·일정·시장 무엇이든 질문">
+    <button class="today-chart-btn" id="ai-go">전송</button>
+  </div>
+</div>
 </body>
 </html>
