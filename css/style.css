@@ -1782,7 +1782,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   transition: opacity .15s ease; }
 .draw-rail:hover { opacity: 1; }
 /* 보조지표 — 차트 안 상단(그리기 레일은 왼쪽이므로 좌측 여백을 비워 겹침 회피) */
-.osc-rail { position: absolute; top: 6px; left: 62px; right: 6px; z-index: 6;
+/* ⚠right를 주면 내용이 짧아도 배경·테두리가 차트 오른쪽 끝까지 늘어난다(사용자 지적).
+   left만 두면 절대배치 요소가 내용 폭으로 줄어들고, max-width로 넘칠 때만 줄바꿈한다. */
+.osc-rail { position: absolute; top: 6px; left: 62px; z-index: 6;
+  max-width: calc(100% - 74px);
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
   padding: 3px 8px; border-radius: 10px; background: rgba(30,30,36,.86);
   border: 1px solid var(--line); backdrop-filter: blur(4px); opacity: .55;
@@ -1954,3 +1957,23 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ai-ask input { flex: 1; background: rgba(255,255,255,.05); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 11px; color: inherit; font-size: .84rem; }
 @media (max-width: 560px) { #ai-panel { right: 8px; left: 8px; width: auto; height: 78vh; } }
+
+/* 🤔 변동 사유 대화 스레드 (v237) */
+.lk-why-out { max-height: 520px; overflow-y: auto; }
+.why-turn { padding-top: 10px; }
+.why-turn + .why-turn { border-top: 1px dashed var(--line); margin-top: 10px; }
+.why-q { font-size: .84rem; font-weight: 600; color: #9bbcf0; margin-bottom: 5px; }
+.why-hint { margin-top: 10px; opacity: .8; }
+
+/* 🔗 AI 답변 근거 링크 (v239) */
+.why-ref { display: inline-block; font-size: .7rem; font-weight: 700; padding: 0 5px; margin: 0 1px;
+  border-radius: 999px; background: rgba(67,145,255,.18); color: #7cb1ff; text-decoration: none;
+  vertical-align: super; }
+.why-ref:hover { background: rgba(67,145,255,.32); }
+.why-ref.off { background: rgba(255,255,255,.08); color: var(--muted); }
+.why-refs { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 7px; font-size: .78rem; }
+.why-refs > b { display: block; font-size: .74rem; color: var(--muted); margin-bottom: 4px; }
+.why-ref-row { display: flex; gap: 7px; align-items: baseline; padding: 2px 0; }
+.why-ref-n { color: #7cb1ff; font-weight: 700; flex: none; }
+.why-ref-row a { color: inherit; }
+.why-ref-row a:hover { color: #7cb1ff; }

@@ -2308,19 +2308,7 @@ ${hist ? `\n[직전 대화]\n${hist}\n` : ""}
 ${ctx.text}
 
 [질문] ${q}`;
-    let ans = null;
-    for (let i = 0; i < 3; i++) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingBudget: 0 } } }),
-      });
-      if (res.status === 429) { await new Promise((r) => setTimeout(r, 3000 * (i + 1))); continue; }
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error?.message || res.status);
-      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join("") || "";
-      break;
-    }
+    const ans = (await gemCall(prompt, { maxTokens: 1600 })).text;
     AI_LOG.pop();                       // "자료 찾는 중" 제거
     aiPush("ai", ans || "응답을 받지 못했습니다(한도 초과). 잠시 후 다시 시도하세요.",
       ctx.stock ? `${ctx.stock.name} · ${ctx.intents.join(",") || "종합"}` : (ctx.intents.join(",") || "시장"));
@@ -2378,6 +2366,7 @@ function initAiPanel() {
 }
 
 const DEV_HISTORY = [
+  ["v240", "2026-08-01", "AI 답변에 근거 원문 링크 + 후속 질문 + 모델 자동 전환", "①**근거 링크** — AI가 인용한 뉴스·공시에 번호(#3)가 붙고, 답변 아래 목록에서 눌러 **원문 기사·DART 공시로 바로 이동**합니다. 모델이 URL을 직접 쓰면 없는 주소를 지어내므로, 자료에 번호를 매겨 인용시키고 코드가 실제 링크로 바꿉니다. ②**후속 질문** — 답변 뒤 이어서 물으면 같은 구간·맥락을 유지한 채 대화가 쌓입니다('그때 수급은?' 식). 🗑로 초기화. ③**모델 자동 전환** — 무료 등급은 모델마다 한도가 따로라(gemini-3.5-flash는 하루 20회) 한도에 걸리면 다음 모델로 자동 전환해 계속 쓸 수 있게 했습니다. ④보조지표 툴바 테두리가 차트 오른쪽 끝까지 늘어나던 것을 내용 폭에 맞췄습니다."],
   ["v236", "2026-08-01", "실적발표 위젯 기본값을 '전체'로 — 미국 종목이 안 보이던 문제", "홈 화면 실적발표 목록의 시장 필터 기본값이 '한국'이라, META처럼 미국 종목의 발표 일정이 달력에는 있는데도 화면에 안 보였습니다(사용자 제보). **기본을 '전체'로 바꿔 한·미를 국기와 함께 한 목록에 날짜순으로** 보여주고, 선택한 필터는 브라우저에 기억되도록 했습니다."],
   ["v231", "2026-08-01", "🤖 AI 어시스턴트 — 어느 화면에서나 종목·시장 전반 질문", "우측 아래 🤖 버튼을 누르면 어디서든 질문할 수 있는 AI 패널이 열립니다. 질문에서 **종목과 의도를 자동으로 인식**해 필요한 자료만 찾아 답합니다 — 실적 발표 일정, 분기 실적·EPS 서프라이즈, 목표주가·애널리스트 분포, 최근 뉴스, 공시, 재무·밸류에이션, 배당, 사업 개요·매출 구성, 수급, 원칙 신호, 그리고 종목 없이 물으면 지수·업종·경제지표 일정까지. 예) \"META 실적발표 언제야\" · \"삼성전자 실적 정리해줘\" · \"SK하이닉스 목표주가\" · \"오늘 시장 어때\". 보유 자료에 없으면 지어내지 않고 '자료에 없다'고 답하도록 강제했습니다."],
   ["v230", "2026-08-01", "종목조회 레이아웃 정리 — 보조지표 위치 이동 + 투자지표 압축", "①**보조지표(RSI·MACD 등)를 차트 바로 아래**로 옮겼습니다. 이전에는 'AI 왜 움직였나' 카드 아래에 생겨 가격 차트와 떨어져 있었는데, 이제 x축이 이어져 함께 읽힙니다. ②**투자 지표 카드를 2열로 압축** — 우측 레일에서 4개 항목이 세로로 쌓여 577px까지 늘어지던 것을 351px로 줄여 한 화면에 들어옵니다(값 잘림 없음, 한국·미국 종목 모두 확인)."],
@@ -9045,11 +9034,17 @@ const GEMINI_MODEL = "gemini-3.5-flash";
 function geminiKey() {
   return localStorage.getItem("gemini_key") || window.GEMINI_API_KEY || "";
 }
+/* 대화 스레드(v237) — 한 번 묻고 끝이 아니라 "그럼 그때 수급은?" 식 후속 질문을 이어간다.
+   종목이 바뀌면 초기화. WHY_WIN은 직전에 사용한 구간이라, 기간을 안 적은 후속 질문도 같은 구간을 본다. */
+let WHY_LOG = [];
+let WHY_WIN = null;
 function renderLookupWhy(st) {
   const host = $("#lookup-why");
   if (!host) return;
   host.style.display = "";
+  WHY_LOG = []; WHY_WIN = null;
   $("#why-out").style.display = "none";
+  $("#why-out").innerHTML = "";
   if (host.dataset.bound) return;
   host.dataset.bound = "1";
   document.querySelectorAll("#why-range button").forEach((b) => b.onclick = () => {
@@ -9061,8 +9056,56 @@ function renderLookupWhy(st) {
     const v = prompt("Gemini API 키 (aistudio.google.com/apikey 무료 발급 · 이 브라우저에만 저장)", cur || "");
     if (v != null && v.trim()) { localStorage.setItem("gemini_key", v.trim()); alert("저장됨"); }
   };
-  $("#why-go").onclick = whyAsk;
+  $("#why-go").onclick = () => whyAsk();
   $("#why-q").addEventListener("keydown", (e) => { if (e.key === "Enter") whyAsk(); });
+  const cl = $("#why-clear");
+  if (cl) cl.onclick = () => { WHY_LOG = []; WHY_WIN = null; whyRenderThread(); };
+}
+
+/* 스레드 렌더 — 질문/답변을 순서대로 쌓아 보여준다 */
+function whyRenderThread(pending) {
+  const out = $("#why-out");
+  if (!out) return;
+  const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const md = (x) => esc(x).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/^[-*]\s+(.+)$/gm, "<li>$1</li>").replace(/\n/g, "<br>").replace(/<\/li><br>/g, "</li>");
+  if (!WHY_LOG.length && !pending) { out.style.display = "none"; out.innerHTML = ""; return; }
+  out.style.display = "";
+  /* 본문의 [#n]을 클릭 가능한 근거 배지로, 실제 인용된 번호만 하단 목록에 싣는다 */
+  const cite = (html, refs) => {
+    if (!refs?.length) return { html, used: [] };
+    const used = new Set();
+    const out2 = html.replace(/\[#\s*(\d+(?:\s*#\s*\d+)*)\]/g, (mm, grp) => {
+      const ns = grp.split("#").map((x) => parseInt(x.trim(), 10)).filter(Boolean);
+      const links = ns.map((n) => {
+        const r = refs.find((x) => x.n === n);
+        if (!r) return "";
+        used.add(n);
+        return r.url ? `<a class="why-ref" href="${r.url}" target="_blank" rel="noopener" title="${esc(r.d + " " + r.src + " · " + r.title)}">#${n}</a>`
+          : `<span class="why-ref off" title="${esc(r.d + " " + r.title)}">#${n}</span>`;
+      }).filter(Boolean).join("");
+      return links || "";
+    });
+    return { html: out2, used: refs.filter((r) => used.has(r.n)) };
+  };
+  out.innerHTML = WHY_LOG.map((m, i) => {
+    const ct = cite(md(m.a), m.refs);
+    return `
+    <div class="why-turn">
+      <div class="why-q">${i === 0 ? "" : "↳ "}${esc(m.q)}</div>
+      <div class="lk-why-ans">${ct.html}</div>
+      ${ct.used.length ? `<div class="why-refs"><b>근거 원문</b>${ct.used.map((r) =>
+        `<div class="why-ref-row"><span class="why-ref-n">#${r.n}</span><span class="sub-note">${esc(r.d)} ${esc(r.src)}</span>
+          ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${esc(r.title)} ↗</a>` : `<span>${esc(r.title)}</span>`}</div>`).join("")}</div>` : ""}
+      ${m.srcs?.length ? `<p class="sub-note">🔎 검색 출처: ${m.srcs.map((w) =>
+        `<a class="ext-link" href="${w.uri}" target="_blank" rel="noopener">${esc((w.title || "링크").slice(0, 30))}</a>`).join(" · ")}</p>` : ""}
+      ${m.foot ? `<p class="sub-note">${m.foot}</p>` : ""}
+    </div>`; }).join("") +
+    (pending ? `<div class="why-turn"><div class="why-q">${esc(pending)}</div>
+      <p class="mini-note">자료 취합·분석 중…</p></div>` : "") +
+    (WHY_LOG.length ? `<p class="sub-note why-hint">이어서 더 물어보세요 — 같은 구간을 기준으로 답합니다
+      (예: 그때 수급은 어땠어? · 지금은 어때?)</p>` : "");
+  out.scrollTop = out.scrollHeight;
 }
 
 /* 질문 속 기간("25년 11월"/"2025년 11월"/"2025년") 자동 인식 → 그 기간의 일봉으로 창을 좁힌다(v223).
@@ -9201,9 +9244,80 @@ function whyContext(st, qwin) {
            name: st.name, tk: st.ticker, mk: st.market };
 }
 
+/* 429(RATE_LIMIT) 응답의 권장 대기시간을 읽어낸다. 무료 등급은 분당 한도가 낮아 고정 4초 백오프로는
+   연속 질문에서 계속 실패했다(실측) → 서버가 알려주는 retryDelay를 쓰고, 없으면 지수 백오프. */
+async function gemRetryWait(res, attempt) {
+  let sec = 0;
+  try {
+    const j = await res.clone().json();
+    for (const d of j.error?.details || []) {
+      const m = /^(\d+(?:\.\d+)?)s$/.exec(d.retryDelay || "");
+      if (m) sec = Math.max(sec, parseFloat(m[1]));
+    }
+  } catch (e) { /* 본문 파싱 실패 시 기본 백오프 */ }
+  if (!sec) sec = 6 * (attempt + 1);
+  await new Promise((r) => setTimeout(r, Math.min(45, sec + 1) * 1000));
+  return sec;
+}
+
+/* ⚠무료 등급은 **모델별로** 한도가 따로 걸린다(2026-08-01 실측: gemini-3.5-flash = 하루 20회,
+   소진돼도 3.6-flash·flash-latest·3.1-flash-lite는 그대로 응답). 한 모델이 429면 다음 모델로 넘겨
+   실질 사용량을 몇 배로 늘린다. 소진된 모델은 세션 동안 건너뛴다.
+   think0=false 모델은 thinkingBudget 지정을 거부하므로 사고가 켜진 채로 돌고, 출력 한도를 넉넉히 준다. */
+const GEMINI_CHAIN = [
+  { id: "gemini-3.5-flash", think0: true },
+  { id: "gemini-3.6-flash", think0: false },
+  { id: "gemini-flash-latest", think0: false },
+  { id: "gemini-3.1-flash-lite", think0: true },
+  { id: "gemini-flash-lite-latest", think0: false },
+];
+const GEM_DEAD = new Set();          // 이번 세션에서 한도 소진이 확인된 모델
+
+/* 프롬프트 1건을 체인으로 호출. {text, srcs, model} 반환. 모두 실패하면 예외. */
+async function gemCall(prompt, opts = {}) {
+  const key = geminiKey();
+  if (!key) throw new Error("NO_KEY");
+  const maxT = opts.maxTokens || 1600;
+  let search = !!opts.search;
+  let lastErr = null;
+  for (const m of GEMINI_CHAIN) {
+    if (GEM_DEAD.has(m.id)) continue;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const body = { contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: m.think0 ? maxT : Math.max(maxT, 3600) } };
+      if (m.think0) body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      if (search) body.tools = [{ google_search: {} }];
+      let res;
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m.id}:generateContent?key=${key}`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      } catch (e) { lastErr = e; break; }
+      if (res.status === 429) {
+        if (search) { search = false; continue; }   // 검색 그라운딩만 막힌 경우
+        GEM_DEAD.add(m.id);                          // 이 모델 한도 소진 → 다음 모델로
+        lastErr = new Error("RATE_LIMIT");
+        if (opts.onSwitch) opts.onSwitch(m.id);
+        break;
+      }
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        lastErr = new Error(j?.error?.message || res.status);
+        break;    // 400(파라미터 거부) 등 → 다음 모델
+      }
+      const cand = j?.candidates?.[0];
+      const text = cand?.content?.parts?.map((x) => x.text || "").join("") || "";
+      if (!text) { lastErr = new Error("빈 응답(" + (cand?.finishReason || "?") + ")"); break; }
+      return { text, model: m.id,
+        srcs: (cand?.groundingMetadata?.groundingChunks || []).map((g) => g.web).filter(Boolean).slice(0, 5) };
+    }
+  }
+  throw lastErr || new Error("모든 모델 실패");
+}
+
+let WHY_BUSY = false;
 async function whyAsk() {
   const st = LOOKUP_ST;
-  if (!st) return;
+  if (!st || WHY_BUSY) return;   // 연타 방지(무료 등급 쿼터 보호)
   const out = $("#why-out");
   const key = geminiKey();
   if (!key) {
@@ -9213,25 +9327,45 @@ async function whyAsk() {
       키는 이 브라우저에만 저장되며 서버로 전송되지 않습니다.</p>`;
     return;
   }
-  out.style.display = "";
-  out.innerHTML = `<p class="mini-note">자료 취합·분석 중…</p>`;
+  WHY_BUSY = true;
+  const q0 = ($("#why-q").value || "").trim();
+  const q = q0 || `이 구간에서 주가가 움직인 사유를 자료 기반으로 설명해줘.`;
+  $("#why-q").value = "";
+  whyRenderThread(q);
   await loadExtras();                       // 공시·뉴스 컨텍스트
-  const q = $("#why-q").value.trim();
-  const qwin = whyParsePeriod(q, st.series || []);   // "25년 11월" → 그 달로 창 좁힘
+  // 기간: 질문에 명시가 있으면 그것, 없으면 **직전 질문에서 쓴 구간**을 이어 쓴다(후속 질문 대응)
+  const qwin = whyParsePeriod(q, st.series || []) || (WHY_LOG.length ? WHY_WIN : null);
   const c = whyContext(st, qwin);
-  if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
+  if (!c) { WHY_LOG.push({ q, a: "구간 데이터가 부족합니다." }); whyRenderThread(); WHY_BUSY = false; return; }
+  WHY_WIN = qwin;
   const peerMoves = await whyPeerMoves(st, c.f.t, c.l.t);   // 업종 동반 하락 여부
   // 구간 당시 뉴스 헤드라인(아카이브) — 급락일 ±1일 기사를 앞쪽에 배치해 인과 판단을 돕는다
   const arc = await loadStockNews(`${st.market}_${st.ticker}`);
+  /* 출처(REF): 자료마다 번호를 매겨 모델에게 주고, 답변의 [#n]을 코드가 실제 링크로 바꾼다.
+     모델이 URL을 직접 쓰게 하면 없는 주소를 지어낸다(deal-radar에서 검증된 패턴). */
+  const refs = [];
   let arcNews = [];
   if (arc) {
     const inWin = arc.filter((x) => x[0] >= c.f.t && x[0] <= c.l.t);
     const keyDays = new Set(c.drops.concat(c.jumps).map((s) => s.slice(0, 10)));
     const near = (d) => { for (const k of keyDays) { const gap = Math.abs(new Date(d) - new Date(k)) / 864e5; if (gap <= 1) return true; } return false; };
     const hot = inWin.filter((x) => near(x[0])), rest = inWin.filter((x) => !near(x[0]));
-    arcNews = hot.concat(rest).slice(0, 40).map((x) => `${x[0]} [${x[1]}] ${x[2]}`);
+    arcNews = hot.concat(rest).slice(0, 40).map((x) => {
+      refs.push({ n: refs.length + 1, d: x[0], src: x[1], title: x[2],
+        url: x[3] ? `https://n.news.naver.com/article/${x[3]}` : null });
+      return `[#${refs.length}] ${x[0]} [${x[1]}] ${x[2]}`;
+    });
   }
+  // 공시도 같은 번호 체계에 넣는다(DART 원문 링크 보유)
+  const fdRef = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
+  const discRefs = (fdRef?.disc || []).filter((d) => d.d >= c.f.t && d.d <= c.l.t).slice(0, 15)
+    .map((d) => {
+      refs.push({ n: refs.length + 1, d: d.d, src: "공시", title: d.title.trim(), url: d.link || null });
+      return `[#${refs.length}] ${d.d} ${d.title.trim()}`;
+    });
+  const hist = WHY_LOG.slice(-3).map((m) => `질문: ${m.q}\n답변요지: ${m.a.slice(0, 300)}`).join("\n---\n");
   const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]를 1차 근거로 답하라.
+${hist ? `\n[직전 대화] 아래는 같은 종목·구간에 대한 앞선 문답이다. 후속 질문이면 맥락을 이어서,\n이미 말한 내용은 반복하지 말고 새로 물은 것에 집중해 답하라.\n${hist}\n` : ""}
 규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인을 보완할 때는 출처를 구분해 표시:
 **실제 구글 검색 결과에 근거한 문장만 [검색]**, 검색 도구를 쓰지 않고 네 지식으로 서술하면 반드시 [추정]
 (검색 도구가 제공되지 않은 요청에서는 [검색]을 절대 쓰지 말 것) ③확신이 없으면 단정 대신 [추정]
@@ -9252,11 +9386,14 @@ ${c.quarters.during.map((x) => `    · **구간 중 발표** — ${x}`).join("\n
 ${c.quarters.after.map((x) => `    · 구간 이후 발표(사후 확인용) — ${x}`).join("\n")}` : ""}
 ${c.cons ? `- 컨센서스(최신 ${c.cons.at || "-"} 기준, 구간 당시 값 아님): 목표주가 ${c.cons.target?.toLocaleString()} · 투자의견 ${c.cons.opinion ?? "-"}/5` : ""}
 ${c.metrics ? `- 밸류에이션(현재): PER ${c.metrics.per ?? "-"} · PBR ${c.metrics.pbr ?? "-"} · ROE ${c.metrics.roe ?? "-"}%` : ""}
-- 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}
+${discRefs.length ? `- 공시(구간 내 ${discRefs.length}건):\n${discRefs.map((x) => `    · ${x}`).join("\n")}`
+  : `- 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}`}
 ${arcNews.length ? `- **구간 당시 뉴스 헤드라인**(${arcNews.length}건, 급락·급등일 전후 우선):
 ${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시 뉴스 자료 없음" : `최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}`}`}
 
 [분석 지침]
+- **근거로 쓴 뉴스·공시는 문장 끝에 그 항목의 번호를 [#3] 또는 [#7 #12] 형태로 반드시 표기하라.**
+  자료에 실제로 있는 번호만 쓰고, 없는 번호를 지어내지 말 것(번호는 링크로 바뀐다).
 - **뉴스 헤드라인이 있으면 그것이 1차 근거다.** 헤드라인에 드러난 사건·업종 분위기·증권사 코멘트를
   구체적으로 인용해 서술하라(날짜·매체 포함). 자료에 있는 내용을 [추정]으로 얼버무리지 말 것.
 - **실적 수치가 좋아 보이는데 주가가 빠졌다면** 그 점을 먼저 짚고, 기대치(컨센서스) 대비 미달·향후 가이던스·
@@ -9267,42 +9404,17 @@ ${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
-    let ans = null, srcs = [], search = true;
-    // ⚠모델명 주의: gemini-2.5-flash는 **신규 발급 키에 제공 중단**(404). 교체 시 실제 호출로 검증할 것.
-    // 검색 그라운딩은 무료 등급 쿼터가 0이라 429가 난다 → 첫 429에서 검색을 끄고 내부 자료만으로 재시도.
-    for (let i = 0; i < 4; i++) {
-      const body = { contents: [{ parts: [{ text: prompt }] }],
-        // thinking이 출력 한도를 잠식해 답이 잘린다(실측) → 0으로
-        generationConfig: { maxOutputTokens: 2600, thinkingConfig: { thinkingBudget: 0 } } };
-      if (search) body.tools = [{ google_search: {} }];
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      if (res.status === 429) {
-        if (search) { search = false; continue; }       // 검색 없이 즉시 재시도
-        await new Promise((r) => setTimeout(r, 4000 * (i + 1)));
-        continue;
-      }
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error?.message || res.status);
-      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join("") || "";
-      srcs = (j.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
-        .map((g) => g.web).filter(Boolean).slice(0, 5);
-      break;
-    }
-    if (!ans) throw new Error("응답 없음(한도 초과 반복) — 잠시 후 다시");
-    const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    out.innerHTML = `<div class="lk-why-ans">${esc(ans)
-      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-      .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
-      .replace(/\n/g, "<br>")
-      .replace(/<\/li><br>/g, "</li>")}</div>
-      ${srcs.length ? `<p class="sub-note" style="margin-top:6px">🔎 검색 출처: ${srcs.map((w) =>
-        `<a class="ext-link" href="${w.uri}" target="_blank" rel="noopener">${(w.title || "링크").slice(0, 30)}</a>`).join(" · ")}</p>` : ""}
-      <p class="sub-note">Gemini · 근거: 주가·공시·수급·분기실적·동종업계${arcNews.length ? ` · <b>당시 뉴스 ${arcNews.length}건</b>` : ""} — 자료 밖 내용은 [추정] 표시 · 투자 판단의 참고용입니다.</p>`;
+    const r = await gemCall(prompt, { maxTokens: 2600, search: true,
+      onSwitch: () => whyRenderThread(`${q}  (모델 한도 — 다른 모델로 전환 중…)`) });
+    const ans = r.text, srcs = r.srcs;
+    WHY_LOG.push({ q, a: ans, srcs, refs,
+      foot: `${c.f.t}~${c.l.t} 구간 · 근거: 주가·공시·수급·분기실적·동종업계${arcNews.length ? ` · 당시 뉴스 ${arcNews.length}건` : ""}` });
+    whyRenderThread();
   } catch (e) {
-    out.innerHTML = `<p class="mini-note">분석 실패: ${String(e.message || e).slice(0, 120)}</p>`;
+    WHY_LOG.push({ q, a: `분석 실패: ${String(e.message || e).slice(0, 140)}` });
+    whyRenderThread();
   }
+  WHY_BUSY = false;
 }
 
 
