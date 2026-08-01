@@ -2614,37 +2614,51 @@ function dsRender() {
   });
 }
 
-/* 구조도 — 인수자 →(금액·지분율)→ 대상, 위에 매도자. 합병은 존속/소멸을 나란히. */
+/* 구조도(v247) — 좁은 좌측 열에 맞춰 **세로 흐름**으로. 가로형은 폭을 많이 먹고 글자도 커진다.
+   노드 2~3개를 위→아래로 연결하고 화살표에 금액·지분율을 얹는다. */
 function dsDiagram(x) {
-  const W = 660, H = x.counter && x.side !== "merge" ? 150 : 110;
-  const midY = H - 46;
-  const boxW = 208, boxH = 52;
-  const lx = 10, rx = W - boxW - 10;
-  const label = x.side === "out" ? "매각" : x.side === "merge" ? "합병" : "인수";
-  const arrowTxt = [dsAmt(x.amount), x.stake_after ? `지분 ${x.stake_after}%` : null,
-    x.ratio ? `비율 ${String(x.ratio).split("\n")[0].slice(0, 26)}` : null].filter(Boolean).join(" · ");
-  const box = (bx, by, title, sub, cls) => `
-    <rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="9" class="ds-box ${cls}"/>
-    <text x="${bx + boxW / 2}" y="${by + 21}" class="ds-box-t">${dsName(title).slice(0, 16)}</text>
-    <text x="${bx + boxW / 2}" y="${by + 38}" class="ds-box-s">${dsEsc((sub || "").slice(0, 20))}</text>`;
-  const left = x.side === "out" ? { t: x.target, s: x.target_biz } : { t: x.corp, s: "인수자" };
-  const right = x.side === "out" ? { t: x.counter, s: x.counter_biz } : { t: x.target, s: x.target_biz };
-  let seller = "";
-  if (x.counter && x.side === "in") {
-    seller = `${box(rx, 6, x.counter, x.counter_biz || "매도자", "ds-box-seller")}
-      <line x1="${rx + boxW / 2}" y1="${6 + boxH}" x2="${rx + boxW / 2}" y2="${midY - 8}" class="ds-arrow"/>
-      <text x="${rx + boxW / 2 + 8}" y="${(6 + boxH + midY) / 2 + 4}" class="ds-arrow-t">매각</text>`;
+  // 유형별 노드 순서: [윗박스, 아랫박스...] + 화살표 라벨
+  const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
+  // 합병비율은 "A(주) : B(주) = 1.0000000 : 0.0000000" 형태 → 숫자 부분만 뽑아 좁은 폭에 맞춘다
+  let ratio = null;
+  if (x.ratio) {
+    const raw = String(x.ratio).split("\n")[0];
+    const m = /([\d.]+)\s*:\s*([\d.]+)\s*$/.exec(raw.trim());
+    ratio = m ? `${parseFloat(m[1])} : ${parseFloat(m[2])}` : raw.slice(0, 16);
   }
+  let nodes, arrows;
+  if (x.side === "merge") {
+    nodes = [{ t: x.target, s: "소멸", c: "tgt" }, { t: x.corp, s: "존속", c: "acq" }];
+    arrows = [ratio ? `합병비율 ${ratio}` : "흡수합병"];
+  } else if (x.side === "out") {
+    nodes = [{ t: x.corp, s: "매각자", c: "acq" }];
+    if (x.target && x.target !== x.counter) nodes.push({ t: x.target, s: "대상", c: "tgt" });
+    if (x.counter) nodes.push({ t: x.counter, s: "인수자", c: "seller" });
+    arrows = nodes.length === 3 ? [amtTxt || "매각", "이전"] : [amtTxt || "매각"];
+  } else {
+    nodes = [];
+    if (x.counter) nodes.push({ t: x.counter, s: "매도자", c: "seller" });
+    nodes.push({ t: x.corp, s: "인수자", c: "acq" });
+    if (x.target) nodes.push({ t: x.target, s: "대상", c: "tgt" });
+    arrows = nodes.length === 3 ? ["매각", amtTxt || "취득"] : [amtTxt || "취득"];
+  }
+  const W = 250, BH = 38, GAP = 34;
+  const H = nodes.length * BH + (nodes.length - 1) * GAP + 8;
+  let svg = "";
+  nodes.forEach((n, i) => {
+    const y = 4 + i * (BH + GAP);
+    svg += `<rect x="4" y="${y}" width="${W - 8}" height="${BH}" rx="7" class="ds-box ds-box-${n.c}"/>
+      <text x="${W / 2}" y="${y + 16}" class="ds-box-t">${dsName(n.t).slice(0, 14)}</text>
+      <text x="${W / 2}" y="${y + 29}" class="ds-box-s">${dsEsc(n.s)}</text>`;
+    if (i < nodes.length - 1) {
+      const ay = y + BH, by = y + BH + GAP;
+      svg += `<line x1="${W / 2}" y1="${ay + 3}" x2="${W / 2}" y2="${by - 5}" class="ds-arrow"/>
+        <text x="${W / 2}" y="${(ay + by) / 2 + 4}" class="ds-arrow-t mid">${dsEsc(arrows[i] || "")}</text>`;
+    }
+  });
   return `<svg viewBox="0 0 ${W} ${H}" class="ds-svg">
-    <defs><marker id="dsah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#7cb1ff"/></marker></defs>
-    ${seller}
-    ${box(lx, midY - boxH / 2, left.t, left.s, "ds-box-acq")}
-    ${box(rx, midY - boxH / 2, right.t, right.s, "ds-box-tgt")}
-    <line x1="${lx + boxW + 6}" y1="${midY}" x2="${rx - 8}" y2="${midY}" class="ds-arrow"/>
-    <text x="${(lx + boxW + rx) / 2}" y="${midY - 9}" class="ds-arrow-t mid">${dsEsc(arrowTxt) || label}</text>
-    <text x="${(lx + boxW + rx) / 2}" y="${midY + 18}" class="ds-arrow-s mid">${label}</text>
-  </svg>`;
+    <defs><marker id="dsah" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="#7cb1ff"/></marker></defs>${svg}</svg>`;
 }
 
 /* 사업개요 — 우리가 이미 가진 company.json(상장사)에서. 비상장이면 공시의 업종 한 줄. */
@@ -2689,14 +2703,18 @@ function dsCard(x) {
       ${x.amount ? `<span class="ds-amt">${dsAmt(x.amount)}</span>` : ""}
       <a class="ext-link" href="${x.url}" target="_blank" rel="noopener">공시 원문 ↗</a>
     </div>
-    ${dsDiagram(x)}
-    ${facts.length ? `<div class="ds-facts">${facts.map(([k, v]) =>
-      `<span><span class="sub-note">${k}</span> <b>${dsEsc(v)}</b></span>`).join("")}</div>` : ""}
-    ${x.purpose ? `<p class="ds-purpose">🎯 ${dsEsc(String(x.purpose).slice(0, 220))}</p>` : ""}
-    ${x.method ? `<p class="sub-note">방식: ${dsEsc(String(x.method).replace(/\n/g, " ").slice(0, 180))}</p>` : ""}
-    ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
-      <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
-    ${dsBiz(x)}
+    <div class="ds-body">
+      <div class="ds-left">${dsDiagram(x)}</div>
+      <div class="ds-right">
+        ${facts.length ? `<div class="ds-facts">${facts.map(([k, v]) =>
+          `<span><span class="sub-note">${k}</span> <b>${dsEsc(v)}</b></span>`).join("")}</div>` : ""}
+        ${x.purpose ? `<p class="ds-purpose">🎯 ${dsEsc(String(x.purpose).slice(0, 220))}</p>` : ""}
+        ${x.method ? `<p class="sub-note">방식: ${dsEsc(String(x.method).replace(/\n/g, " ").slice(0, 180))}</p>` : ""}
+        ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
+          <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
+        ${dsBiz(x)}
+      </div>
+    </div>
   </div>`;
 }
 
@@ -2715,6 +2733,7 @@ function initDealsStruct() {
 }
 
 const DEV_HISTORY = [
+  ["v247", "2026-08-02", "딜 구조 카드 2단 배치 + 도식 축소", "구조도가 카드 전체 폭을 쓰고 글자도 커서 한 딜이 화면을 가득 채웠습니다. **구조도를 왼쪽 좁은 열에 세로 흐름으로** 줄이고(매도자→인수자→대상), 거래금액·지분율·목적·자금조달·양측 사업개요는 **오른쪽에 배치**했습니다. 글자 크기도 전반적으로 줄여 한 화면에 더 많은 딜이 들어옵니다."],
   ["v246", "2026-08-02", "딜 구조 탭이 빈 화면으로 뜨던 문제 수정", "🤝 딜 구조를 눌러도 아무것도 안 나오던 문제를 고쳤습니다. 새 상위 그룹의 기본 탭이 등록되지 않아 그룹만 눌렀을 때 아무 탭도 열리지 않았습니다(제가 검증할 때는 탭을 직접 눌러 확인해서 놓쳤습니다). 전체 그룹 6개가 모두 정상 표시되는지 다시 확인했고, 뒤로가기 라벨에 쓰이는 탭 이름(딜 구조·투자 다이어리)도 함께 등록했습니다."],
   ["v245", "2026-08-02", "🤝 딜 구조 탭 신설 — 공시 원본으로 M&A 구조도·사업개요", "M&A를 기사로만 보던 것을 **공시 원본 데이터**로 바꿨습니다. 국내 상장사 딜은 주요사항보고서에 거래상대방·대상회사·금액·주식수·취득 후 지분율·목적·자금조달·일정이 **필드로** 들어 있어 그대로 씁니다. 화면에는 **구조도**(인수자 →금액·지분율→ 대상, 위에 매도자)와 **양측 사업개요**(보유한 기업개요·매출구성·실적), 취득 목적·외부평가·대금지급 방식, 공시 원문 링크가 함께 나옵니다. 중요 딜 선정은 기사 노출이 아니라 **거래금액·자산 대비 비중·취득 지분율** 정량 점수로 합니다. 예: 두산→SK실트론 2.3조·70.61%, 삼성바이오로직스→PolyPeptide 2.7조·100%. 해외·비상장 딜은 공시 대상이 아니라 별도 보고서로 보완합니다."],
   ["v244", "2026-08-02", "📔 다이어리에 제목 칸 추가", "기록마다 **제목**을 붙일 수 있습니다(선택 — 비우면 본문 첫 줄이 제목이 됩니다). 목록에서 제목이 굵게 먼저 보여 훑어보기 쉽고, 검색·미해결 질문 배너·Notion 동기화의 페이지 제목에도 그대로 반영됩니다. 제목 칸에서 Enter를 누르면 본문으로 넘어갑니다. 이전에 쓴 기록도 그대로 보입니다."],
