@@ -2386,6 +2386,10 @@ function diLoad() { try { return JSON.parse(localStorage.getItem(DI_KEY)) || [];
 function diSave(a) { localStorage.setItem(DI_KEY, JSON.stringify(a)); }
 const diMeta = (k) => DI_TYPES.find((x) => x.k === k) || DI_TYPES[0];
 const diEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/* 제목은 선택 입력 — 비어 있으면 본문 첫 줄(최대 60자)을 제목처럼 쓴다.
+   제목 칸이 없던 시절의 기록도 그대로 읽히게 하기 위한 호환 장치. */
+const diTitle = (x) => (x.title || "").trim() ||
+  ((x.body || "").split("\n")[0].trim().slice(0, 60) || "(제목 없음)");
 
 function initDiary() {
   diaryRendered = true;
@@ -2404,6 +2408,9 @@ function initDiary() {
   // Ctrl+Enter 저장 — 길게 쓰다 마우스로 옮기지 않게
   $("#di-body").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); diSubmit(); }
+  });
+  $("#di-title").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("#di-body").focus(); }   // 제목 → 본문으로
   });
   $("#di-search").addEventListener("input", diRender);
   $("#di-export").onclick = () => {
@@ -2437,6 +2444,7 @@ function initDiary() {
 
 function diReset() {
   diEditId = null;
+  $("#di-title").value = "";
   $("#di-body").value = "";
   $("#di-tags").value = "";
   $("#di-ticker").value = "";
@@ -2448,6 +2456,7 @@ function diReset() {
 function diSubmit() {
   const body = $("#di-body").value.trim();
   if (!body) { $("#di-body").focus(); return; }
+  const title = $("#di-title").value.trim().slice(0, 80);
   const type = $("#di-types .chip.active")?.dataset.t || "think";
   const tags = $("#di-tags").value.split(/[,#\s]+/).map((s) => s.trim()).filter(Boolean).slice(0, 6);
   const tkRaw = $("#di-ticker").value.trim();
@@ -2460,9 +2469,9 @@ function diSubmit() {
   const all = diLoad();
   if (diEditId) {
     const it = all.find((x) => x.id === diEditId);
-    if (it) Object.assign(it, { type, body, tags, tk, updated: kstDay() });
+    if (it) Object.assign(it, { title, type, body, tags, tk, updated: kstDay() });
   } else {
-    all.unshift({ id: "d" + Date.now().toString(36), d: kstDay(), type, body, tags, tk, resolved: false });
+    all.unshift({ id: "d" + Date.now().toString(36), d: kstDay(), title, type, body, tags, tk, resolved: false });
   }
   diSave(all);
   diReset();
@@ -2482,7 +2491,7 @@ function diRender() {
     bn.innerHTML = openQ.length
       ? `<b>❓ 아직 답을 못 찾은 질문 ${openQ.length}건</b>` +
         openQ.slice(0, 5).map((x) => `<div class="di-openq-row" data-id="${x.id}">
-          <span class="sub-note">${x.d}</span> ${diEsc(x.body).slice(0, 70)}${x.body.length > 70 ? "…" : ""}</div>`).join("")
+          <span class="sub-note">${x.d}</span> ${diEsc(diTitle(x))}</div>`).join("")
       : "";
     bn.querySelectorAll(".di-openq-row").forEach((r) => r.onclick = () => {
       const el = host.querySelector(`[data-card="${r.dataset.id}"]`);
@@ -2491,7 +2500,8 @@ function diRender() {
   }
   if (diFilter === "ask-open") all = all.filter((x) => x.type === "ask" && !x.resolved);
   else if (diFilter !== "all") all = all.filter((x) => x.type === diFilter);
-  if (q) all = all.filter((x) => (x.body + " " + (x.tags || []).join(" ") + " " + (x.tk?.name || "")).toLowerCase().includes(q));
+  if (q) all = all.filter((x) => ((x.title || "") + " " + x.body + " " + (x.tags || []).join(" ") +
+    " " + (x.tk?.name || "")).toLowerCase().includes(q));
   $("#di-count").textContent = `${all.length}건`;
   if (!all.length) {
     host.innerHTML = `<p class="mini-note">${q || diFilter !== "all" ? "조건에 맞는 기록이 없습니다." :
@@ -2508,6 +2518,7 @@ function diRender() {
         ${x.type === "ask" ? `<button class="di-mini" data-res="${x.id}">${x.resolved ? "✅ 해결됨" : "☐ 해결 표시"}</button>` : ""}
         <button class="di-mini" data-edit="${x.id}">수정</button>
         <button class="di-mini" data-del="${x.id}">삭제</button></div>
+      <div class="di-title${x.resolved ? " done" : ""}">${diEsc(diTitle(x))}</div>
       <div class="di-body${x.resolved ? " done" : ""}">${diEsc(x.body).replace(/\n/g, "<br>")}</div>
       ${(x.tags || []).length ? `<div class="di-tags">${x.tags.map((t) =>
         `<span class="badge" data-tag="${diEsc(t)}">#${diEsc(t)}</span>`).join("")}</div>` : ""}
@@ -2529,6 +2540,7 @@ function diRender() {
     const it = diLoad().find((x) => x.id === b.dataset.edit);
     if (!it) return;
     diEditId = it.id;
+    $("#di-title").value = it.title || "";
     $("#di-body").value = it.body;
     $("#di-tags").value = (it.tags || []).join(", ");
     $("#di-ticker").value = it.tk?.name || "";
@@ -2544,6 +2556,7 @@ function diRender() {
 }
 
 const DEV_HISTORY = [
+  ["v244", "2026-08-02", "📔 다이어리에 제목 칸 추가", "기록마다 **제목**을 붙일 수 있습니다(선택 — 비우면 본문 첫 줄이 제목이 됩니다). 목록에서 제목이 굵게 먼저 보여 훑어보기 쉽고, 검색·미해결 질문 배너·Notion 동기화의 페이지 제목에도 그대로 반영됩니다. 제목 칸에서 Enter를 누르면 본문으로 넘어갑니다. 이전에 쓴 기록도 그대로 보입니다."],
   ["v243", "2026-08-02", "📔 다이어리 Notion 연동 + 기기 간 동기화 수정", "①**다른 노트북에서 다이어리가 안 보이던 문제 수정** — 기기 간 동기화 대상 목록에 다이어리가 빠져 있었습니다(백업 목록과 별개인 걸 놓침). 이제 같은 구글 계정으로 로그인하면 어느 기기에서든 따라옵니다. ②**Notion 연동** — Claude에게 '다이어리 노션에 올려줘'라고 하면 Notion 데이터베이스로 보냅니다. 날짜·유형·내용·태그·종목·해결 여부가 그대로 들어가고, **기록 ID 기준으로 갱신**되어 여러 번 올려도 중복이 생기지 않으며 수정한 글도 반영됩니다. (Notion은 브라우저 직접 호출을 막아둬서 사이트가 아닌 스크립트가 대신 올리는 구조입니다.)"],
   ["v242", "2026-08-01", "📔 투자 다이어리 — 생각·궁금증을 그때그때 적는 공간", "내 투자에 **투자 다이어리** 탭을 새로 만들었습니다. 매매일지가 '거래 기록'이라면 이건 '생각 기록'으로, 종목이나 수익률과 무관하게 자유롭게 씁니다. 유형을 💭생각·❓궁금·📌배움·⚠️반성으로 구분하고, **❓궁금은 답을 찾으면 해결 표시**를 할 수 있어 **아직 답 못 찾은 질문만 맨 위 배너에 모아** 보여줍니다 — 궁금증이 묻히지 않게. 태그(#반도체 등)로 묶어 클릭 검색, 종목을 연결하면 종목조회로 바로 이동, Ctrl+Enter로 빠르게 저장, JSON 내보내기/가져오기도 됩니다. 모든 기록은 이 브라우저(로그인 시 개인 계정)에만 저장되며 공개되지 않습니다."],
   ["v241", "2026-08-01", "💰 배당 섹션 — 배당수익률 추이까지 (한국 종목 신규 지원)", "배당 카드가 미국 종목의 분기 지급 이력만 보여주던 것을 전면 개편했습니다. ①**한국 종목도 지원** — 주당배당금 연도별 추이(추정 연도 포함). ②**배당수익률 시계열** — 저장된 값은 최신 1개뿐이라, 보유한 10년 일봉으로 **그해 배당÷그해 평균주가**를 직접 계산해 5~6개년 추이를 그립니다. '지금이 역사적으로 배당 매력이 높은 구간인가'를 판단할 수 있고, 현재값이 평균 대비 높/낮은지 한 줄로 짚어줍니다. ③**요약 타일 3개** — 시가배당률(기간 평균 대비), 배당성향, 연속 증액 연수. 미국 배당 이력도 3년 → 6년으로 늘려 재수집했습니다(94종목). 무배당 종목은 카드가 숨겨집니다."],
