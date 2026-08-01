@@ -13,7 +13,9 @@ import re
 import sys
 from pathlib import Path
 
-MODEL = "gemini-2.5-flash"  # 2.0-flash는 이 키에서 무료 limit 0 (stock-radar 이력)
+# ⚠2.5-flash·2.0-flash는 **신규 발급 키에 제공 중단**(404 no longer available to new users).
+#   2026-08-01 키 교체 때 전 프로젝트가 동시에 멈춘 원인 — 교체 시 반드시 실제 호출로 검증.
+MODEL = "gemini-3.5-flash"
 URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 TIMEOUT = 90
 ENV_FALLBACK = Path(r"C:\Users\yoo73\stock-radar\.env")

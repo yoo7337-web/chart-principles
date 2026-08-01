@@ -2051,6 +2051,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v226", "2026-08-01", "Gemini 모델 교체 — 키 재발급으로 멈춘 AI 기능 전면 복구", "API 키를 새로 발급받자 **모든 AI 기능이 동시에 멈추는** 문제가 발생했습니다. 원인은 `gemini-2.5-flash`(및 2.0-flash)가 신규 발급 키에는 더 이상 제공되지 않기 때문으로(기존 키만 사용 가능), 사이트 AI 분석·시장 브리핑·텔레그램 봇 2종·거인의 어깨·아파트 추천 6곳이 함께 영향을 받았습니다. 전부 **gemini-3.5-flash**로 교체하고 실제 호출로 검증했습니다. 또한 구글 검색 보강은 무료 등급에서 사용할 수 없어(한도 0), 검색이 막히면 **자동으로 내부 자료만으로 재분석**하고 그 사실을 하단에 명시하도록 했습니다 — 근거 표시도 [검색]/[추정]을 정확히 구분합니다."],
   ["v225", "2026-08-01", "📚 사업 심층 — 팝업으로 전환", "사업 심층을 카드 안 접이식 대신 **팝업(심층 보고서와 같은 전체화면 뷰어)**으로 바꿨습니다. 카드에는 '📚 사업 심층 보기' 버튼 한 줄만 남고, 누르면 소제목별 전체 내용(표 포함)을 넓은 화면에서 스크롤로 읽습니다. 종목조회·관심종목 동일 적용."],
   ["v224", "2026-08-01", "📚 사업 심층 — 원문 표를 실제 표로 복원", "사업 심층에서 원문의 표(매출실적·매입처·생산능력 등)가 셀마다 한 줄씩 세로로 풀려 읽기 어렵다는 피드백을 반영했습니다. 수집기가 표 블록을 구조 그대로(셀 구분 유지) 뽑아내고, 화면에서 **실제 표**(헤더행 강조·가로 스크롤)로 복원합니다. DART XML의 특수 구조 3종(셀 안 문단 중첩·닫는 행 태그 생략·TABLE-GROUP 유사 태그)을 각각 처리했고, 전 종목(한 636) 재수집으로 반영했습니다."],
   ["v223", "2026-08-01", "🤔 AI 변동 사유 — 과거 질문 답변 가능(기간 인식+급락일 상세+웹 검색)", "'25년 11월 와이지 하락 이유'처럼 **과거 시점 질문에 답을 못 하던 문제**를 고쳤습니다(내부 뉴스가 최근 1주치뿐 + 구간 통계가 전체 평균으로 뭉개짐 + 자료 밖 지식 차단이 원인). ①질문 속 기간('25년 11월'/'2025년')을 자동 인식해 **그 기간의 일봉으로 자료를 좁히고**, ②구간 내 **최대 급락 3일·급등 2일**(날짜·등락률)을 자료에 추가, ③Gemini **구글 검색 그라운딩**을 켜서 그 시기 뉴스를 웹에서 찾아 [검색] 표시·출처 링크와 함께 인용합니다(무료 한도 내). 과거 구간 질문일 땐 최신 뉴스를 자료에서 빼 오답 유도를 제거했습니다. 실측: 같은 질문에 '3분기 실적 컨센 하회(11-07 공시·-9.4% 급락일 일치) + 증권사 목표가 일제 하향' — 출처 5건과 함께 정확히 답합니다."],
@@ -8702,6 +8703,9 @@ function renderLookupReports(st) {
    키: localStorage 'gemini_key' — youtube-mentor(같은 origin)와 공유. 브라우저 밖으로 안 나감.
    원칙: **제공한 자료 안에서만** 답하게 강제하고, 일반 지식 추정은 [추정]으로 표시시킨다(환각 억제). */
 let whyRange = "5";
+// ⚠모델 은퇴 주의: gemini-2.5-flash·2.0-flash는 신규 발급 키에 제공 중단(404 "no longer available
+//   to new users"). 2026-08-01 키 교체 때 사이트·봇·멘토가 동시에 멈춘 원인 — 바꿀 땐 실제 호출로 검증.
+const GEMINI_MODEL = "gemini-3.5-flash";
 function geminiKey() {
   return localStorage.getItem("gemini_key") || window.GEMINI_API_KEY || "";
 }
@@ -8810,8 +8814,9 @@ async function whyAsk() {
   const c = whyContext(st, qwin);
   if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
   const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]를 1차 근거로 답하라.
-규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인은 **구글 검색으로 찾아 보완**하되
-해당 문장 앞에 [검색]을 붙일 것(특히 급락일 날짜로 당시 뉴스를 검색) ③검색으로도 못 찾으면 [추정] 표시
+규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인을 보완할 때는 출처를 구분해 표시:
+**실제 구글 검색 결과에 근거한 문장만 [검색]**, 검색 도구를 쓰지 않고 네 지식으로 서술하면 반드시 [추정]
+(검색 도구가 제공되지 않은 요청에서는 [검색]을 절대 쓰지 말 것) ③확신이 없으면 단정 대신 [추정]
 ④결론 3~6문장 → 그 아래 "근거:" 불릿(자료·검색의 날짜·항목 인용) ⑤과장·투자권유 금지, 한국어.
 ${qwin ? `※질문의 기간(${c.f.t.slice(0, 7)})을 인식해 자료를 그 기간으로 좁혔다.` : ""}
 
@@ -8827,24 +8832,30 @@ ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
-    let ans = null, srcs = [];
-    for (let i = 0; i < 3; i++) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],   // 과거 뉴스는 내부 자료에 없다 → 검색 그라운딩(무료 한도 내)
-          // thinking이 출력 한도를 잠식해 답이 잘린다(youtube-mentor 실측) → 0으로
-          generationConfig: { maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } } }),
+    let ans = null, srcs = [], search = true;
+    // ⚠모델명 주의: gemini-2.5-flash는 **신규 발급 키에 제공 중단**(404). 교체 시 실제 호출로 검증할 것.
+    // 검색 그라운딩은 무료 등급 쿼터가 0이라 429가 난다 → 첫 429에서 검색을 끄고 내부 자료만으로 재시도.
+    for (let i = 0; i < 4; i++) {
+      const body = { contents: [{ parts: [{ text: prompt }] }],
+        // thinking이 출력 한도를 잠식해 답이 잘린다(실측) → 0으로
+        generationConfig: { maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } } };
+      if (search) body.tools = [{ google_search: {} }];
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
-      if (res.status === 429) { await new Promise((r) => setTimeout(r, 4000 * (i + 1))); continue; }
+      if (res.status === 429) {
+        if (search) { search = false; continue; }       // 검색 없이 즉시 재시도
+        await new Promise((r) => setTimeout(r, 4000 * (i + 1)));
+        continue;
+      }
       const j = await res.json();
       if (!res.ok) throw new Error(j.error?.message || res.status);
-      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text).join("") || "";
+      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join("") || "";
       srcs = (j.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
         .map((g) => g.web).filter(Boolean).slice(0, 5);
       break;
     }
-    if (!ans) throw new Error("응답 없음(429 반복) — 잠시 후 다시");
+    if (!ans) throw new Error("응답 없음(한도 초과 반복) — 잠시 후 다시");
     const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     out.innerHTML = `<div class="lk-why-ans">${esc(ans)
       .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
@@ -8853,7 +8864,8 @@ ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
       .replace(/<\/li><br>/g, "</li>")}</div>
       ${srcs.length ? `<p class="sub-note" style="margin-top:6px">🔎 검색 출처: ${srcs.map((w) =>
         `<a class="ext-link" href="${w.uri}" target="_blank" rel="noopener">${(w.title || "링크").slice(0, 30)}</a>`).join(" · ")}</p>` : ""}
-      <p class="sub-note">Gemini 2.5 Flash + 구글 검색 · 내부 자료(주가·공시·뉴스·수급) 우선, 부족분은 [검색]·[추정] 표시 — 투자 판단의 참고용입니다.</p>`;
+      <p class="sub-note">Gemini${search ? " + 구글 검색" : ""} · 내부 자료(주가·공시·뉴스·수급) 기반${
+        search ? ", 부족분은 [검색]·[추정] 표시" : " — 검색 보강은 무료 등급 한도 초과로 미사용([추정] 표시 확인)"} — 투자 판단의 참고용입니다.</p>`;
   } catch (e) {
     out.innerHTML = `<p class="mini-note">분석 실패: ${String(e.message || e).slice(0, 120)}</p>`;
   }
