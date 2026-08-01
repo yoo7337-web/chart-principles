@@ -1907,3 +1907,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .bizdeep-t { font-size: .82rem; line-height: 1.6; white-space: normal; word-break: break-word;
   max-height: 340px; overflow-y: auto; }
 .ws-bizdeep { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+/* 📚 사업 심층 접기 (v222) — 기본은 한 줄 요약만 */
+.bizdeep-wrap { margin-top: 10px; }
+.bizdeep-wrap > summary { cursor: pointer; font-size: .88rem; list-style: none; }
+.bizdeep-wrap > summary::before { content: "▸ "; color: var(--muted, #9ca3af); }
+.bizdeep-wrap[open] > summary::before { content: "▾ "; }
+.bizdeep-wrap > summary::-webkit-details-marker { display: none; }
+.bizdeep-body { margin-top: 4px; }

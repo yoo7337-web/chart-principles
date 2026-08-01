@@ -2051,6 +2051,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v222", "2026-08-01", "📚 사업 심층 접기 — 기본은 한 줄, 클릭해야 펼쳐짐", "사업 심층이 종목조회·관심종목에서 소제목 목록만으로도 세로 공간을 크게 차지한다는 피드백을 반영해, 전체를 **한 줄 접이식**('📚 사업 심층 · N개 섹션 — 눌러서 펼치기')으로 감쌌습니다. 펼치면 기존처럼 소제목별로 다시 열어볼 수 있고, 공시 원문 링크는 펼친 안쪽으로 이동했습니다."],
   ["v221", "2026-08-01", "기업개요 대보강 — 기업 정보 팩트 + 📚 사업 심층(공식 원문 발췌)", "①**🪪 기업 정보 팩트**(종목조회 기업개요 카드): 한국은 DART 공식 API에서 대표자·설립일·직원 수·평균 연봉·평균 근속·주당배당 3개년·배당성향·시가배당률을, 미국은 직원 수·본사·섹터·경영진 명단을 가져와 표시합니다. ②**📚 사업 심층**: 한국 시총 상위 500은 최신 사업보고서의 'II. 사업의 내용'(사업 개요·주요 제품·원재료와 생산설비·매출과 수주·연구개발 등 소제목별), 미국 전 종목은 10-K Item 1(Business)을 원문 발췌로 제공 — 요약본에 없던 시장점유율·수주잔고·가동률급 정보를 공식 출처 그대로 봅니다(원문 링크 포함, 분기 갱신). 종목조회 기업개요 카드와 관심종목 워크스페이스 보고서 카드 양쪽에 접이식으로 들어갑니다."],
   ["v220", "2026-08-01", "🤔 AI 변동 사유 Q&A — 차트 아래에서 '왜 움직였나' 질문", "종목조회 차트 아래에 **AI 변동 사유 카드**를 추가했습니다. 기간(최근 5일/1개월/차트에 보이는 구간)을 고르고 분석을 누르면 **그 구간의 주가 등락·고저·거래량 급증일 + 공시 + 뉴스 헤드라인 + 외국인·기관·개인 수급 + 원칙 신호**를 한 번에 모아 Gemini에게 넘기고, '이 자료 안에서만 답하라(자료 밖 추정은 [추정] 표시)'를 강제해 근거 있는 설명을 받습니다. 자유 질문도 가능(비우면 상승/하락 사유 분석). Gemini 키는 🔑 버튼으로 브라우저에만 저장되며(youtube-mentor와 공유) 서버로 전송되지 않습니다."],
   ["v219", "2026-08-01", "관심종목 재무 그래프를 추이형 스파크라인으로 교체", "막대 방식은 분기 간 값 차이가 작으면 전부 비슷한 높이로 보여 추이가 읽히지 않았습니다(사용자 피드백). **매출·영업이익·순이익 각각을 면적 스파크라인**(자기 범위로 증폭, 높이 확대)으로 바꿔 방향과 굴곡이 한눈에 보이게 했고, 각 줄 오른쪽에 최근 분기 값을 붙였습니다. 적자 구간이 있으면 0선(점선)이 표시되고 점에 커서를 올리면 분기별 값이 나옵니다. 함께: 전년 동분기가 0에 가까울 때 YoY가 '-5,815%' 같은 허수로 표시되던 것을 **흑자전환/적자전환** 표기로 정리했습니다."],
@@ -7372,10 +7373,14 @@ function renderLookupOverview(st) {
 const BIZDEEP = {};
 function bizDeepHtml(d, open) {
   const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<div class="ov-sec"><b>📚 사업 심층</b> <span class="sub-note">${d.src} 원문 발췌 ·
-      <a class="ext-link" href="${d.url}" target="_blank" rel="noopener">원문 ↗</a></span>
-    ${d.sections.map((s, i) => `<details class="bizdeep-sec"${open && i === 0 ? " open" : ""}>
-      <summary>${esc(s.h)}</summary><p class="bizdeep-t">${esc(s.t).replace(/\n/g, "<br>")}</p></details>`).join("")}</div>`;
+  // v222: 전체를 바깥 접이식 한 줄로 — 펼치기 전엔 공간을 거의 차지하지 않는다(사용자 피드백)
+  return `<details class="bizdeep-wrap"${open ? " open" : ""}>
+    <summary><b>📚 사업 심층</b> <span class="sub-note">${d.src} 원문 발췌 · ${d.sections.length}개 섹션 — 눌러서 펼치기</span></summary>
+    <div class="bizdeep-body">
+      <p class="sub-note" style="margin:4px 0 2px"><a class="ext-link" href="${d.url}" target="_blank" rel="noopener">공시 원문 전체 ↗</a></p>
+      ${d.sections.map((s) => `<details class="bizdeep-sec">
+        <summary>${esc(s.h)}</summary><p class="bizdeep-t">${esc(s.t).replace(/\n/g, "<br>")}</p></details>`).join("")}
+    </div></details>`;
 }
 async function fetchBizDeep(key) {
   if (!(key in BIZDEEP)) {
