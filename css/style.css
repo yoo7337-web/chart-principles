@@ -1412,11 +1412,15 @@ dialog { background: var(--card); color: var(--ink); }
 .rank-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
 .rank-grid .mv-row:nth-last-child(2) { border-bottom: none; }   /* 각 열 마지막 행 라인 정리(짝수개 기준) */
 .lk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; margin-top: 14px; }
-/* 우측 레일로 옮긴 개요·투자지표·컨센서스는 좁은 폭에 맞춰 세로 스택 */
-.lk-side .lk-mgrid, .lk-side .lk-mgrid.four, .lk-side .lk-mgrid.fin3 { grid-template-columns: 1fr; padding: 4px 14px; }
+/* 우측 레일(400px): 1열 스택은 투자지표가 577px까지 늘어져 한눈에 안 들어왔다 → 2열로 압축(v229) */
+.lk-side .lk-mgrid, .lk-side .lk-mgrid.four { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 4px 14px; }
+.lk-side .lk-mgrid.fin3 { grid-template-columns: 1fr; padding: 4px 14px; }
+.lk-side .lk-mbox { padding: 7px 10px; border-radius: 8px; }
+.lk-side .lk-mbox-h { font-size: .74rem; margin-bottom: 3px; }
 /* 좁은 레일에선 값 폰트가 카드 제목(.lk-h3 .95rem)보다 커 보임 → 축소 */
-.lk-side .lk-mrow { font-size: .78rem; padding: 2px 0; }
-.lk-side .lk-mrow b { font-size: .86rem; }
+.lk-side .lk-mrow { font-size: .74rem; padding: 1px 0; gap: 6px; }
+.lk-side .lk-mrow span { white-space: nowrap; }
+.lk-side .lk-mrow b { font-size: .8rem; white-space: nowrap; }
 .lk-side .lk-mgrid.fin3 .lk-mrow b { font-size: 1rem; }
 .lk-side .lk-mcard-h { font-size: .8rem; }
 .lk-side .lk-cap { padding: 0 14px 6px; }

@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=226">
-<script src="firebase-config.js?v=226"></script>
-<script src="js/auth.js?v=226"></script>
+<link rel="stylesheet" href="css/style.css?v=230">
+<script src="firebase-config.js?v=230"></script>
+<script src="js/auth.js?v=230"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=226"></script>
+<script src="js/sync.js?v=230"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -403,6 +403,9 @@
     </div>
     <!-- 공시 띠: 차트 x축과 같은 좌표계에 공시일 동그라미(hover=내용 / click=DART 원문) -->
     <div id="lookup-discband" class="disc-band" style="display:none"></div>
+    <!-- 보조지표(RSI·MACD 등) 서브차트 — 가격 차트 바로 아래에 붙어야 x축이 이어져 보인다(v229) -->
+    <div id="lookup-inds"></div>
+    <p class="legend" id="lookup-legend" style="display:none"></p>
     <!-- v220: AI 변동 사유 — 이 종목의 주가·공시·뉴스·수급을 근거로 Gemini가 상승/하락 이유를 설명 -->
     <div id="lookup-why" class="card-flat lk-why" style="display:none">
       <div class="lk-why-head">🤔 왜 움직였나 <span class="sub-note">(AI가 공시·뉴스·수급을 종합 — 근거 자료 범위 내에서만)</span>
@@ -420,8 +423,6 @@
       </div>
       <div id="why-out" class="lk-why-out" style="display:none"></div>
     </div>
-    <div id="lookup-inds"></div>
-    <p class="legend" id="lookup-legend" style="display:none"></p>
     <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
     <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
     <p class="legend" id="lookup-supply-legend" style="display:none"></p>
@@ -1097,6 +1098,6 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=226"></script>
+<script src="js/app.js?v=230"></script>
 </body>
 </html>

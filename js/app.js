@@ -2051,6 +2051,9 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v230", "2026-08-01", "종목조회 레이아웃 정리 — 보조지표 위치 이동 + 투자지표 압축", "①**보조지표(RSI·MACD 등)를 차트 바로 아래**로 옮겼습니다. 이전에는 'AI 왜 움직였나' 카드 아래에 생겨 가격 차트와 떨어져 있었는데, 이제 x축이 이어져 함께 읽힙니다. ②**투자 지표 카드를 2열로 압축** — 우측 레일에서 4개 항목이 세로로 쌓여 577px까지 늘어지던 것을 351px로 줄여 한 화면에 들어옵니다(값 잘림 없음, 한국·미국 종목 모두 확인)."],
+  ["v228", "2026-08-01", "🤔 AI 변동 사유 — 당시 뉴스·실적·업종을 근거로 '진짜 이유'를 답한다", "답변이 [추정]만 늘어놓아 쓸모없다는 지적을 반영해 **근거 자료 자체를 대폭 보강**했습니다. ①**종목별 과거 뉴스 아카이브**(최근 1년 헤드라인, 네이버 종목뉴스)를 새로 수집해, 질문한 기간의 실제 기사 제목·매체·날짜를 근거로 제공합니다(급락·급등일 전후 기사 우선). ②**분기 실적**을 구간 직전·중·직후로 나눠 제공 — 실적이 좋았는데 왜 빠졌는지, 이후 실적 둔화를 선반영한 것인지 판단할 수 있습니다. ③**동종업계 같은 기간 등락**으로 업종 이슈인지 개별 이슈인지 구분합니다. ④컨센서스·밸류에이션 추가. 예: YG 2025년 11월 → '3분기 영업익 311억(+270%)으로 좋았으나 블랙핑크 MD 매출이 기대 미달, 11/10 iM·NH·유진 목표가 일제 하향 + 한한령 해제 기대 소멸로 엔터 업종 동반 급락'처럼 매체·날짜를 인용해 답합니다."],
+  ["v227", "2026-08-01", "AI 변동 사유 — 무료 등급 검색 한계 확인 및 대체 설계", "구글 검색 그라운딩이 무료 등급에서 전 모델 429(쿼터 0)로 막혀 있고, 무료 Gemini 모델들의 학습 데이터가 최근 국내 이슈를 담지 못한다는 점을 실측으로 확인했습니다(2025년 11월을 '미래'로 인식). 그래서 검색에 의존하지 않고 **우리가 보유한 데이터로 답하는 구조**로 전환했습니다 — 그 결과가 v228입니다."],
   ["v226", "2026-08-01", "Gemini 모델 교체 — 키 재발급으로 멈춘 AI 기능 전면 복구", "API 키를 새로 발급받자 **모든 AI 기능이 동시에 멈추는** 문제가 발생했습니다. 원인은 `gemini-2.5-flash`(및 2.0-flash)가 신규 발급 키에는 더 이상 제공되지 않기 때문으로(기존 키만 사용 가능), 사이트 AI 분석·시장 브리핑·텔레그램 봇 2종·거인의 어깨·아파트 추천 6곳이 함께 영향을 받았습니다. 전부 **gemini-3.5-flash**로 교체하고 실제 호출로 검증했습니다. 또한 구글 검색 보강은 무료 등급에서 사용할 수 없어(한도 0), 검색이 막히면 **자동으로 내부 자료만으로 재분석**하고 그 사실을 하단에 명시하도록 했습니다 — 근거 표시도 [검색]/[추정]을 정확히 구분합니다."],
   ["v225", "2026-08-01", "📚 사업 심층 — 팝업으로 전환", "사업 심층을 카드 안 접이식 대신 **팝업(심층 보고서와 같은 전체화면 뷰어)**으로 바꿨습니다. 카드에는 '📚 사업 심층 보기' 버튼 한 줄만 남고, 누르면 소제목별 전체 내용(표 포함)을 넓은 화면에서 스크롤로 읽습니다. 종목조회·관심종목 동일 적용."],
   ["v224", "2026-08-01", "📚 사업 심층 — 원문 표를 실제 표로 복원", "사업 심층에서 원문의 표(매출실적·매입처·생산능력 등)가 셀마다 한 줄씩 세로로 풀려 읽기 어렵다는 피드백을 반영했습니다. 수집기가 표 블록을 구조 그대로(셀 구분 유지) 뽑아내고, 화면에서 **실제 표**(헤더행 강조·가로 스크롤)로 복원합니다. DART XML의 특수 구조 3종(셀 안 문단 중첩·닫는 행 태그 생략·TABLE-GROUP 유사 태그)을 각각 처리했고, 전 종목(한 636) 재수집으로 반영했습니다."],
@@ -8746,6 +8749,75 @@ function whyParsePeriod(q, s) {
   return win.length >= 2 ? win : null;
 }
 
+/* 같은 기간 동종업계 등락(v227) — "업종 전체가 빠졌나, 이 종목만 빠졌나"를 자료로 판별.
+   피어 종목 JSON을 받아 동일 창의 수익률 계산(최대 4개, 캐시). */
+const PEER_SERIES = {};
+/* 과거 뉴스 아카이브(v228) — data/stocknews/{key}.json (네이버 종목뉴스 1년치 헤드라인).
+   feed.json은 최근 1주뿐이고 무료 등급 Gemini는 검색이 막혀 있어(429), 과거 구간 질문의 유일한 근거다. */
+const STOCK_NEWS = {};
+async function loadStockNews(key) {
+  if (!(key in STOCK_NEWS)) {
+    try {
+      const d = await fetch(`data/stocknews/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null));
+      STOCK_NEWS[key] = d?.news || null;
+    } catch (e) { STOCK_NEWS[key] = null; }
+  }
+  return STOCK_NEWS[key];
+}
+async function whyPeerMoves(st, fromT, toT) {
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const peers = (co?.peers || []).slice(0, 4);
+  const out = [];
+  for (const pr of peers) {
+    const k = `${pr.mk || st.market}_${pr.ticker}`;
+    if (!(k in PEER_SERIES)) {
+      try {
+        const d = await fetch(`data/stocks/${k}.json` + _cb).then((r) => (r.ok ? r.json() : null));
+        PEER_SERIES[k] = normStock(d)?.series || null;
+      } catch (e) { PEER_SERIES[k] = null; }
+    }
+    const s = PEER_SERIES[k];
+    if (!s?.length) continue;
+    const w = s.filter((x) => x.t >= fromT && x.t <= toT);
+    if (w.length < 2) continue;
+    const ch = (w[w.length - 1].c / w[0].c - 1) * 100;
+    out.push(`${pr.name} ${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%`);
+  }
+  return out;
+}
+
+/* 분기 실적 — 구간 직전·중·직후를 함께(v227). 발표 시점이 구간 안이면 그게 하락의 직접 원인 후보이고,
+   구간 '이후' 분기는 시장이 무엇을 선반영했는지 사후 검증하는 근거가 된다. */
+function whyQuarters(st, fromT, toT) {
+  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+  const fq = co?.fin_q || [];
+  if (!fq.length) return null;
+  // '25Q3' → 그 분기 실적발표 대략 시점(분기말 +40일)으로 구간과의 전후 판정
+  const endOf = (q) => {
+    const m = /^(\d{2})Q(\d)$/.exec(q);
+    if (!m) return null;
+    const y = 2000 + +m[1], mo = +m[2] * 3;
+    const d = new Date(Date.UTC(y, mo, 0));
+    d.setUTCDate(d.getUTCDate() + 40);
+    return d.toISOString().slice(0, 10);
+  };
+  const unit = co.fin_unit || "억원";
+  const line = (q, i) => {
+    const prev = fq[i - 1];
+    const qoq = prev?.op != null && q.op != null && Math.abs(prev.op) > 1
+      ? ` (전분기 영업익 ${prev.op.toLocaleString()}→${q.op.toLocaleString()}, ${((q.op / prev.op - 1) * 100).toFixed(0)}%)` : "";
+    return `${q.q}${q.est ? "(추정)" : ""} 매출 ${q.rev?.toLocaleString() ?? "-"} · 영업익 ${q.op?.toLocaleString() ?? "-"}` +
+      `${q.opm != null ? `(OPM ${q.opm}%)` : ""} · 순이익 ${q.np?.toLocaleString() ?? "-"}${qoq}`;
+  };
+  const before = [], during = [], after = [];
+  fq.forEach((q, i) => {
+    const d = endOf(q.q);
+    if (!d) return;
+    (d < fromT ? before : d <= toT ? during : after).push(line(q, i));
+  });
+  return { unit, before: before.slice(-2), during, after: after.slice(0, 2) };
+}
+
 function whyContext(st, qwin) {
   const s = st.series || [];
   let from, to = s.length ? s[s.length - 1].t : null;
@@ -8766,7 +8838,7 @@ function whyContext(st, qwin) {
     .map((x) => `${x.t}(평균의 ${((x.v || 0) / avgV).toFixed(1)}배, 종가 ${x.c >= (win[Math.max(0, win.indexOf(x) - 1)]?.c ?? x.c) ? "상승" : "하락"})`);
   const key = `${st.market}_${st.ticker}`;
   const fd = EXTRAS.feed?.map?.[key] || {};
-  const disc = (fd.disc || []).filter((d) => d.d >= f.t && d.d <= l.t).slice(0, 15)
+  const disc = (fd.disc || []).filter((d) => d.d >= f.t && d.d <= l.t).slice(0, 25)
     .map((d) => `${d.d} ${d.title.trim()}`);
   const news = (fd.news || []).slice(0, 10).map((x) => `${x.t} ${x.title.replace(/&[a-z]+;/g, " ")}`);
   const sup = st.supply || [];
@@ -8790,7 +8862,9 @@ function whyContext(st, qwin) {
   // 구간이 오래된 과거면 최신 뉴스는 오히려 오답을 유도한다 → 자료에서 제외
   const isOld = s.length && l.t < s[s.length - 1].t.slice(0, 8) + "01" &&
     (new Date(s[s.length - 1].t) - new Date(l.t)) / 864e5 > 30;
+  const co = EXTRAS.company?.map?.[key];
   return { f, l, chg, hi, lo, volDays, disc, news: isOld ? [] : news, isOld, drops, jumps, supTxt, sigs,
+           quarters: whyQuarters(st, f.t, l.t), cons: co?.cons, metrics: co?.metrics,
            name: st.name, tk: st.ticker, mk: st.market };
 }
 
@@ -8813,6 +8887,17 @@ async function whyAsk() {
   const qwin = whyParsePeriod(q, st.series || []);   // "25년 11월" → 그 달로 창 좁힘
   const c = whyContext(st, qwin);
   if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
+  const peerMoves = await whyPeerMoves(st, c.f.t, c.l.t);   // 업종 동반 하락 여부
+  // 구간 당시 뉴스 헤드라인(아카이브) — 급락일 ±1일 기사를 앞쪽에 배치해 인과 판단을 돕는다
+  const arc = await loadStockNews(`${st.market}_${st.ticker}`);
+  let arcNews = [];
+  if (arc) {
+    const inWin = arc.filter((x) => x[0] >= c.f.t && x[0] <= c.l.t);
+    const keyDays = new Set(c.drops.concat(c.jumps).map((s) => s.slice(0, 10)));
+    const near = (d) => { for (const k of keyDays) { const gap = Math.abs(new Date(d) - new Date(k)) / 864e5; if (gap <= 1) return true; } return false; };
+    const hot = inWin.filter((x) => near(x[0])), rest = inWin.filter((x) => !near(x[0]));
+    arcNews = hot.concat(rest).slice(0, 40).map((x) => `${x[0]} [${x[1]}] ${x[2]}`);
+  }
   const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]를 1차 근거로 답하라.
 규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인을 보완할 때는 출처를 구분해 표시:
 **실제 구글 검색 결과에 근거한 문장만 [검색]**, 검색 도구를 쓰지 않고 네 지식으로 서술하면 반드시 [추정]
@@ -8827,8 +8912,25 @@ ${c.jumps.length ? `- 급등일: ${c.jumps.join(" / ")}` : ""}
 - 거래량 급증일: ${c.volDays.join(" / ") || "없음"}
 ${c.supTxt ? `- 수급(구간 누적): ${c.supTxt}` : ""}
 ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
+${peerMoves.length ? `- 동종업계 같은 기간 등락: ${peerMoves.join(" · ")}` : ""}
+${c.quarters ? `- 분기 실적(단위 ${c.quarters.unit}):
+${c.quarters.before.map((x) => `    · 구간 직전 발표 — ${x}`).join("\n")}
+${c.quarters.during.map((x) => `    · **구간 중 발표** — ${x}`).join("\n")}
+${c.quarters.after.map((x) => `    · 구간 이후 발표(사후 확인용) — ${x}`).join("\n")}` : ""}
+${c.cons ? `- 컨센서스(최신 ${c.cons.at || "-"} 기준, 구간 당시 값 아님): 목표주가 ${c.cons.target?.toLocaleString()} · 투자의견 ${c.cons.opinion ?? "-"}/5` : ""}
+${c.metrics ? `- 밸류에이션(현재): PER ${c.metrics.per ?? "-"} · PBR ${c.metrics.pbr ?? "-"} · ROE ${c.metrics.roe ?? "-"}%` : ""}
 - 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}
-- ${c.isOld ? "구간 당시 뉴스 자료 없음(과거 구간) — 필요하면 검색으로 보완" : `최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}`}
+${arcNews.length ? `- **구간 당시 뉴스 헤드라인**(${arcNews.length}건, 급락·급등일 전후 우선):
+${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시 뉴스 자료 없음" : `최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}`}`}
+
+[분석 지침]
+- **뉴스 헤드라인이 있으면 그것이 1차 근거다.** 헤드라인에 드러난 사건·업종 분위기·증권사 코멘트를
+  구체적으로 인용해 서술하라(날짜·매체 포함). 자료에 있는 내용을 [추정]으로 얼버무리지 말 것.
+- **실적 수치가 좋아 보이는데 주가가 빠졌다면** 그 점을 먼저 짚고, 기대치(컨센서스) 대비 미달·향후 가이던스·
+  일회성 요인·차익실현 같은 가능성을 자료 범위에서 따져라. 실적이 좋았다는 사실을 얼버무리지 말 것.
+- **동종업계가 함께 빠졌으면 업종·시장 요인**, 이 종목만 빠졌으면 개별 요인으로 명확히 구분해 서술하라.
+- **구간 이후 분기 실적**이 자료에 있으면, 당시 하락이 이후 실적 둔화를 선반영한 것인지 사후 평가하라.
+- 급락일과 공시일이 일치하면 인과를 우선 검토하되, 공시 제목만으로 단정하지 말 것.
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
@@ -8838,7 +8940,7 @@ ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
     for (let i = 0; i < 4; i++) {
       const body = { contents: [{ parts: [{ text: prompt }] }],
         // thinking이 출력 한도를 잠식해 답이 잘린다(실측) → 0으로
-        generationConfig: { maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } } };
+        generationConfig: { maxOutputTokens: 2600, thinkingConfig: { thinkingBudget: 0 } } };
       if (search) body.tools = [{ google_search: {} }];
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -8864,8 +8966,7 @@ ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
       .replace(/<\/li><br>/g, "</li>")}</div>
       ${srcs.length ? `<p class="sub-note" style="margin-top:6px">🔎 검색 출처: ${srcs.map((w) =>
         `<a class="ext-link" href="${w.uri}" target="_blank" rel="noopener">${(w.title || "링크").slice(0, 30)}</a>`).join(" · ")}</p>` : ""}
-      <p class="sub-note">Gemini${search ? " + 구글 검색" : ""} · 내부 자료(주가·공시·뉴스·수급) 기반${
-        search ? ", 부족분은 [검색]·[추정] 표시" : " — 검색 보강은 무료 등급 한도 초과로 미사용([추정] 표시 확인)"} — 투자 판단의 참고용입니다.</p>`;
+      <p class="sub-note">Gemini · 근거: 주가·공시·수급·분기실적·동종업계${arcNews.length ? ` · <b>당시 뉴스 ${arcNews.length}건</b>` : ""} — 자료 밖 내용은 [추정] 표시 · 투자 판단의 참고용입니다.</p>`;
   } catch (e) {
     out.innerHTML = `<p class="mini-note">분석 실패: ${String(e.message || e).slice(0, 120)}</p>`;
   }
