@@ -2077,3 +2077,15 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ds-biz-card b { font-size: .84rem; }
 .ds-biz-card p { font-size: .77rem; }
 @media (max-width: 860px) { .ds-body { grid-template-columns: 1fr; } .ds-left { max-width: 250px; } }
+
+/* 🤝 딜 서술·타임라인 (v249) */
+.ds-narr { margin: 6px 0; }
+.ds-narr p { font-size: .83rem; line-height: 1.65; margin: 3px 0; }
+.ds-tl { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 7px 0; padding: 7px 0;
+  border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
+.ds-tl-step { display: flex; align-items: center; gap: 5px; font-size: .78rem; }
+.ds-tl-step .sub-note { font-size: .72rem; }
+.ds-tl-dot { width: 6px; height: 6px; border-radius: 50%; background: #7cb1ff; flex: none; }
+.ds-tl-step.last .ds-tl-dot { background: #e0a93f; }
+/* 상위 그룹이 탭 1개(solo)면 탭 바가 숨겨져 본문이 그룹 메뉴에 바로 붙는다 → 여백 확보(v249) */
+#tab-dealstruct { margin-top: 18px; }

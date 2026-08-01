@@ -2661,6 +2661,100 @@ function dsDiagram(x) {
       <path d="M0,0 L0,5 L7,2.5 z" fill="#7cb1ff"/></marker></defs>${svg}</svg>`;
 }
 
+/* 한국어 조사 — 받침 유무로 골라 붙인다("삼성바이오로직스이(가)" 같은 어색함 제거).
+   괄호·영문이 섞인 사명은 마지막 한글/숫자 글자로 판정한다. */
+function dsJosa(word, pair) {
+  const s = String(word || "").replace(/[^가-힣0-9A-Za-z]/g, "");
+  const ch = s.slice(-1);
+  const [a, b] = pair;                       // [받침O, 받침X]
+  if (!ch) return b;
+  const code = ch.charCodeAt(0);
+  let jong;
+  if (code >= 0xac00 && code <= 0xd7a3) jong = (code - 0xac00) % 28 !== 0;
+  else if (/[0-9]/.test(ch)) jong = "0134678".includes(ch);   // 0,1,3,6,7,8 = 받침 있음
+  else jong = !"aeiouAEIOU".includes(ch);                      // 영문은 근사
+  return jong ? a : b;
+}
+/* 서술 생성(v249) — 공시 필드를 조합해 "무엇을·어떻게·왜"를 한국어 문장으로 만든다.
+   AI를 쓰지 않는다(모든 문장이 필드에서 나오므로 지어낼 여지가 없다). 값이 없으면 그 문장만 빠진다. */
+function dsEvalAmt(op) {                     // 외부평가 의견문에서 '2,089,897백만원' 같은 금액 추출
+  if (!op) return null;
+  const m = /([\d,]+)\s*(백만원|억원|천원|원)/.exec(String(op));
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(/,/g, ""));
+  const mul = { "백만원": 1e6, "억원": 1e8, "천원": 1e3, "원": 1 }[m[2]];
+  return v * mul;
+}
+
+function dsNarrative(x) {
+  const S = [];
+  const nm = dsName(x.corp), tg = dsName(x.target), ct = dsName(x.counter);
+  const amt = dsAmt(x.amount);
+
+  if (x.side === "merge") {
+    S.push(`<b>${nm}</b>${dsJosa(nm, ["이", "가"])} <b>${tg}</b>${dsJosa(tg, ["을", "를"])} 흡수합병한다. 합병 후 ${nm}만 남고 ${tg}${dsJosa(tg, ["은", "는"])} 소멸한다.`);
+    if (x.counter) S.push(`${tg}${dsJosa(tg, ["은", "는"])} ${nm}의 <b>${dsEsc(x.counter)}</b>이다.`);
+    if (x.target_asset) {
+      const dbt = x.target_debt ? ` · 부채 ${dsAmt(x.target_debt)}` : "";
+      S.push(`소멸회사 규모는 자산 ${dsAmt(x.target_asset)}${dbt} · 자본 ${dsAmt(x.target_eq)} 수준이다.`);
+    }
+    if (x.ratio_basis) S.push(`합병비율 근거: ${dsEsc(String(x.ratio_basis).replace(/\s+/g, " ").slice(0, 150))}`);
+  } else if (x.side === "out") {
+    S.push(`<b>${nm}</b>${dsJosa(nm, ["이", "가"])} 보유한 <b>${tg}</b> 지분을 ${x.counter ? `<b>${ct}</b>에 ` : ""}매각한다${amt ? ` (거래금액 ${amt})` : ""}.`);
+  } else {
+    const via = x.counter ? `<b>${ct}</b>${dsJosa(ct, ["으로부터", "로부터"])} ` : "";
+    const st = x.stake_after ? ` 지분 <b>${x.stake_after}%</b>` : " 지분";
+    S.push(`<b>${nm}</b>${dsJosa(nm, ["이", "가"])} ${via}<b>${tg}</b>의${st}를 ${amt ? `<b>${amt}</b>에 ` : ""}인수한다.`);
+    // 신규 진입 vs 추가 취득 — 취득 후 보유주식 - 이번 취득분
+    if (x.shares && x.shares_after) {
+      const before = x.shares_after - x.shares;
+      const pb = x.target_shares ? (before / x.target_shares) * 100 : null;
+      S.push(before <= 0
+        ? `이번 거래로 <b>처음</b> 지분을 확보하는 신규 인수다.`
+        : `기존 ${pb != null ? `${pb.toFixed(1)}%(${before.toLocaleString()}주)` : `${before.toLocaleString()}주`}에서 추가 취득하는 거래다.`);
+    }
+    if (x.target_shares && x.shares) {
+      const per = x.amount ? x.amount / x.shares : null;
+      if (per) S.push(`주당 ${Math.round(per).toLocaleString()}원 · 대상회사 전체 가치로 환산하면 약 ${dsAmt(per * x.target_shares)} 수준이다.`);
+    }
+    // 부담 규모
+    const burden = [];
+    if (x.equity_vs) burden.push(`자기자본의 <b>${x.equity_vs}%</b>`);
+    if (x.amount_vs_asset) burden.push(`자산총액의 ${x.amount_vs_asset}%`);
+    if (burden.length) S.push(`인수 규모는 ${burden.join(" · ")}에 해당한다.`);
+    // 가격 적정성 — 외부평가액 대비
+    const ev = dsEvalAmt(x.eval_op);
+    if (ev && x.amount) {
+      const gap = (x.amount / ev - 1) * 100;
+      S.push(`외부평가(${dsEsc(x.evaluator || "평가기관")}) 산정가치 ${dsAmt(ev)} 대비 ` +
+        (Math.abs(gap) < 3 ? "비슷한 수준이다." :
+          `<b class="${gap > 0 ? "neg" : "pos"}">${Math.abs(gap).toFixed(0)}% ${gap > 0 ? "높은" : "낮은"}</b> 가격이다.`) +
+        ` <span class="sub-note">(평가액이 범위로 제시되면 하단값 기준)</span>`);
+    }
+  }
+  if (x.purpose) S.push(`<b>추진 이유</b> — ${dsEsc(String(x.purpose).replace(/\s+/g, " ").slice(0, 240))}`);
+  // 규제·계약 특이사항
+  const flags = [];
+  if (x.ftc && x.ftc !== "미해당") flags.push(`공정위 신고 ${dsEsc(x.ftc)}`);
+  if (x.putopt && x.putopt !== "아니오") flags.push("풋옵션 등 부가계약 있음");
+  if (x.backdoor && x.backdoor !== "아니오") flags.push("우회상장 해당");
+  if (flags.length) S.push(`⚖ ${flags.join(" · ")}`);
+  return S.length ? `<div class="ds-narr">${S.map((s) => `<p>${s}</p>`).join("")}</div>` : "";
+}
+
+/* 진행 일정 — 이사회 결의 → (평가기간) → 대금지급 → 취득/합병 예정일 */
+function dsTimeline(x) {
+  const steps = [];
+  if (x.board_d) steps.push(["이사회 결의", x.board_d]);
+  if (x.eval_pd) steps.push(["외부평가", dsEsc(String(x.eval_pd).replace(/\s+/g, " ").slice(0, 34))]);
+  if (x.sched) steps.push(["일정", dsEsc(x.sched)]);
+  if (x.when) steps.push([x.side === "merge" ? "합병기일" : x.side === "out" ? "이전 예정일" : "취득 예정일", x.when]);
+  if (steps.length < 2) return "";
+  return `<div class="ds-tl">${steps.map(([k, v], i) =>
+    `<div class="ds-tl-step${i === steps.length - 1 ? " last" : ""}">
+      <span class="ds-tl-dot"></span><span class="sub-note">${k}</span><b>${v}</b></div>`).join("")}</div>`;
+}
+
 /* 사업개요 — 우리가 이미 가진 company.json(상장사)에서. 비상장이면 공시의 업종 한 줄. */
 function dsBiz(x) {
   const co = x.code ? EXTRAS.company?.map?.[`kr_${x.code}`] : null;
@@ -2708,7 +2802,8 @@ function dsCard(x) {
       <div class="ds-right">
         ${facts.length ? `<div class="ds-facts">${facts.map(([k, v]) =>
           `<span><span class="sub-note">${k}</span> <b>${dsEsc(v)}</b></span>`).join("")}</div>` : ""}
-        ${x.purpose ? `<p class="ds-purpose">🎯 ${dsEsc(String(x.purpose).slice(0, 220))}</p>` : ""}
+        ${dsNarrative(x)}
+        ${dsTimeline(x)}
         ${x.method ? `<p class="sub-note">방식: ${dsEsc(String(x.method).replace(/\n/g, " ").slice(0, 180))}</p>` : ""}
         ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
           <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
@@ -2733,6 +2828,8 @@ function initDealsStruct() {
 }
 
 const DEV_HISTORY = [
+  ["v252", "2026-08-02", "딜 구조 여백 정리 + 문장 다듬기", "딜 구조 본문이 상단 메뉴에 바짝 붙어 있던 것을 띄웠고, 회사명 받침에 따라 조사(이/가·을/를·로부터)를 자동으로 골라 문장이 자연스럽게 읽히도록 했습니다."],
+  ["v249", "2026-08-02", "딜 구조에 '어떻게·왜' 서술 추가", "숫자만 나열되던 것을 **문장으로 설명**하도록 했습니다. 공시 필드를 조합해 ① 누가 누구로부터 무엇을 얼마에 인수하는지, ② **처음 확보하는 지분인지 추가 취득인지**, ③ 주당 단가와 대상회사 전체 환산가치, ④ 인수 규모가 자기자본·자산의 몇 %인지, ⑤ **외부평가액 대비 비싸게/싸게 사는지**, ⑥ 추진 이유(공시 원문), ⑦ 공정위 신고·풋옵션 등 특이사항을 서술합니다. **진행 일정 타임라인**(이사회 결의 → 외부평가 → 취득/합병 예정일)도 추가했습니다. AI가 아니라 공시 필드에서 직접 만들기 때문에 지어낸 문장이 없습니다."],
   ["v247", "2026-08-02", "딜 구조 카드 2단 배치 + 도식 축소", "구조도가 카드 전체 폭을 쓰고 글자도 커서 한 딜이 화면을 가득 채웠습니다. **구조도를 왼쪽 좁은 열에 세로 흐름으로** 줄이고(매도자→인수자→대상), 거래금액·지분율·목적·자금조달·양측 사업개요는 **오른쪽에 배치**했습니다. 글자 크기도 전반적으로 줄여 한 화면에 더 많은 딜이 들어옵니다."],
   ["v246", "2026-08-02", "딜 구조 탭이 빈 화면으로 뜨던 문제 수정", "🤝 딜 구조를 눌러도 아무것도 안 나오던 문제를 고쳤습니다. 새 상위 그룹의 기본 탭이 등록되지 않아 그룹만 눌렀을 때 아무 탭도 열리지 않았습니다(제가 검증할 때는 탭을 직접 눌러 확인해서 놓쳤습니다). 전체 그룹 6개가 모두 정상 표시되는지 다시 확인했고, 뒤로가기 라벨에 쓰이는 탭 이름(딜 구조·투자 다이어리)도 함께 등록했습니다."],
   ["v245", "2026-08-02", "🤝 딜 구조 탭 신설 — 공시 원본으로 M&A 구조도·사업개요", "M&A를 기사로만 보던 것을 **공시 원본 데이터**로 바꿨습니다. 국내 상장사 딜은 주요사항보고서에 거래상대방·대상회사·금액·주식수·취득 후 지분율·목적·자금조달·일정이 **필드로** 들어 있어 그대로 씁니다. 화면에는 **구조도**(인수자 →금액·지분율→ 대상, 위에 매도자)와 **양측 사업개요**(보유한 기업개요·매출구성·실적), 취득 목적·외부평가·대금지급 방식, 공시 원문 링크가 함께 나옵니다. 중요 딜 선정은 기사 노출이 아니라 **거래금액·자산 대비 비중·취득 지분율** 정량 점수로 합니다. 예: 두산→SK실트론 2.3조·70.61%, 삼성바이오로직스→PolyPeptide 2.7조·100%. 해외·비상장 딜은 공시 대상이 아니라 별도 보고서로 보완합니다."],
