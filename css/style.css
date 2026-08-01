@@ -1914,3 +1914,15 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .bizdeep-wrap[open] > summary::before { content: "▾ "; }
 .bizdeep-wrap > summary::-webkit-details-marker { display: none; }
 .bizdeep-body { margin-top: 4px; }
+/* 📚 사업 심층 표 복원 (v224) */
+.bizdeep-t p { margin: 4px 0; }
+.bd-tblwrap { overflow-x: auto; margin: 6px 0; }
+.bd-tbl { border-collapse: collapse; font-size: .76rem; line-height: 1.4; }
+.bd-tbl td { border: 1px solid var(--line); padding: 3px 8px; white-space: nowrap; }
+.bd-tbl tr:first-child td { font-weight: 600; background: rgba(255,255,255,.04); }
+
+/* 📚 사업 심층 팝업 (v225) */
+.bd-open .sub-note { margin-left: 6px; font-weight: 400; }
+.bd-body h3 { margin: 16px 0 6px; font-size: .95rem; border-left: 3px solid var(--accent, #4391ff); padding-left: 8px; }
+.bd-body h3:first-child { margin-top: 0; }
+.bd-body .bizdeep-t { max-height: none; overflow: visible; }

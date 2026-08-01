@@ -2051,6 +2051,8 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v225", "2026-08-01", "📚 사업 심층 — 팝업으로 전환", "사업 심층을 카드 안 접이식 대신 **팝업(심층 보고서와 같은 전체화면 뷰어)**으로 바꿨습니다. 카드에는 '📚 사업 심층 보기' 버튼 한 줄만 남고, 누르면 소제목별 전체 내용(표 포함)을 넓은 화면에서 스크롤로 읽습니다. 종목조회·관심종목 동일 적용."],
+  ["v224", "2026-08-01", "📚 사업 심층 — 원문 표를 실제 표로 복원", "사업 심층에서 원문의 표(매출실적·매입처·생산능력 등)가 셀마다 한 줄씩 세로로 풀려 읽기 어렵다는 피드백을 반영했습니다. 수집기가 표 블록을 구조 그대로(셀 구분 유지) 뽑아내고, 화면에서 **실제 표**(헤더행 강조·가로 스크롤)로 복원합니다. DART XML의 특수 구조 3종(셀 안 문단 중첩·닫는 행 태그 생략·TABLE-GROUP 유사 태그)을 각각 처리했고, 전 종목(한 636) 재수집으로 반영했습니다."],
   ["v223", "2026-08-01", "🤔 AI 변동 사유 — 과거 질문 답변 가능(기간 인식+급락일 상세+웹 검색)", "'25년 11월 와이지 하락 이유'처럼 **과거 시점 질문에 답을 못 하던 문제**를 고쳤습니다(내부 뉴스가 최근 1주치뿐 + 구간 통계가 전체 평균으로 뭉개짐 + 자료 밖 지식 차단이 원인). ①질문 속 기간('25년 11월'/'2025년')을 자동 인식해 **그 기간의 일봉으로 자료를 좁히고**, ②구간 내 **최대 급락 3일·급등 2일**(날짜·등락률)을 자료에 추가, ③Gemini **구글 검색 그라운딩**을 켜서 그 시기 뉴스를 웹에서 찾아 [검색] 표시·출처 링크와 함께 인용합니다(무료 한도 내). 과거 구간 질문일 땐 최신 뉴스를 자료에서 빼 오답 유도를 제거했습니다. 실측: 같은 질문에 '3분기 실적 컨센 하회(11-07 공시·-9.4% 급락일 일치) + 증권사 목표가 일제 하향' — 출처 5건과 함께 정확히 답합니다."],
   ["v222", "2026-08-01", "📚 사업 심층 접기 — 기본은 한 줄, 클릭해야 펼쳐짐", "사업 심층이 종목조회·관심종목에서 소제목 목록만으로도 세로 공간을 크게 차지한다는 피드백을 반영해, 전체를 **한 줄 접이식**('📚 사업 심층 · N개 섹션 — 눌러서 펼치기')으로 감쌌습니다. 펼치면 기존처럼 소제목별로 다시 열어볼 수 있고, 공시 원문 링크는 펼친 안쪽으로 이동했습니다."],
   ["v221", "2026-08-01", "기업개요 대보강 — 기업 정보 팩트 + 📚 사업 심층(공식 원문 발췌)", "①**🪪 기업 정보 팩트**(종목조회 기업개요 카드): 한국은 DART 공식 API에서 대표자·설립일·직원 수·평균 연봉·평균 근속·주당배당 3개년·배당성향·시가배당률을, 미국은 직원 수·본사·섹터·경영진 명단을 가져와 표시합니다. ②**📚 사업 심층**: 한국 시총 상위 500은 최신 사업보고서의 'II. 사업의 내용'(사업 개요·주요 제품·원재료와 생산설비·매출과 수주·연구개발 등 소제목별), 미국 전 종목은 10-K Item 1(Business)을 원문 발췌로 제공 — 요약본에 없던 시장점유율·수주잔고·가동률급 정보를 공식 출처 그대로 봅니다(원문 링크 포함, 분기 갱신). 종목조회 기업개요 카드와 관심종목 워크스페이스 보고서 카드 양쪽에 접이식으로 들어갑니다."],
@@ -5595,7 +5597,8 @@ function wsShow(key) {
       if (!card || card.querySelector(".ws-bizdeep")) return;
       const div = document.createElement("div");
       div.className = "ws-bizdeep";
-      div.innerHTML = bizDeepHtml(d, false);
+      div.innerHTML = bizDeepHtml(d);
+      div.querySelector(".bd-open").onclick = () => openBizDeep(d, w.name || tk);
       card.appendChild(div);
     });
   });
@@ -7372,16 +7375,50 @@ function renderLookupOverview(st) {
 
 /* ---------- 📚 사업 심층 (v221) — 사업보고서 '사업의 내용'/10-K Item 1 발췌 ---------- */
 const BIZDEEP = {};
-function bizDeepHtml(d, open) {
-  const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // v222: 전체를 바깥 접이식 한 줄로 — 펼치기 전엔 공간을 거의 차지하지 않는다(사용자 피드백)
-  return `<details class="bizdeep-wrap"${open ? " open" : ""}>
-    <summary><b>📚 사업 심층</b> <span class="sub-note">${d.src} 원문 발췌 · ${d.sections.length}개 섹션 — 눌러서 펼치기</span></summary>
-    <div class="bizdeep-body">
-      <p class="sub-note" style="margin:4px 0 2px"><a class="ext-link" href="${d.url}" target="_blank" rel="noopener">공시 원문 전체 ↗</a></p>
-      ${d.sections.map((s) => `<details class="bizdeep-sec">
-        <summary>${esc(s.h)}</summary><p class="bizdeep-t">${esc(s.t).replace(/\n/g, "<br>")}</p></details>`).join("")}
-    </div></details>`;
+/* 발췌 본문 렌더(v224): 표는 수집기가 '셀1 | 셀2 | …' 한 줄로 보존한다 —
+   '|' 포함 연속 줄을 실제 <table>로 복원, 나머지는 문단으로 */
+function bdRender(escaped) {
+  const out = [];
+  let tbl = null;
+  const flush = () => {
+    if (!tbl) return;
+    out.push(`<div class="bd-tblwrap"><table class="bd-tbl">${tbl.map((r) =>
+      `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`);
+    tbl = null;
+  };
+  for (const ln of escaped.split("\n")) {
+    if (ln.includes("|") && ln.split("|").length >= 2 && ln.trim()) {
+      (tbl = tbl || []).push(ln.split("|").map((c) => c.trim()));
+    } else {
+      flush();
+      if (ln.trim()) out.push(`<p>${ln}</p>`);
+    }
+  }
+  flush();
+  return out.join("");
+}
+const bdEsc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/* v225: 카드에는 한 줄 버튼만 — 클릭하면 보고서 뷰어와 같은 팝업으로 전체 섹션 열람 */
+function bizDeepHtml(d) {
+  return `<button class="today-chart-btn bd-open">📚 사업 심층 보기
+    <span class="sub-note">${d.src.replace(/ \(/, "(")} · ${d.sections.length}개 섹션</span></button>`;
+}
+function openBizDeep(d, name) {
+  let ov = document.getElementById("report-overlay");
+  if (!ov) { ov = document.createElement("div"); ov.id = "report-overlay"; document.body.appendChild(ov); }
+  const close = () => { ov.style.display = "none"; document.body.style.overflow = ""; };
+  ov.innerHTML = `<div class="rep-doc">
+    <div class="rep-head"><b>📚 ${bdEsc(name || d.name)} — 사업 심층</b>
+      <span class="sub-note">${d.src} 원문 발췌 ·
+        <a class="ext-link" href="${d.url}" target="_blank" rel="noopener">공시 원문 전체 ↗</a></span>
+      <span style="flex:1"></span><button class="jr-x" id="bd-close">✕</button></div>
+    <div class="rep-body bd-body">${d.sections.map((s) =>
+      `<h3>${bdEsc(s.h)}</h3><div class="bizdeep-t">${bdRender(bdEsc(s.t))}</div>`).join("")}
+    </div></div>`;
+  ov.style.display = "block";
+  document.body.style.overflow = "hidden";
+  document.getElementById("bd-close").onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
 }
 async function fetchBizDeep(key) {
   if (!(key in BIZDEEP)) {
@@ -7396,7 +7433,8 @@ async function loadBizDeep(st) {
   const d = await fetchBizDeep(key);
   const el = document.getElementById("ov-bizdeep");
   if (!d || !el || LOOKUP_ST !== st) return;
-  el.innerHTML = bizDeepHtml(d, false);
+  el.innerHTML = bizDeepHtml(d);
+  el.querySelector(".bd-open").onclick = () => openBizDeep(d, st.name);
 }
 
 // 증권가 컨센서스 카드: 목표주가 vs 현재가 + 투자의견
