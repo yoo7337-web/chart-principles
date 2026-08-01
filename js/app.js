@@ -2613,6 +2613,11 @@ function dsRender() {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
   });
   dsFillNews();
+  host.querySelectorAll("[data-aibtn]").forEach((b) => {
+    const id = b.dataset.aibtn;
+    if (dealAiLoad()[id]) { b.style.display = "none"; dsRenderAi(id); }
+    b.onclick = () => dsAiBrief(id, b);
+  });
 }
 
 /* 구조도(v247) — 좁은 좌측 열에 맞춰 **세로 흐름**으로. 가로형은 폭을 많이 먹고 글자도 커진다.
@@ -2673,7 +2678,11 @@ function dsJosa(word, pair) {
   let jong;
   if (code >= 0xac00 && code <= 0xd7a3) jong = (code - 0xac00) % 28 !== 0;
   else if (/[0-9]/.test(ch)) jong = "0134678".includes(ch);   // 0,1,3,6,7,8 = 받침 있음
-  else jong = !"aeiouAEIOU".includes(ch);                      // 영문은 근사
+  else {
+    // 영문은 **한국식 발음의 끝소리**로 판단한다(SK=에스케이 → 받침 없음).
+    //   알파벳별 한글 발음 끝글자: 받침 있는 것은 L(엘)·M(엠)·N(엔)·R(알) 정도.
+    jong = "LMNRlmnr".includes(ch);
+  }
   return jong ? a : b;
 }
 /* 서술 생성(v249) — 공시 필드를 조합해 "무엇을·어떻게·왜"를 한국어 문장으로 만든다.
@@ -2732,6 +2741,18 @@ function dsNarrative(x) {
           `<b class="${gap > 0 ? "neg" : "pos"}">${Math.abs(gap).toFixed(0)}% ${gap > 0 ? "높은" : "낮은"}</b> 가격이다.`) +
         ` <span class="sub-note">(평가액이 범위로 제시되면 하단값 기준)</span>`);
     }
+  }
+  // 대금지급·자금조달 — 공시는 "1) 대금 지급방법: … 2) 지급시기: … 3) 자금조달: …" 형태의 여러 줄이다.
+  //   별도 접이식으로 두면 눈에 안 띄어(사용자 피드백) 설명 문단에 한 줄로 합친다.
+  if (x.pay) {
+    const parts = String(x.pay).split(/\s*\d\)\s*/).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const txt = (parts.length > 1 ? parts : [String(x.pay).replace(/\s+/g, " ").trim()])
+      .map((s) => s.replace(/^(대금\s*)?지급\s*(방법|형태)\s*[:：]?\s*/, "지급방법 ")
+        .replace(/^(대금\s*)?지급\s*시기\s*[:：]?\s*/, "지급시기 ")
+        .replace(/^자금\s*조달\s*(방법)?\s*[:：]?\s*/, "재원 ")
+        .replace(/\s*[:：]\s*/, " "))
+      .join(" · ").slice(0, 300);
+    if (txt) S.push(`<b>대금·자금조달</b> — ${dsEsc(txt)}`);
   }
   if (x.purpose) S.push(`<b>추진 이유</b> — ${dsEsc(String(x.purpose).replace(/\s+/g, " ").slice(0, 240))}`);
   // 규제·계약 특이사항
@@ -2861,6 +2882,68 @@ async function dsNews(x) {
     .sort((a, b) => (b.sc - a.sc) || (a.d || "").localeCompare(b.d || "")).slice(0, 6);
 }
 
+/* 기사 기반 배경 설명(v258)
+   공시 필드는 '무엇을 얼마에'까지만 알려준다. 왜 지금인지·어떤 경쟁 구도였는지·시장 반응은 기사에 있다.
+   ⚠전 딜을 자동 호출하면 무료 등급 하루 한도(모델당 20회)를 즉시 소진한다 → **버튼식 + 캐시**.
+   캐시는 localStorage(공개 저장소로 안 나감). 자료에 없는 내용은 쓰지 말라고 프롬프트에서 강제한다. */
+const DEAL_AI_KEY = "cp_deal_ai_v1";
+function dealAiLoad() { try { return JSON.parse(localStorage.getItem(DEAL_AI_KEY)) || {}; } catch (e) { return {}; } }
+function dealAiSave(o) { localStorage.setItem(DEAL_AI_KEY, JSON.stringify(o)); }
+
+async function dsAiBrief(rcept, btn) {
+  const x = (DEALS_ST?.deals || []).find((d) => d.rcept === rcept);
+  const box = document.querySelector(`[data-ai="${rcept}"]`);
+  if (!x || !box) return;
+  if (!geminiKey()) {
+    box.innerHTML = `<p class="mini-note">🔑 Gemini API 키가 필요합니다 — 우측 아래 🤖 어시스턴트의 🔑 버튼에서 등록하세요.</p>`;
+    return;
+  }
+  btn.disabled = true; btn.textContent = "작성 중…";
+  box.innerHTML = `<p class="mini-note">관련 기사를 읽고 배경을 정리하는 중…</p>`;
+  try {
+    const arts = await dsNews(x);
+    const facts = [
+      `유형: ${x.label}`, `인수(주체): ${x.corp}`, x.target && `대상: ${x.target}`,
+      x.counter && `거래상대방: ${x.counter}`, x.target_biz && `대상 사업: ${x.target_biz}`,
+      x.amount && `금액: ${dsAmt(x.amount)}`, x.stake_after && `취득 후 지분: ${x.stake_after}%`,
+      x.equity_vs && `자기자본 대비: ${x.equity_vs}%`, x.purpose && `공시상 목적: ${x.purpose}`,
+      x.when && `예정일: ${x.when}`, x.d && `공시일: ${x.d}`,
+    ].filter(Boolean).join("\n");
+    const prompt = `당신은 M&A 리서치 애널리스트다. 아래 [공시 사실]과 [관련 기사 제목]만 근거로
+이 거래의 **배경과 의미**를 한국어로 정리하라.
+
+규칙
+① 공시에 이미 있는 수치를 그대로 반복하지 말고, **왜 지금 이 거래인지·어떤 맥락에서 나왔는지**를 설명한다.
+② 기사 제목에서 읽히는 사실(협상 경과·경쟁 구도·업황·시장 반응)을 활용하되, **제목에 없는 내용은 지어내지 말 것**.
+③ 확실하지 않으면 "기사에서는 …로 보인다"처럼 완곡하게 쓴다.
+④ 3~5문장, 불릿 없이 문단 하나. 투자 권유·목표주가 언급 금지.
+
+[공시 사실]
+${facts}
+
+[관련 기사 제목]
+${arts.length ? arts.map((a) => `- ${a.d || ""} ${a.title}`).join("\n") : "(없음)"}`;
+    const r = await gemCall(prompt, { maxTokens: 900 });
+    const o = dealAiLoad();
+    o[rcept] = { text: r.text.trim(), at: kstDay(), n: arts.length };
+    dealAiSave(o);
+    dsRenderAi(rcept);
+  } catch (e) {
+    box.innerHTML = `<p class="mini-note">생성 실패: ${dsEsc(String(e.message || e)).slice(0, 120)}</p>`;
+    btn.disabled = false; btn.textContent = "🤖 기사로 배경 설명";
+  }
+}
+
+function dsRenderAi(rcept) {
+  const box = document.querySelector(`[data-ai="${rcept}"]`);
+  if (!box) return;
+  const c = dealAiLoad()[rcept];
+  if (!c) return;
+  box.innerHTML = `<div class="ds-ai"><b>🤖 배경 설명</b>
+    <p>${dsEsc(c.text).replace(/\n+/g, "<br>")}</p>
+    <p class="sub-note">관련 기사 ${c.n}건 + 공시 사실 기반 · ${c.at} 작성 · 기사 제목 범위 내 해석입니다</p></div>`;
+}
+
 /* 카드가 그려진 뒤 비동기로 채운다(기사 조회가 카드 렌더를 막지 않게) */
 function dsFillNews() {
   document.querySelectorAll("#ds-list [data-news]").forEach(async (el) => {
@@ -2928,10 +3011,10 @@ function dsCard(x) {
         ${dsNarrative(x)}
         ${dsTimeline(x)}
         ${x.method ? `<p class="sub-note">방식: ${dsEsc(String(x.method).replace(/\n/g, " ").slice(0, 180))}</p>` : ""}
-        ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
-          <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
         ${dsBiz(x)}
         <div data-news="${x.rcept}"></div>
+        <div class="ds-aiwrap"><button class="today-chart-btn ds-aibtn" data-aibtn="${x.rcept}">🤖 기사로 배경 설명</button>
+          <div data-ai="${x.rcept}"></div></div>
       </div>
     </div>
   </div>`;
@@ -2952,6 +3035,7 @@ function initDealsStruct() {
 }
 
 const DEV_HISTORY = [
+  ["v258", "2026-08-02", "딜 배경 설명(기사 기반) + 대금 정보 통합", "①**🤖 기사로 배경 설명** — 버튼을 누르면 그 딜의 관련 기사 제목과 공시 사실을 함께 읽고 '왜 지금 이 거래인지·어떤 협상 경과와 업황 속에서 나왔는지'를 3~5문장으로 정리합니다. 공시 수치 반복 대신 **맥락**을 채우며, 기사 제목에 없는 내용은 쓰지 않도록 강제했습니다. 한 번 만들면 저장돼 다시 부르지 않습니다(무료 한도 보호). ②자금조달·대금지급을 접이식에서 빼내 **인수 설명 문단에 합쳤습니다**. ③회사명 조사 처리를 보완했습니다(SK으로부터 → SK로부터)."],
   ["v253", "2026-08-02", "딜 카드에 관련 기사 연결", "각 딜에 **그 딜을 다룬 기사**를 붙였습니다. M&A 전문 기사 아카이브(3,500건)와 종목별 뉴스 아카이브에서 인수자·대상회사·매도자 이름으로 찾고, **공시일 전후(-21~+14일) 기사만** 골라 최대 6건을 보여줍니다. 제목을 누르면 원문으로 이동합니다. 예: 두산-SK실트론 딜에 'SK, 두산에 SK실트론 지분 70% 판다…매각가 2.3조원' 기사가 붙습니다."],
   ["v252", "2026-08-02", "딜 구조 여백 정리 + 문장 다듬기", "딜 구조 본문이 상단 메뉴에 바짝 붙어 있던 것을 띄웠고, 회사명 받침에 따라 조사(이/가·을/를·로부터)를 자동으로 골라 문장이 자연스럽게 읽히도록 했습니다."],
   ["v249", "2026-08-02", "딜 구조에 '어떻게·왜' 서술 추가", "숫자만 나열되던 것을 **문장으로 설명**하도록 했습니다. 공시 필드를 조합해 ① 누가 누구로부터 무엇을 얼마에 인수하는지, ② **처음 확보하는 지분인지 추가 취득인지**, ③ 주당 단가와 대상회사 전체 환산가치, ④ 인수 규모가 자기자본·자산의 몇 %인지, ⑤ **외부평가액 대비 비싸게/싸게 사는지**, ⑥ 추진 이유(공시 원문), ⑦ 공정위 신고·풋옵션 등 특이사항을 서술합니다. **진행 일정 타임라인**(이사회 결의 → 외부평가 → 취득/합병 예정일)도 추가했습니다. AI가 아니라 공시 필드에서 직접 만들기 때문에 지어낸 문장이 없습니다."],
