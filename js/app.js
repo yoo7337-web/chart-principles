@@ -2051,6 +2051,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v223", "2026-08-01", "🤔 AI 변동 사유 — 과거 질문 답변 가능(기간 인식+급락일 상세+웹 검색)", "'25년 11월 와이지 하락 이유'처럼 **과거 시점 질문에 답을 못 하던 문제**를 고쳤습니다(내부 뉴스가 최근 1주치뿐 + 구간 통계가 전체 평균으로 뭉개짐 + 자료 밖 지식 차단이 원인). ①질문 속 기간('25년 11월'/'2025년')을 자동 인식해 **그 기간의 일봉으로 자료를 좁히고**, ②구간 내 **최대 급락 3일·급등 2일**(날짜·등락률)을 자료에 추가, ③Gemini **구글 검색 그라운딩**을 켜서 그 시기 뉴스를 웹에서 찾아 [검색] 표시·출처 링크와 함께 인용합니다(무료 한도 내). 과거 구간 질문일 땐 최신 뉴스를 자료에서 빼 오답 유도를 제거했습니다. 실측: 같은 질문에 '3분기 실적 컨센 하회(11-07 공시·-9.4% 급락일 일치) + 증권사 목표가 일제 하향' — 출처 5건과 함께 정확히 답합니다."],
   ["v222", "2026-08-01", "📚 사업 심층 접기 — 기본은 한 줄, 클릭해야 펼쳐짐", "사업 심층이 종목조회·관심종목에서 소제목 목록만으로도 세로 공간을 크게 차지한다는 피드백을 반영해, 전체를 **한 줄 접이식**('📚 사업 심층 · N개 섹션 — 눌러서 펼치기')으로 감쌌습니다. 펼치면 기존처럼 소제목별로 다시 열어볼 수 있고, 공시 원문 링크는 펼친 안쪽으로 이동했습니다."],
   ["v221", "2026-08-01", "기업개요 대보강 — 기업 정보 팩트 + 📚 사업 심층(공식 원문 발췌)", "①**🪪 기업 정보 팩트**(종목조회 기업개요 카드): 한국은 DART 공식 API에서 대표자·설립일·직원 수·평균 연봉·평균 근속·주당배당 3개년·배당성향·시가배당률을, 미국은 직원 수·본사·섹터·경영진 명단을 가져와 표시합니다. ②**📚 사업 심층**: 한국 시총 상위 500은 최신 사업보고서의 'II. 사업의 내용'(사업 개요·주요 제품·원재료와 생산설비·매출과 수주·연구개발 등 소제목별), 미국 전 종목은 10-K Item 1(Business)을 원문 발췌로 제공 — 요약본에 없던 시장점유율·수주잔고·가동률급 정보를 공식 출처 그대로 봅니다(원문 링크 포함, 분기 갱신). 종목조회 기업개요 카드와 관심종목 워크스페이스 보고서 카드 양쪽에 접이식으로 들어갑니다."],
   ["v220", "2026-08-01", "🤔 AI 변동 사유 Q&A — 차트 아래에서 '왜 움직였나' 질문", "종목조회 차트 아래에 **AI 변동 사유 카드**를 추가했습니다. 기간(최근 5일/1개월/차트에 보이는 구간)을 고르고 분석을 누르면 **그 구간의 주가 등락·고저·거래량 급증일 + 공시 + 뉴스 헤드라인 + 외국인·기관·개인 수급 + 원칙 신호**를 한 번에 모아 Gemini에게 넘기고, '이 자료 안에서만 답하라(자료 밖 추정은 [추정] 표시)'를 강제해 근거 있는 설명을 받습니다. 자유 질문도 가능(비우면 상승/하락 사유 분석). Gemini 키는 🔑 버튼으로 브라우저에만 저장되며(youtube-mentor와 공유) 서버로 전송되지 않습니다."],
@@ -8686,7 +8687,24 @@ function renderLookupWhy(st) {
   $("#why-q").addEventListener("keydown", (e) => { if (e.key === "Enter") whyAsk(); });
 }
 
-function whyContext(st) {
+/* 질문 속 기간("25년 11월"/"2025년 11월"/"2025년") 자동 인식 → 그 기간의 일봉으로 창을 좁힌다(v223).
+   기간을 좁혀야 급락일 상세가 자료에 실려 과거 질문에 답할 수 있다(YG 2025-11 실사고). */
+function whyParsePeriod(q, s) {
+  if (!q) return null;
+  let m = q.match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/);
+  let pfx = null;
+  if (m) {
+    const y = +m[1] < 100 ? +m[1] + 2000 : +m[1];
+    pfx = `${y}-${String(m[2]).padStart(2, "0")}`;
+  } else if ((m = q.match(/(\d{4})\s*년(?!\s*\d{1,2}\s*월)/))) {
+    pfx = m[1];
+  }
+  if (!pfx) return null;
+  const win = s.filter((x) => x.t.startsWith(pfx));
+  return win.length >= 2 ? win : null;
+}
+
+function whyContext(st, qwin) {
   const s = st.series || [];
   let from, to = s.length ? s[s.length - 1].t : null;
   if (whyRange === "view" && lookupChart) {
@@ -8694,7 +8712,7 @@ function whyContext(st) {
     if (r) { from = typeof r.from === "string" ? r.from : null; to = typeof r.to === "string" ? r.to : to; }
   }
   const n = whyRange === "21" ? 21 : 5;
-  const win = from ? s.filter((x) => x.t >= from && x.t <= to) : s.slice(-n);
+  const win = qwin || (from ? s.filter((x) => x.t >= from && x.t <= to) : s.slice(-n));
   if (win.length < 2) return null;
   const f = win[0], l = win[win.length - 1];
   const chg = (l.c / f.c - 1) * 100;
@@ -8720,7 +8738,17 @@ function whyContext(st) {
   }
   const sigs = (st.markers || []).filter((m) => m.t >= f.t && m.t <= l.t).slice(-6)
     .map((m) => `${m.t} ${m.side === "buy" ? "매수" : "매도"}신호(${m.rule_id})`);
-  return { f, l, chg, hi, lo, volDays, disc, news, supTxt, sigs,
+  // 일별 등락 상세(v223): 구간 내 최대 급락 3일·급등 2일 — "그 달에 무슨 일이"의 핵심 자료
+  const days = [];
+  for (let i = 1; i < win.length; i++)
+    days.push({ t: win[i].t, ch: (win[i].c / win[i - 1].c - 1) * 100, v: win[i].v || 0 });
+  const fmtD = (d) => `${d.t}(${d.ch >= 0 ? "+" : ""}${d.ch.toFixed(1)}%)`;
+  const drops = [...days].sort((a, b) => a.ch - b.ch).slice(0, 3).filter((d) => d.ch < -1).map(fmtD);
+  const jumps = [...days].sort((a, b) => b.ch - a.ch).slice(0, 2).filter((d) => d.ch > 1).map(fmtD);
+  // 구간이 오래된 과거면 최신 뉴스는 오히려 오답을 유도한다 → 자료에서 제외
+  const isOld = s.length && l.t < s[s.length - 1].t.slice(0, 8) + "01" &&
+    (new Date(s[s.length - 1].t) - new Date(l.t)) / 864e5 > 30;
+  return { f, l, chg, hi, lo, volDays, disc, news: isOld ? [] : news, isOld, drops, jumps, supTxt, sigs,
            name: st.name, tk: st.ticker, mk: st.market };
 }
 
@@ -8739,35 +8767,43 @@ async function whyAsk() {
   out.style.display = "";
   out.innerHTML = `<p class="mini-note">자료 취합·분석 중…</p>`;
   await loadExtras();                       // 공시·뉴스 컨텍스트
-  const c = whyContext(st);
-  if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
   const q = $("#why-q").value.trim();
-  const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]만 근거로 답하라.
-규칙: ①자료에 없는 원인을 단정하지 말 것 — 자료 밖 일반 지식으로 보완할 때는 문장 앞에 [추정]을 붙일 것
-②결론 3~6문장 → 그 아래 "근거:" 불릿(자료의 날짜·항목 인용) ③과장·투자권유 금지, 한국어.
+  const qwin = whyParsePeriod(q, st.series || []);   // "25년 11월" → 그 달로 창 좁힘
+  const c = whyContext(st, qwin);
+  if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
+  const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]를 1차 근거로 답하라.
+규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인은 **구글 검색으로 찾아 보완**하되
+해당 문장 앞에 [검색]을 붙일 것(특히 급락일 날짜로 당시 뉴스를 검색) ③검색으로도 못 찾으면 [추정] 표시
+④결론 3~6문장 → 그 아래 "근거:" 불릿(자료·검색의 날짜·항목 인용) ⑤과장·투자권유 금지, 한국어.
+${qwin ? `※질문의 기간(${c.f.t.slice(0, 7)})을 인식해 자료를 그 기간으로 좁혔다.` : ""}
 
 [자료] ${c.name}(${c.tk}) ${c.f.t} ~ ${c.l.t}
 - 주가: ${c.f.c.toLocaleString()} → ${c.l.c.toLocaleString()} (${c.chg >= 0 ? "+" : ""}${c.chg.toFixed(1)}%) · 구간 최고 ${c.hi.h.toLocaleString()}(${c.hi.t}) · 최저 ${c.lo.l.toLocaleString()}(${c.lo.t})
+${c.drops.length ? `- 급락일: ${c.drops.join(" / ")}` : ""}
+${c.jumps.length ? `- 급등일: ${c.jumps.join(" / ")}` : ""}
 - 거래량 급증일: ${c.volDays.join(" / ") || "없음"}
 ${c.supTxt ? `- 수급(구간 누적): ${c.supTxt}` : ""}
 ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
 - 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}
-- 최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}
+- ${c.isOld ? "구간 당시 뉴스 자료 없음(과거 구간) — 필요하면 검색으로 보완" : `최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}`}
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
-    let ans = null;
+    let ans = null, srcs = [];
     for (let i = 0; i < 3; i++) {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],   // 과거 뉴스는 내부 자료에 없다 → 검색 그라운딩(무료 한도 내)
           // thinking이 출력 한도를 잠식해 답이 잘린다(youtube-mentor 실측) → 0으로
-          generationConfig: { maxOutputTokens: 1200, thinkingConfig: { thinkingBudget: 0 } } }),
+          generationConfig: { maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } } }),
       });
       if (res.status === 429) { await new Promise((r) => setTimeout(r, 4000 * (i + 1))); continue; }
       const j = await res.json();
       if (!res.ok) throw new Error(j.error?.message || res.status);
       ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text).join("") || "";
+      srcs = (j.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
+        .map((g) => g.web).filter(Boolean).slice(0, 5);
       break;
     }
     if (!ans) throw new Error("응답 없음(429 반복) — 잠시 후 다시");
@@ -8777,7 +8813,9 @@ ${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
       .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
       .replace(/\n/g, "<br>")
       .replace(/<\/li><br>/g, "</li>")}</div>
-      <p class="sub-note">Gemini 2.5 Flash · 위 자료(주가·공시·뉴스·수급) 범위 내 분석 — 투자 판단의 참고용입니다.</p>`;
+      ${srcs.length ? `<p class="sub-note" style="margin-top:6px">🔎 검색 출처: ${srcs.map((w) =>
+        `<a class="ext-link" href="${w.uri}" target="_blank" rel="noopener">${(w.title || "링크").slice(0, 30)}</a>`).join(" · ")}</p>` : ""}
+      <p class="sub-note">Gemini 2.5 Flash + 구글 검색 · 내부 자료(주가·공시·뉴스·수급) 우선, 부족분은 [검색]·[추정] 표시 — 투자 판단의 참고용입니다.</p>`;
   } catch (e) {
     out.innerHTML = `<p class="mini-note">분석 실패: ${String(e.message || e).slice(0, 120)}</p>`;
   }
