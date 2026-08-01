@@ -2612,6 +2612,7 @@ function dsRender() {
   host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
   });
+  dsFillNews();
 }
 
 /* 구조도(v247) — 좁은 좌측 열에 맞춰 **세로 흐름**으로. 가로형은 폭을 많이 먹고 글자도 커진다.
@@ -2755,6 +2756,128 @@ function dsTimeline(x) {
       <span class="ds-tl-dot"></span><span class="sub-note">${k}</span><b>${v}</b></div>`).join("")}</div>`;
 }
 
+/* 관련 기사(v253) — 두 소스에서 회사명 + 공시일 전후로 찾는다.
+   ① deals_archive.json : deal-radar가 모은 M&A 전문 기사(3,500건, 국내외)
+   ② stocknews/{key}.json: 종목별 1년치 헤드라인(링크 포함) — 인수자가 시총 400위 안이면 존재
+   회사명은 괄호·법인격을 떼고 핵심어만 쓴다("SK실트론(주) (SK Siltron…)" → "SK실트론"). */
+let DEAL_ARCH = null;
+function dsCoreName(s) {
+  return String(s || "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/(주식회사|㈜|\(주\)|Co\.,? ?Ltd\.?|Inc\.?|Corp\.?|Group|AG|B\.V\.|LLC)/gi, " ")
+    .replace(/\s+/g, " ").trim();
+}
+function dsLoadArch() {
+  if (DEAL_ARCH) return Promise.resolve(DEAL_ARCH);
+  return fetch("data/deals_archive.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (DEAL_ARCH = j?.items || [], DEAL_ARCH));
+}
+/* 'MM-DD HH:MM' → 'YYYY-MM-DD' (아카이브에 연도가 없어 딜 날짜 기준으로 연도를 붙인다) */
+function dsArchDate(tstr, refYmd) {
+  const m = /^(\d{2})-(\d{2})/.exec(String(tstr || ""));
+  if (!m) return null;
+  const y = +(refYmd || "").slice(0, 4) || new Date().getFullYear();
+  const cand = `${y}-${m[1]}-${m[2]}`;
+  // 딜이 1월인데 기사가 12월이면 전년도로 본다(연말·연초 경계)
+  if (refYmd && cand > refYmd && (+m[1] - +refYmd.slice(5, 7)) > 6) return `${y - 1}-${m[1]}-${m[2]}`;
+  return cand;
+}
+
+async function dsNews(x) {
+  const names = [dsCoreName(x.corp), dsCoreName(x.target), dsCoreName(x.counter)]
+    .filter((s) => s && s.length >= 2);
+  if (!names.length) return [];
+  const hit = new Map();                     // link → {d, title, src, sc}
+  // ⚠회사명만으로 걸면 '노조 재심'·'브랜드평판' 같은 무관 기사가 섞인다(실측) → 관련도 점수로 거른다.
+  const DEALKW = /인수|합병|매각|양수|양도|M&A|지분|분할|취득|피인수|딜|베팅|계약 ?체결|출자|공개매수/i;
+  const tgt = [dsCoreName(x.target), dsCoreName(x.counter)].filter((s) => s && s.length >= 4);
+  /* 짧은 사명(SK·두산 등 3자 이하)은 그냥 포함 검사하면 'SKT'·'SK하이닉스'가 걸린다(실측).
+     앞뒤 경계를 본다 — 뒤에 조사나 기호가 오면 그 회사, 한글·영문이 이어지면 다른 회사로 판정. */
+  const JOSA = "이가은는을를의에와과도만로부서까지";
+  const nameHit = (ti, n) => {
+    if (!n) return false;
+    if (n.length >= 4) return ti.includes(n);
+    for (let i = ti.indexOf(n); i !== -1; i = ti.indexOf(n, i + 1)) {
+      const nx = ti[i + n.length] || "", pv = ti[i - 1] || "";
+      const okN = !nx || /[^가-힣A-Za-z0-9]/.test(nx) || JOSA.includes(nx);
+      const okP = !pv || /[^가-힣A-Za-z0-9]/.test(pv);
+      if (okN && okP) return true;
+    }
+    return false;
+  };
+  /* 제목에 이 딜의 금액이 있으면 강한 신호 — 한국 기사는 대상 사명을 한글로 옮겨 적어(폴리펩타이드)
+     영문 사명 매칭이 안 되는 경우가 많다. "2.7조" "2조7천억" 같은 표기를 만들어 대조한다. */
+  const amtKeys = [];
+  if (x.amount) {
+    const jo = x.amount / 1e12;
+    if (jo >= 0.95) {
+      amtKeys.push(`${jo.toFixed(1)}조`);
+      const w = Math.floor(jo), r = Math.round((jo - w) * 10);
+      amtKeys.push(r ? `${w}조${r}` : `${w}조`);
+    } else {
+      const eok = Math.round(x.amount / 1e8);
+      amtKeys.push(`${eok.toLocaleString()}억`);
+      if (eok >= 1000) amtKeys.push(`${Math.round(eok / 1000)}천억`);
+    }
+  }
+  const relScore = (ti) => {
+    let s = 0;
+    if (tgt.some((n) => nameHit(ti, n))) s += 3;   // 대상·상대방이 제목에 = 이 딜 기사일 확률 높음
+    if (amtKeys.some((k) => ti.includes(k))) s += 3;
+    if (DEALKW.test(ti)) s += 2;
+    return s;
+  };
+  const near = (d) => {                      // 공시일 -21 ~ +14일
+    if (!d || !x.d) return true;
+    const gap = (new Date(d) - new Date(x.d)) / 864e5;
+    return gap >= -21 && gap <= 14;
+  };
+  try {
+    const arch = await dsLoadArch();
+    for (const a of arch) {
+      const ti = a.title || "";
+      if (!names.some((n) => nameHit(ti, n))) continue;
+      const sc = relScore(ti);
+      if (sc < 2) continue;                        // 회사명만 스친 기사는 제외
+      const d = dsArchDate(a.t, x.d);
+      if (!near(d)) continue;
+      hit.set(a.link, { d, title: ti, src: a.src || "", sc });
+    }
+  } catch (e) { /* 아카이브 없으면 종목 뉴스만 */ }
+  if (x.code) {
+    const arr = await loadStockNews(`kr_${x.code}`);
+    (arr || []).forEach((n) => {
+      if (!names.some((s) => nameHit(n[2], s))) return;
+      const sc = relScore(n[2]);
+      if (sc < 2 || !near(n[0])) return;
+      const url = n[3] ? `https://n.news.naver.com/article/${n[3]}` : null;
+      if (url && !hit.has(url)) hit.set(url, { d: n[0], title: n[2], src: n[1], sc });
+    });
+  }
+  const arr = [...hit.entries()].map(([link, v]) => ({ link, ...v }));
+  const best = Math.max(0, ...arr.map((a) => a.sc));
+  const cut = best >= 5 ? best - 2 : 2;          // 확실한 기사가 있으면 애매한 건 제외
+  return arr.filter((a) => a.sc >= cut)
+    .sort((a, b) => (b.sc - a.sc) || (a.d || "").localeCompare(b.d || "")).slice(0, 6);
+}
+
+/* 카드가 그려진 뒤 비동기로 채운다(기사 조회가 카드 렌더를 막지 않게) */
+function dsFillNews() {
+  document.querySelectorAll("#ds-list [data-news]").forEach(async (el) => {
+    if (el.dataset.done) return;
+    el.dataset.done = "1";
+    const x = (DEALS_ST?.deals || []).find((d) => d.rcept === el.dataset.news);
+    if (!x) return;
+    const arts = await dsNews(x);
+    if (!arts.length) return;
+    el.innerHTML = `<div class="ds-news"><b>📰 관련 기사 ${arts.length}건</b>` +
+      arts.map((a) => `<div class="ds-news-row"><span class="sub-note">${dsEsc(a.d || "")}${
+        a.src ? " " + dsEsc(String(a.src).split("·")[0].trim().slice(0, 12)) : ""}</span>
+        <a href="${a.link}" target="_blank" rel="noopener">${dsEsc(a.title).slice(0, 70)} ↗</a></div>`).join("") +
+      `</div>`;
+  });
+}
+
 /* 사업개요 — 우리가 이미 가진 company.json(상장사)에서. 비상장이면 공시의 업종 한 줄. */
 function dsBiz(x) {
   const co = x.code ? EXTRAS.company?.map?.[`kr_${x.code}`] : null;
@@ -2808,6 +2931,7 @@ function dsCard(x) {
         ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
           <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
         ${dsBiz(x)}
+        <div data-news="${x.rcept}"></div>
       </div>
     </div>
   </div>`;
@@ -2828,6 +2952,7 @@ function initDealsStruct() {
 }
 
 const DEV_HISTORY = [
+  ["v253", "2026-08-02", "딜 카드에 관련 기사 연결", "각 딜에 **그 딜을 다룬 기사**를 붙였습니다. M&A 전문 기사 아카이브(3,500건)와 종목별 뉴스 아카이브에서 인수자·대상회사·매도자 이름으로 찾고, **공시일 전후(-21~+14일) 기사만** 골라 최대 6건을 보여줍니다. 제목을 누르면 원문으로 이동합니다. 예: 두산-SK실트론 딜에 'SK, 두산에 SK실트론 지분 70% 판다…매각가 2.3조원' 기사가 붙습니다."],
   ["v252", "2026-08-02", "딜 구조 여백 정리 + 문장 다듬기", "딜 구조 본문이 상단 메뉴에 바짝 붙어 있던 것을 띄웠고, 회사명 받침에 따라 조사(이/가·을/를·로부터)를 자동으로 골라 문장이 자연스럽게 읽히도록 했습니다."],
   ["v249", "2026-08-02", "딜 구조에 '어떻게·왜' 서술 추가", "숫자만 나열되던 것을 **문장으로 설명**하도록 했습니다. 공시 필드를 조합해 ① 누가 누구로부터 무엇을 얼마에 인수하는지, ② **처음 확보하는 지분인지 추가 취득인지**, ③ 주당 단가와 대상회사 전체 환산가치, ④ 인수 규모가 자기자본·자산의 몇 %인지, ⑤ **외부평가액 대비 비싸게/싸게 사는지**, ⑥ 추진 이유(공시 원문), ⑦ 공정위 신고·풋옵션 등 특이사항을 서술합니다. **진행 일정 타임라인**(이사회 결의 → 외부평가 → 취득/합병 예정일)도 추가했습니다. AI가 아니라 공시 필드에서 직접 만들기 때문에 지어낸 문장이 없습니다."],
   ["v247", "2026-08-02", "딜 구조 카드 2단 배치 + 도식 축소", "구조도가 카드 전체 폭을 쓰고 글자도 커서 한 딜이 화면을 가득 채웠습니다. **구조도를 왼쪽 좁은 열에 세로 흐름으로** 줄이고(매도자→인수자→대상), 거래금액·지분율·목적·자금조달·양측 사업개요는 **오른쪽에 배치**했습니다. 글자 크기도 전반적으로 줄여 한 화면에 더 많은 딜이 들어옵니다."],

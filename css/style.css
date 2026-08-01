@@ -2089,3 +2089,11 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ds-tl-step.last .ds-tl-dot { background: #e0a93f; }
 /* 상위 그룹이 탭 1개(solo)면 탭 바가 숨겨져 본문이 그룹 메뉴에 바로 붙는다 → 여백 확보(v249) */
 #tab-dealstruct { margin-top: 18px; }
+
+/* 🤝 딜 관련 기사 (v253) */
+.ds-news { margin-top: 9px; border-top: 1px dashed var(--line); padding-top: 7px; }
+.ds-news > b { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; }
+.ds-news-row { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; font-size: .79rem; }
+.ds-news-row .sub-note { flex: none; font-size: .72rem; }
+.ds-news-row a { color: inherit; text-decoration: none; }
+.ds-news-row a:hover { color: #7cb1ff; }
