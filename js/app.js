@@ -2051,6 +2051,7 @@ adminSetup();
 
 // 개발 내역(버전별 릴리스) — 최신순. 새 기능 배포 시 여기 맨 위에 한 줄 추가.
 const DEV_HISTORY = [
+  ["v221", "2026-08-01", "기업개요 대보강 — 기업 정보 팩트 + 📚 사업 심층(공식 원문 발췌)", "①**🪪 기업 정보 팩트**(종목조회 기업개요 카드): 한국은 DART 공식 API에서 대표자·설립일·직원 수·평균 연봉·평균 근속·주당배당 3개년·배당성향·시가배당률을, 미국은 직원 수·본사·섹터·경영진 명단을 가져와 표시합니다. ②**📚 사업 심층**: 한국 시총 상위 500은 최신 사업보고서의 'II. 사업의 내용'(사업 개요·주요 제품·원재료와 생산설비·매출과 수주·연구개발 등 소제목별), 미국 전 종목은 10-K Item 1(Business)을 원문 발췌로 제공 — 요약본에 없던 시장점유율·수주잔고·가동률급 정보를 공식 출처 그대로 봅니다(원문 링크 포함, 분기 갱신). 종목조회 기업개요 카드와 관심종목 워크스페이스 보고서 카드 양쪽에 접이식으로 들어갑니다."],
   ["v220", "2026-08-01", "🤔 AI 변동 사유 Q&A — 차트 아래에서 '왜 움직였나' 질문", "종목조회 차트 아래에 **AI 변동 사유 카드**를 추가했습니다. 기간(최근 5일/1개월/차트에 보이는 구간)을 고르고 분석을 누르면 **그 구간의 주가 등락·고저·거래량 급증일 + 공시 + 뉴스 헤드라인 + 외국인·기관·개인 수급 + 원칙 신호**를 한 번에 모아 Gemini에게 넘기고, '이 자료 안에서만 답하라(자료 밖 추정은 [추정] 표시)'를 강제해 근거 있는 설명을 받습니다. 자유 질문도 가능(비우면 상승/하락 사유 분석). Gemini 키는 🔑 버튼으로 브라우저에만 저장되며(youtube-mentor와 공유) 서버로 전송되지 않습니다."],
   ["v219", "2026-08-01", "관심종목 재무 그래프를 추이형 스파크라인으로 교체", "막대 방식은 분기 간 값 차이가 작으면 전부 비슷한 높이로 보여 추이가 읽히지 않았습니다(사용자 피드백). **매출·영업이익·순이익 각각을 면적 스파크라인**(자기 범위로 증폭, 높이 확대)으로 바꿔 방향과 굴곡이 한눈에 보이게 했고, 각 줄 오른쪽에 최근 분기 값을 붙였습니다. 적자 구간이 있으면 0선(점선)이 표시되고 점에 커서를 올리면 분기별 값이 나옵니다. 함께: 전년 동분기가 0에 가까울 때 YoY가 '-5,815%' 같은 허수로 표시되던 것을 **흑자전환/적자전환** 표기로 정리했습니다."],
   ["v218", "2026-08-01", "관심종목 카드 심화(재무 3종 그래프·밸류 확장·산업지표) + UI 정리", "①**관심종목 재무 카드** — 매출만 있던 분기 그래프를 **매출·영업이익·순이익 3줄 미니 막대**로 확장(각자 스케일, 적자 분기는 파란 막대). ②**밸류에이션 카드 보강** — PBR도 동종 평균과 비교, **PSR**(시총÷최근 연매출), **EPS 4개년 추이 막대**(추정치는 빗금) 추가. ③**산업 맥락 카드에 산업 진단의 실물 지표 연동** — 소속 산업의 수출금액지수(한국은행)·글로벌 프록시(SOX 등) 3종을 3개월 변화율과 함께 표시. 월간·주간 시계열의 주기가 섞여 있어 잘못 계산되던 문제(+229%로 표시)도 함께 수정. ④**종목조회 검색창을 맨 왼쪽으로** 이동, '전체 적용' 버튼 제거(라디오 '전체 신호'와 중복) 후 '신호 끄기' 버튼을 주변 요소와 같은 크기로 정리."],
@@ -5585,6 +5586,16 @@ function wsShow(key) {
       if (b) b.onclick = () => { navigator.clipboard?.writeText(`${w.name || tk} 이해 보고서 써줘`);
         b.textContent = "✅ 복사됨 — Claude에게 붙여넣으세요"; };
     }
+    // 📚 사업 심층(v221) — 있으면 보고서 카드 하단에 접이식으로
+    fetchBizDeep(key).then((d) => {
+      if (wsSel !== key || !d) return;
+      const card = document.querySelector("#ws-main .ws-report .ws-card-b");
+      if (!card || card.querySelector(".ws-bizdeep")) return;
+      const div = document.createElement("div");
+      div.className = "ws-bizdeep";
+      div.innerHTML = bizDeepHtml(d, false);
+      card.appendChild(div);
+    });
   });
 
   // 종목 시계열(stocks/{key}.json) 기반 카드들
@@ -7296,7 +7307,7 @@ function renderLookupOverview(st) {
   const host = $("#lookup-overview");
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
   const f = FUND?.map?.[`${st.market}_${st.ticker}`];
-  if (!co?.overview) { host.style.display = "none"; return; }
+  if (!co || (!co.overview && !co.profile)) { host.style.display = "none"; return; }
   host.style.display = "";
   const ind = co.industry || f?.industry;
   // 사업구조: 개요 불릿(1행=회사, 2행~=사업/전략) 분리 서술
@@ -7322,12 +7333,64 @@ function renderLookupOverview(st) {
       : co.holders_pct ? `<p class="sub-note" style="margin-top:4px">내부자 ${co.holders_pct.insider}% · 기관 ${co.holders_pct.inst}% 보유</p>` : "";
     shHtml = `<div class="ov-sec"><b>👥 주주 구성</b><div class="mix-bars">${rows}</div>${extra}</div>`;
   }
+  // 🪪 기업 정보 팩트(v221): KR=DART 개황·직원·배당 / US=yfinance 확장
+  let pfHtml = "";
+  const pr = co.profile;
+  if (pr) {
+    const facts = [];
+    if (st.market === "kr") {
+      if (pr.ceo) facts.push(["대표", pr.ceo]);
+      if (pr.est) facts.push(["설립", pr.est.slice(0, 7)]);
+      if (pr.emp) facts.push(["직원", pr.emp.toLocaleString() + "명" + (pr.tenure_y ? ` · 근속 ${pr.tenure_y}년` : "")]);
+      if (pr.salary_mn) facts.push(["평균연봉", pr.salary_mn >= 100 ? (pr.salary_mn / 100).toFixed(2) + "억원" : pr.salary_mn + "백만원"]);
+      if (pr.dps_y?.some((v) => v)) facts.push(["주당배당 3년", pr.dps_y.map((v) => (v ? v.toLocaleString() : "-")).join(" → ") + "원"]);
+      if (pr.payout != null || pr.yld != null)
+        facts.push(["배당", [pr.payout != null ? `성향 ${pr.payout}%` : "", pr.yld != null ? `시가배당률 ${pr.yld}%` : ""].filter(Boolean).join(" · ")]);
+    } else {
+      if (pr.hq) facts.push(["본사", pr.hq]);
+      if (pr.emp) facts.push(["직원", pr.emp.toLocaleString() + "명"]);
+      if (pr.sector) facts.push(["섹터", pr.sector]);
+      if (pr.officers?.length)
+        facts.push(["경영진", pr.officers.slice(0, 3).map((o) => `${o.name.replace(/^(Mr|Ms|Mrs|Dr)\.?\s+/, "")} (${(o.title || "").split(/,| and | & /)[0].slice(0, 28)})`).join(" · ")]);
+    }
+    if (facts.length)
+      pfHtml = `<div class="ov-sec"><b>🪪 기업 정보</b><div class="ov-facts">${facts.map(([k, v]) =>
+        `<span class="ov-fact"><span class="ov-fact-k">${k}</span>${v}</span>`).join("")}</div></div>`;
+  }
   host.innerHTML = `<h3 class="lk-h3">🏢 기업 개요 ${ind ? `<span class="badge dim">${ind}</span>` : ""}
-      ${co.website ? `<a class="ext-link" href="${co.website}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}</h3>
-    <div class="ov-sec"><b>무엇을 하는 회사인가</b><p class="lk-ov-text">${intro}</p></div>
+      ${co.website || pr?.url ? `<a class="ext-link" href="${co.website || pr.url}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}</h3>
+    ${co.overview ? `<div class="ov-sec"><b>무엇을 하는 회사인가</b><p class="lk-ov-text">${intro}</p></div>` : ""}
+    ${pfHtml}
     ${biz ? `<div class="ov-sec"><b>🧩 사업 구조·전략</b><ul class="ov-biz">${biz.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}
     ${mixHtml}${shHtml}
-    <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART 사업보고서(주주)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
+    <div id="ov-bizdeep"></div>
+    <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART(주주·기업정보)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
+  loadBizDeep(st);
+}
+
+/* ---------- 📚 사업 심층 (v221) — 사업보고서 '사업의 내용'/10-K Item 1 발췌 ---------- */
+const BIZDEEP = {};
+function bizDeepHtml(d, open) {
+  const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<div class="ov-sec"><b>📚 사업 심층</b> <span class="sub-note">${d.src} 원문 발췌 ·
+      <a class="ext-link" href="${d.url}" target="_blank" rel="noopener">원문 ↗</a></span>
+    ${d.sections.map((s, i) => `<details class="bizdeep-sec"${open && i === 0 ? " open" : ""}>
+      <summary>${esc(s.h)}</summary><p class="bizdeep-t">${esc(s.t).replace(/\n/g, "<br>")}</p></details>`).join("")}</div>`;
+}
+async function fetchBizDeep(key) {
+  if (!(key in BIZDEEP)) {
+    try {
+      BIZDEEP[key] = await fetch(`data/bizdeep/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null));
+    } catch (e) { BIZDEEP[key] = null; }
+  }
+  return BIZDEEP[key];
+}
+async function loadBizDeep(st) {
+  const key = `${st.market}_${st.ticker}`;
+  const d = await fetchBizDeep(key);
+  const el = document.getElementById("ov-bizdeep");
+  if (!d || !el || LOOKUP_ST !== st) return;
+  el.innerHTML = bizDeepHtml(d, false);
 }
 
 // 증권가 컨센서스 카드: 목표주가 vs 현재가 + 투자의견
