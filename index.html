@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=244">
-<script src="firebase-config.js?v=244"></script>
-<script src="js/auth.js?v=244"></script>
+<link rel="stylesheet" href="css/style.css?v=245">
+<script src="firebase-config.js?v=245"></script>
+<script src="js/auth.js?v=245"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=244"></script>
+<script src="js/sync.js?v=245"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -23,6 +23,7 @@
   <button class="group" data-group="discover">🔍 종목 찾기</button>
   <button class="group" data-group="research">📐 원칙 검증</button>
   <button class="group" data-group="journal">✍️ 내 투자</button>
+  <button class="group" data-group="dealstruct">🤝 딜 구조</button>
   <button class="group" data-group="watch">⭐ 관심종목</button>
   <!-- 관리자 전용(yoo7337@gmail.com) — 그룹 메뉴 라인 오른쪽 끝 -->
   <button class="group admin-group" id="admin-devlog" title="개발일지 (관리자)" style="display:none">🛠 개발일지</button>
@@ -43,6 +44,9 @@
   <button class="tab" data-tab="disc">📢 공시 스캐너</button>
 </nav>
 <!-- 관심종목은 상위 그룹으로 승격(v210) — 탭이 하나뿐이라 `solo` nav(항상 숨김)로 그룹↔탭을 잇는다 -->
+<nav class="tabs solo" data-group-tabs="dealstruct" style="display:none">
+  <button class="tab" data-tab="dealstruct">🤝 딜 구조</button>
+</nav>
 <nav class="tabs solo" data-group-tabs="watch" style="display:none">
   <button class="tab" data-tab="watch">⭐ 관심종목</button>
 </nav>
@@ -1013,6 +1017,32 @@
       </form>
     </dialog>
   </section>
+  <section id="tab-dealstruct" class="panel">
+    <div class="criteria">🤝 <b>딜 구조</b> — 국내 상장사의 M&amp;A·자본거래를 <b>공시 원본(DART 주요사항보고서)</b>의
+      구조화 필드로 보여줍니다. 금액·지분율·목적·일정이 기사 요약이 아니라 공시 그대로입니다.
+      중요도는 <b>거래금액·자산 대비 비중·취득 지분율</b>로 매깁니다.
+      <br><span class="sub-note">해외·비상장 간 딜은 공시 대상이 아니라 빠집니다 — 필요하면 Claude에게
+      "○○ 딜 구조 정리해줘"라고 요청해 별도 보고서로 받으세요.</span></div>
+    <div class="home-topbar" style="margin:14px 0 10px">
+      <div class="chips" id="ds-filter">
+        <button class="chip active" data-f="all">전체</button>
+        <button class="chip" data-f="big">1,000억+</button>
+        <button class="chip" data-f="in">인수</button>
+        <button class="chip" data-f="out">매각</button>
+        <button class="chip" data-f="merge">합병</button>
+      </div>
+      <span class="sub-note" id="ds-count"></span>
+      <span style="flex:1"></span>
+      <span class="mk-toggle" id="ds-sort">
+        <button data-s="score" class="active">중요도</button>
+        <button data-s="amount">금액</button>
+        <button data-s="date">최신</button>
+      </span>
+      <span class="sub-note" id="ds-asof"></span>
+    </div>
+    <div id="ds-list"></div>
+  </section>
+
   <section id="tab-diary" class="panel">
     <div class="criteria">📔 <b>투자 다이어리</b> — 오늘 느낀 점·궁금한 것을 자유롭게 적는 곳입니다.
       거래와 무관해도 좋습니다. <b>이 브라우저에만</b> 저장되며(로그인 시 개인 계정 동기화) 공개되지 않습니다.
@@ -1137,7 +1167,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=244"></script>
+<script src="js/app.js?v=245"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

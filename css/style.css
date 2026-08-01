@@ -2024,3 +2024,39 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   font-size: .92rem; font-weight: 600; font-family: inherit; }
 .di-card .di-title { font-size: .95rem; font-weight: 700; margin-bottom: 4px; }
 .di-card .di-title.done { opacity: .6; text-decoration: line-through; }
+
+/* 🤝 딜 구조 (v245) */
+.ds-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 15px; margin-bottom: 12px; }
+.ds-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 4px; }
+.ds-head b { font-size: 1rem; }
+.ds-kind { font-size: .75rem; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  background: rgba(255,255,255,.08); }
+.ds-kind.k-in { background: rgba(34,192,122,.16); color: #22c07a; }
+.ds-kind.k-out { background: rgba(245,68,90,.15); color: #f5445a; }
+.ds-kind.k-merge { background: rgba(67,145,255,.16); color: #7cb1ff; }
+.ds-amt { font-size: 1rem; font-weight: 700; color: #e0a93f; }
+.ds-svg { width: 100%; height: auto; margin: 4px 0 8px; }
+.ds-box { fill: #23232b; stroke: var(--line); }
+.ds-box-acq { stroke: rgba(34,192,122,.5); }
+.ds-box-tgt { stroke: rgba(67,145,255,.5); }
+.ds-box-seller { stroke: rgba(245,68,90,.4); }
+.ds-box-t { fill: #e9e9ee; font-size: 13px; font-weight: 700; text-anchor: middle; }
+.ds-box-s { fill: #9ca3af; font-size: 10px; text-anchor: middle; }
+.ds-arrow { stroke: #7cb1ff; stroke-width: 2; marker-end: url(#dsah); }
+.ds-arrow-t { fill: #cfe0fb; font-size: 12px; font-weight: 700; }
+.ds-arrow-s { fill: #9ca3af; font-size: 10px; }
+.ds-arrow-t.mid, .ds-arrow-s.mid { text-anchor: middle; }
+.ds-facts { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 7px 0; border-top: 1px dashed var(--line); }
+.ds-facts .sub-note { font-size: .74rem; }
+.ds-purpose { font-size: .85rem; line-height: 1.6; margin: 5px 0; }
+.ds-more { margin-top: 5px; }
+.ds-more summary { cursor: pointer; font-size: .8rem; color: var(--muted); }
+.ds-more p { font-size: .8rem; line-height: 1.6; margin-top: 5px; }
+.ds-biz { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 9px; }
+.ds-biz-card { background: #212127; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; }
+.ds-biz-card b { font-size: .88rem; }
+.ds-biz-card p { font-size: .8rem; line-height: 1.55; margin-top: 4px; }
+.ds-go { font-size: .72rem; padding: 1px 7px; margin-left: 6px; border-radius: 999px; cursor: pointer;
+  background: rgba(67,145,255,.15); border: 1px solid rgba(67,145,255,.35); color: #7cb1ff; }
+@media (max-width: 760px) { .ds-biz { grid-template-columns: 1fr; } }

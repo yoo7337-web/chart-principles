@@ -162,6 +162,7 @@ function activateTab(tabId) {
   if (tabId === "value" && !valRendered) initValue();
   if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "diary" && !diaryRendered) initDiary();
+  if (tabId === "dealstruct" && !dealsStructRendered) initDealsStruct();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
@@ -2555,7 +2556,162 @@ function diRender() {
   });
 }
 
+
+/* ---------- 🤝 딜 구조 (v245) — DART 주요사항보고서의 구조화 필드로 M&A 구조도 ----------
+   기사 대신 공시 원본 필드를 쓴다(금액·지분율·목적·일정이 그대로 들어있다).
+   선정은 노출도가 아니라 score(금액 로그 + 자산대비 + 지분율)로 — '기사 많은 딜'이 아니라 '큰 딜'. */
+let DEALS_ST = null;
+let dsFilter = "all";
+let dsSort = "score";
+let dealsStructRendered = false;
+
+const dsAmt = (v) => {
+  if (!v) return null;
+  if (v >= 1e12) return (v / 1e12).toFixed(v >= 1e13 ? 0 : 1) + "조원";
+  if (v >= 1e8) return Math.round(v / 1e8).toLocaleString() + "억원";
+  return Math.round(v / 1e4).toLocaleString() + "만원";
+};
+const dsEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const dsName = (s) => dsEsc(String(s || "").replace(/\s*\(.*?\)\s*$/, "").trim() || "-");
+
+function renderDealsStruct() {
+  dealsStructRendered = true;
+  const host = $("#ds-list");
+  if (!host) return;
+  if (!DEALS_ST) {
+    host.innerHTML = `<p class="mini-note">불러오는 중…</p>`;
+    fetch("data/deals_struct.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      DEALS_ST = j || { deals: [] };
+      loadExtras().finally(dsRender);          // 사업개요(company.json) 함께
+    });
+    return;
+  }
+  dsRender();
+}
+
+function dsRender() {
+  const host = $("#ds-list");
+  const all = DEALS_ST?.deals || [];
+  if (!all.length) {
+    host.innerHTML = `<p class="mini-note">수집된 딜이 없습니다 — <code>python analysis\\deal_structure.py</code> 실행 필요</p>`;
+    return;
+  }
+  let rows = dsFilter === "all" ? all.slice()
+    : dsFilter === "big" ? all.filter((x) => (x.amount || 0) >= 1e11)
+      : all.filter((x) => x.side === dsFilter);
+  rows.sort((a, b) => dsSort === "score" ? (b.score || 0) - (a.score || 0)
+    : dsSort === "amount" ? (b.amount || 0) - (a.amount || 0)
+      : (b.d || "").localeCompare(a.d || ""));
+  $("#ds-count").textContent = `${rows.length}건`;
+  $("#ds-asof").textContent = DEALS_ST.generated ? `수집 ${DEALS_ST.generated}` : "";
+  host.innerHTML = rows.map(dsCard).join("");
+  host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
+  });
+}
+
+/* 구조도 — 인수자 →(금액·지분율)→ 대상, 위에 매도자. 합병은 존속/소멸을 나란히. */
+function dsDiagram(x) {
+  const W = 660, H = x.counter && x.side !== "merge" ? 150 : 110;
+  const midY = H - 46;
+  const boxW = 208, boxH = 52;
+  const lx = 10, rx = W - boxW - 10;
+  const label = x.side === "out" ? "매각" : x.side === "merge" ? "합병" : "인수";
+  const arrowTxt = [dsAmt(x.amount), x.stake_after ? `지분 ${x.stake_after}%` : null,
+    x.ratio ? `비율 ${String(x.ratio).split("\n")[0].slice(0, 26)}` : null].filter(Boolean).join(" · ");
+  const box = (bx, by, title, sub, cls) => `
+    <rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="9" class="ds-box ${cls}"/>
+    <text x="${bx + boxW / 2}" y="${by + 21}" class="ds-box-t">${dsName(title).slice(0, 16)}</text>
+    <text x="${bx + boxW / 2}" y="${by + 38}" class="ds-box-s">${dsEsc((sub || "").slice(0, 20))}</text>`;
+  const left = x.side === "out" ? { t: x.target, s: x.target_biz } : { t: x.corp, s: "인수자" };
+  const right = x.side === "out" ? { t: x.counter, s: x.counter_biz } : { t: x.target, s: x.target_biz };
+  let seller = "";
+  if (x.counter && x.side === "in") {
+    seller = `${box(rx, 6, x.counter, x.counter_biz || "매도자", "ds-box-seller")}
+      <line x1="${rx + boxW / 2}" y1="${6 + boxH}" x2="${rx + boxW / 2}" y2="${midY - 8}" class="ds-arrow"/>
+      <text x="${rx + boxW / 2 + 8}" y="${(6 + boxH + midY) / 2 + 4}" class="ds-arrow-t">매각</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="ds-svg">
+    <defs><marker id="dsah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#7cb1ff"/></marker></defs>
+    ${seller}
+    ${box(lx, midY - boxH / 2, left.t, left.s, "ds-box-acq")}
+    ${box(rx, midY - boxH / 2, right.t, right.s, "ds-box-tgt")}
+    <line x1="${lx + boxW + 6}" y1="${midY}" x2="${rx - 8}" y2="${midY}" class="ds-arrow"/>
+    <text x="${(lx + boxW + rx) / 2}" y="${midY - 9}" class="ds-arrow-t mid">${dsEsc(arrowTxt) || label}</text>
+    <text x="${(lx + boxW + rx) / 2}" y="${midY + 18}" class="ds-arrow-s mid">${label}</text>
+  </svg>`;
+}
+
+/* 사업개요 — 우리가 이미 가진 company.json(상장사)에서. 비상장이면 공시의 업종 한 줄. */
+function dsBiz(x) {
+  const co = x.code ? EXTRAS.company?.map?.[`kr_${x.code}`] : null;
+  const cards = [];
+  if (co) {
+    const mx = (co.sales_mix || []).slice(0, 4).map((m) => `${m.name} ${m.pct}%`).join(" · ");
+    const fin = (co.fin || []).filter((f) => !f.est).slice(-1)[0];
+    cards.push(`<div class="ds-biz-card"><b>${dsEsc(x.corp)}</b>
+      <button class="ds-go" data-go="kr_${x.code}">종목조회 →</button>
+      <p>${dsEsc((co.overview || "").slice(0, 190))}</p>
+      ${mx ? `<p class="sub-note">매출구성 ${dsEsc(mx)}</p>` : ""}
+      ${fin ? `<p class="sub-note">${fin.y} 매출 ${(fin.rev || 0).toLocaleString()}억 · 영업익 ${(fin.op ?? 0).toLocaleString()}억</p>` : ""}
+    </div>`);
+  }
+  if (x.target_biz || x.target) {
+    cards.push(`<div class="ds-biz-card"><b>${dsName(x.target)}</b>
+      <span class="badge dim">${x.target_nation && x.target_nation !== "대한민국" ? dsEsc(x.target_nation) : "대상회사"}</span>
+      <p>${dsEsc(x.target_biz || "공시에 업종 정보 없음")}</p>
+      ${x.shares ? `<p class="sub-note">취득 주식수 ${x.shares.toLocaleString()}주</p>` : ""}
+      ${x.target_asset ? `<p class="sub-note">자산 ${dsAmt(x.target_asset)} · 자본 ${dsAmt(x.target_eq)}</p>` : ""}
+    </div>`);
+  }
+  return cards.length ? `<div class="ds-biz">${cards.join("")}</div>` : "";
+}
+
+function dsCard(x) {
+  const facts = [
+    ["거래금액", dsAmt(x.amount)],
+    ["자산 대비", x.amount_vs_asset ? x.amount_vs_asset + "%" : null],
+    ["취득 후 지분", x.stake_after ? x.stake_after + "%" : null],
+    ["예정일", x.when],
+    ["외부평가", x.evaluator],
+  ].filter(([, v]) => v);
+  return `<div class="ds-card">
+    <div class="ds-head">
+      <span class="ds-kind k-${x.side}">${dsEsc(x.label)}</span>
+      <b>${dsEsc(x.corp)}</b>
+      <span class="sub-note">${x.d}</span>
+      <span style="flex:1"></span>
+      ${x.amount ? `<span class="ds-amt">${dsAmt(x.amount)}</span>` : ""}
+      <a class="ext-link" href="${x.url}" target="_blank" rel="noopener">공시 원문 ↗</a>
+    </div>
+    ${dsDiagram(x)}
+    ${facts.length ? `<div class="ds-facts">${facts.map(([k, v]) =>
+      `<span><span class="sub-note">${k}</span> <b>${dsEsc(v)}</b></span>`).join("")}</div>` : ""}
+    ${x.purpose ? `<p class="ds-purpose">🎯 ${dsEsc(String(x.purpose).slice(0, 220))}</p>` : ""}
+    ${x.method ? `<p class="sub-note">방식: ${dsEsc(String(x.method).replace(/\n/g, " ").slice(0, 180))}</p>` : ""}
+    ${x.pay ? `<details class="ds-more"><summary>자금조달·대금지급</summary>
+      <p>${dsEsc(x.pay).replace(/\n/g, "<br>")}</p></details>` : ""}
+    ${dsBiz(x)}
+  </div>`;
+}
+
+function initDealsStruct() {
+  $("#ds-filter").querySelectorAll(".chip").forEach((b) => b.onclick = () => {
+    dsFilter = b.dataset.f;
+    $("#ds-filter").querySelectorAll(".chip").forEach((x) => x.classList.toggle("active", x === b));
+    dsRender();
+  });
+  $("#ds-sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    dsSort = b.dataset.s;
+    $("#ds-sort").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    dsRender();
+  });
+  renderDealsStruct();
+}
+
 const DEV_HISTORY = [
+  ["v245", "2026-08-02", "🤝 딜 구조 탭 신설 — 공시 원본으로 M&A 구조도·사업개요", "M&A를 기사로만 보던 것을 **공시 원본 데이터**로 바꿨습니다. 국내 상장사 딜은 주요사항보고서에 거래상대방·대상회사·금액·주식수·취득 후 지분율·목적·자금조달·일정이 **필드로** 들어 있어 그대로 씁니다. 화면에는 **구조도**(인수자 →금액·지분율→ 대상, 위에 매도자)와 **양측 사업개요**(보유한 기업개요·매출구성·실적), 취득 목적·외부평가·대금지급 방식, 공시 원문 링크가 함께 나옵니다. 중요 딜 선정은 기사 노출이 아니라 **거래금액·자산 대비 비중·취득 지분율** 정량 점수로 합니다. 예: 두산→SK실트론 2.3조·70.61%, 삼성바이오로직스→PolyPeptide 2.7조·100%. 해외·비상장 딜은 공시 대상이 아니라 별도 보고서로 보완합니다."],
   ["v244", "2026-08-02", "📔 다이어리에 제목 칸 추가", "기록마다 **제목**을 붙일 수 있습니다(선택 — 비우면 본문 첫 줄이 제목이 됩니다). 목록에서 제목이 굵게 먼저 보여 훑어보기 쉽고, 검색·미해결 질문 배너·Notion 동기화의 페이지 제목에도 그대로 반영됩니다. 제목 칸에서 Enter를 누르면 본문으로 넘어갑니다. 이전에 쓴 기록도 그대로 보입니다."],
   ["v243", "2026-08-02", "📔 다이어리 Notion 연동 + 기기 간 동기화 수정", "①**다른 노트북에서 다이어리가 안 보이던 문제 수정** — 기기 간 동기화 대상 목록에 다이어리가 빠져 있었습니다(백업 목록과 별개인 걸 놓침). 이제 같은 구글 계정으로 로그인하면 어느 기기에서든 따라옵니다. ②**Notion 연동** — Claude에게 '다이어리 노션에 올려줘'라고 하면 Notion 데이터베이스로 보냅니다. 날짜·유형·내용·태그·종목·해결 여부가 그대로 들어가고, **기록 ID 기준으로 갱신**되어 여러 번 올려도 중복이 생기지 않으며 수정한 글도 반영됩니다. (Notion은 브라우저 직접 호출을 막아둬서 사이트가 아닌 스크립트가 대신 올리는 구조입니다.)"],
   ["v242", "2026-08-01", "📔 투자 다이어리 — 생각·궁금증을 그때그때 적는 공간", "내 투자에 **투자 다이어리** 탭을 새로 만들었습니다. 매매일지가 '거래 기록'이라면 이건 '생각 기록'으로, 종목이나 수익률과 무관하게 자유롭게 씁니다. 유형을 💭생각·❓궁금·📌배움·⚠️반성으로 구분하고, **❓궁금은 답을 찾으면 해결 표시**를 할 수 있어 **아직 답 못 찾은 질문만 맨 위 배너에 모아** 보여줍니다 — 궁금증이 묻히지 않게. 태그(#반도체 등)로 묶어 클릭 검색, 종목을 연결하면 종목조회로 바로 이동, Ctrl+Enter로 빠르게 저장, JSON 내보내기/가져오기도 됩니다. 모든 기록은 이 브라우저(로그인 시 개인 계정)에만 저장되며 공개되지 않습니다."],
