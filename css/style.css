@@ -1887,3 +1887,12 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-fin-spark { flex: 1; height: 44px; display: block; }
 .ws-fin-last { flex: 0 0 74px; text-align: right; font-size: .8rem; }
 .ws-fin-last.kdn { color: var(--kdn); }
+/* 🤔 AI 변동 사유 (v220) */
+.lk-why { margin-top: 12px; padding: 12px 14px; }
+.lk-why-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: .92rem; flex-wrap: wrap; }
+.lk-why-ask { display: flex; gap: 6px; margin-top: 9px; }
+.lk-why-ask input { flex: 1; background: rgba(255,255,255,.05); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 11px; color: inherit; font-size: .84rem; }
+.lk-why-out { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.lk-why-ans { font-size: .87rem; line-height: 1.65; }
+.lk-why-ans li { margin-left: 18px; }

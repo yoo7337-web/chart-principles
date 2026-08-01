@@ -1261,6 +1261,7 @@ function loadLookup(key) {
     bindDrawTools();            // 그리기 도구(추세선·박스권) 1회 바인딩
     setDrawMode("");            // 종목 전환 시 이동 모드로 초기화(+저장된 그림 재배치)
     renderLookupMemo(st);       // 이 종목 메모 카드
+    renderLookupWhy(st);        // 🤔 AI 변동 사유(공시·뉴스·수급 근거)
 
     $("#lookup-stats").innerHTML =
       `<tr><th>원칙</th><th>방향</th><th>구분</th><th>신호수</th><th>승률</th><th>평균 20일 수익</th></tr>` +
@@ -8588,6 +8589,131 @@ function renderLookupReports(st) {
       <p class="sub-note" style="margin:6px 0 0">미국 리서치 원문은 대부분 유료 — 공개된 등급·목표가 변경 이력으로 대체</p>`;
   }
 }
+
+/* ---------- 🤔 AI 변동 사유 (v220) — 주가·공시·뉴스·수급을 근거로 Gemini가 설명 ----------
+   키: localStorage 'gemini_key' — youtube-mentor(같은 origin)와 공유. 브라우저 밖으로 안 나감.
+   원칙: **제공한 자료 안에서만** 답하게 강제하고, 일반 지식 추정은 [추정]으로 표시시킨다(환각 억제). */
+let whyRange = "5";
+function geminiKey() {
+  return localStorage.getItem("gemini_key") || window.GEMINI_API_KEY || "";
+}
+function renderLookupWhy(st) {
+  const host = $("#lookup-why");
+  if (!host) return;
+  host.style.display = "";
+  $("#why-out").style.display = "none";
+  if (host.dataset.bound) return;
+  host.dataset.bound = "1";
+  document.querySelectorAll("#why-range button").forEach((b) => b.onclick = () => {
+    whyRange = b.dataset.r;
+    document.querySelectorAll("#why-range button").forEach((x) => x.classList.toggle("active", x === b));
+  });
+  $("#why-key").onclick = () => {
+    const cur = geminiKey();
+    const v = prompt("Gemini API 키 (aistudio.google.com/apikey 무료 발급 · 이 브라우저에만 저장)", cur || "");
+    if (v != null && v.trim()) { localStorage.setItem("gemini_key", v.trim()); alert("저장됨"); }
+  };
+  $("#why-go").onclick = whyAsk;
+  $("#why-q").addEventListener("keydown", (e) => { if (e.key === "Enter") whyAsk(); });
+}
+
+function whyContext(st) {
+  const s = st.series || [];
+  let from, to = s.length ? s[s.length - 1].t : null;
+  if (whyRange === "view" && lookupChart) {
+    const r = lookupChart.timeScale().getVisibleRange();
+    if (r) { from = typeof r.from === "string" ? r.from : null; to = typeof r.to === "string" ? r.to : to; }
+  }
+  const n = whyRange === "21" ? 21 : 5;
+  const win = from ? s.filter((x) => x.t >= from && x.t <= to) : s.slice(-n);
+  if (win.length < 2) return null;
+  const f = win[0], l = win[win.length - 1];
+  const chg = (l.c / f.c - 1) * 100;
+  const hi = win.reduce((a, x) => (x.h > a.h ? x : a), win[0]);
+  const lo = win.reduce((a, x) => (x.l < a.l ? x : a), win[0]);
+  // 거래량 급증일 상위 2 (구간 평균 대비)
+  const avgV = win.reduce((a, x) => a + (x.v || 0), 0) / win.length || 1;
+  const volDays = [...win].sort((a, b) => (b.v || 0) - (a.v || 0)).slice(0, 2)
+    .map((x) => `${x.t}(평균의 ${((x.v || 0) / avgV).toFixed(1)}배, 종가 ${x.c >= (win[Math.max(0, win.indexOf(x) - 1)]?.c ?? x.c) ? "상승" : "하락"})`);
+  const key = `${st.market}_${st.ticker}`;
+  const fd = EXTRAS.feed?.map?.[key] || {};
+  const disc = (fd.disc || []).filter((d) => d.d >= f.t && d.d <= l.t).slice(0, 15)
+    .map((d) => `${d.d} ${d.title}`);
+  const news = (fd.news || []).slice(0, 10).map((x) => `${x.t} ${x.title.replace(/&[a-z]+;/g, " ")}`);
+  const sup = st.supply || [];
+  const sw = sup.filter((x) => x.t >= f.t && x.t <= l.t);
+  let supTxt = "";
+  if (st.market === "kr" && sw.length >= 2) {
+    const d0 = sw[0], d1 = sw[sw.length - 1];
+    const dv = (a, b) => (a == null || b == null) ? null : Math.round(a - b);
+    const fc = dv(d1.fc, d0.fc), ic = dv(d1.ic, d0.ic), pc = dv(d1.pc, d0.pc);
+    supTxt = `외국인 ${fc != null ? (fc >= 0 ? "+" : "") + fc + "억" : "-"} · 기관 ${ic != null ? (ic >= 0 ? "+" : "") + ic + "억" : "-"}${pc != null ? ` · 개인 ${(pc >= 0 ? "+" : "") + pc + "억"}` : ""}`;
+  }
+  const sigs = (st.markers || []).filter((m) => m.t >= f.t && m.t <= l.t).slice(-6)
+    .map((m) => `${m.t} ${m.side === "buy" ? "매수" : "매도"}신호(${m.rule_id})`);
+  return { f, l, chg, hi, lo, volDays, disc, news, supTxt, sigs,
+           name: st.name, tk: st.ticker, mk: st.market };
+}
+
+async function whyAsk() {
+  const st = LOOKUP_ST;
+  if (!st) return;
+  const out = $("#why-out");
+  const key = geminiKey();
+  if (!key) {
+    out.style.display = "";
+    out.innerHTML = `<p class="mini-note">🔑 버튼으로 Gemini API 키를 먼저 등록하세요 —
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>에서 무료 발급(1분).
+      키는 이 브라우저에만 저장되며 서버로 전송되지 않습니다.</p>`;
+    return;
+  }
+  out.style.display = "";
+  out.innerHTML = `<p class="mini-note">자료 취합·분석 중…</p>`;
+  await loadExtras();                       // 공시·뉴스 컨텍스트
+  const c = whyContext(st);
+  if (!c) { out.innerHTML = `<p class="mini-note">구간 데이터가 부족합니다.</p>`; return; }
+  const q = $("#why-q").value.trim();
+  const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]만 근거로 답하라.
+규칙: ①자료에 없는 원인을 단정하지 말 것 — 자료 밖 일반 지식으로 보완할 때는 문장 앞에 [추정]을 붙일 것
+②결론 3~6문장 → 그 아래 "근거:" 불릿(자료의 날짜·항목 인용) ③과장·투자권유 금지, 한국어.
+
+[자료] ${c.name}(${c.tk}) ${c.f.t} ~ ${c.l.t}
+- 주가: ${c.f.c.toLocaleString()} → ${c.l.c.toLocaleString()} (${c.chg >= 0 ? "+" : ""}${c.chg.toFixed(1)}%) · 구간 최고 ${c.hi.h.toLocaleString()}(${c.hi.t}) · 최저 ${c.lo.l.toLocaleString()}(${c.lo.t})
+- 거래량 급증일: ${c.volDays.join(" / ") || "없음"}
+${c.supTxt ? `- 수급(구간 누적): ${c.supTxt}` : ""}
+${c.sigs.length ? `- 기술 신호: ${c.sigs.join(" / ")}` : ""}
+- 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}
+- 최근 뉴스 헤드라인: ${c.news.join(" | ") || "없음"}
+
+[질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
+  try {
+    let ans = null;
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+          // thinking이 출력 한도를 잠식해 답이 잘린다(youtube-mentor 실측) → 0으로
+          generationConfig: { maxOutputTokens: 1200, thinkingConfig: { thinkingBudget: 0 } } }),
+      });
+      if (res.status === 429) { await new Promise((r) => setTimeout(r, 4000 * (i + 1))); continue; }
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error?.message || res.status);
+      ans = j.candidates?.[0]?.content?.parts?.map((x) => x.text).join("") || "";
+      break;
+    }
+    if (!ans) throw new Error("응답 없음(429 반복) — 잠시 후 다시");
+    const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    out.innerHTML = `<div class="lk-why-ans">${esc(ans)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+      .replace(/
+/g, "<br>")}</div>
+      <p class="sub-note">Gemini 2.5 Flash · 위 자료(주가·공시·뉴스·수급) 범위 내 분석 — 투자 판단의 참고용입니다.</p>`;
+  } catch (e) {
+    out.innerHTML = `<p class="mini-note">분석 실패: ${String(e.message || e).slice(0, 120)}</p>`;
+  }
+}
+
 
 function renderLookupFeed(st) {
   const wrap = $("#lookup-feed");
