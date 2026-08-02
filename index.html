@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=268">
-<script src="firebase-config.js?v=268"></script>
-<script src="js/auth.js?v=268"></script>
+<link rel="stylesheet" href="css/style.css?v=272">
+<script src="firebase-config.js?v=272"></script>
+<script src="js/auth.js?v=272"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=268"></script>
+<script src="js/sync.js?v=272"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -264,6 +264,18 @@
         </span></h3>
       <div id="as-gold-legend" class="cr-legend"></div>
       <div id="as-gold"></div>
+    </div>
+    <!-- v269 신설: M2는 수집만 하고 화면에 없었다. 물가를 더하면 실질금리까지 나온다 —
+         '돈의 양'과 '돈의 값'은 자산시장 판단의 출발점이라 카드 한 장으로 묶는다. -->
+    <div class="card-flat">
+      <h3 class="lk-h3">💧 유동성·물가 <span class="sub-note">(M2 통화량 · 소비자물가 · 실질금리)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-liq-mode">
+          <button data-m="growth" class="active">증가율</button>
+          <button data-m="real">실질금리</button>
+        </span></h3>
+      <div id="as-liq-legend" class="cr-legend"></div>
+      <div id="as-liq"></div>
     </div>
     </div><!-- /as-grid -->
     <div class="criteria" id="as-context" style="margin-top:14px"></div>
@@ -1205,7 +1217,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=268"></script>
+<script src="js/app.js?v=272"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

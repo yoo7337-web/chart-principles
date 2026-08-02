@@ -3076,12 +3076,15 @@ function ownShape(x, y, w, h, kind) {
 
 function ownLabel(x, y, w, h, n, small) {
   const nm = ownEsc(String(n.name).replace(/\(주\)|㈜|주식회사|\(유\)/g, "").trim());
+  // 검색해서 들어온 회사는 도식 안에서 바로 찾을 수 있게 테두리로 표시
+  const mark = ownHL && n.id === ownHL
+    ? `<rect x="${x - 3}" y="${y - 3}" width="${w + 6}" height="${h + 6}" rx="5" class="og-hl"/>` : "";
   const star = n.listed ? "★" : "";
   const fs = small ? 9.5 : 10.5;
   // 긴 이름은 두 줄로
   const lines = nm.length > (small ? 10 : 9) ? [nm.slice(0, small ? 10 : 9), nm.slice(small ? 10 : 9, small ? 20 : 18)] : [nm];
   const y0 = y + h / 2 + (lines.length > 1 ? -3 : 4);
-  return `<g class="og-lb${n.listed ? " listed" : ""}" ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
+  return mark + `<g class="og-lb${n.listed ? " listed" : ""}" ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
     ${lines.map((s, i) => `<text x="${x + w / 2}" y="${y0 + i * 11}" font-size="${fs}">${i === 0 ? star : ""}${ownEsc(s)}</text>`).join("")}
   </g>`;
 }
@@ -3196,7 +3199,7 @@ function ownDiagram(g, byId, out, root, kids) {
       <path d="M0,0 L0,4.4 L6,2.2 z" fill="#8aa0c0"/></marker></defs>${svg}</svg></div>`;
 }
 
-let OWN_SEARCH = null, OWN_NAMES = [], ownQ = "";
+let OWN_SEARCH = null, OWN_NAMES = [], ownQ = "", ownHL = null;
 
 async function initOwnership() {
   ownRendered = true;
@@ -3209,9 +3212,9 @@ async function initOwnership() {
   OWN_NAMES = OWN_IDX.map((k) => {
     const code = k.slice(3);
     const s = (LOOKUP_INDEX || []).find((x) => x.ticker === code);
-    return { key: k, code, name: s?.name || OWN_SEARCH?.groups?.[k]?.name || code,
-             n: OWN_SEARCH?.groups?.[k]?.n || 0 };
-  }).sort((a, b) => b.n - a.n);
+    const gi = OWN_SEARCH?.groups?.[k] || {};
+    return { key: k, code, name: s?.name || gi.name || code, n: gi.n || 0, rank: gi.rank ?? 9999 };
+  }).sort((a, b) => a.rank - b.rank);   // ⚠계열사 수 순으로 두면 단순투자가 수백 건인 보험사가 앞에 온다
   if (!OWN_NAMES.length) {
     $("#own-body").innerHTML = `<p class="mini-note">아직 수집된 지분도가 없습니다 —
       <code>python analysis\\ownership.py --top 300</code> 실행 필요</p>`;
@@ -3232,39 +3235,44 @@ function ownPickRender() {
   const q = ownQ.replace(/\s+/g, "");
   const hit = (s) => q && String(s).replace(/\s+/g, "").toLowerCase().includes(q.toLowerCase());
   const btn = (g, extra) => `<button class="own-pill${g.key === ownSel ? " active" : ""}"
-      data-k="${g.key}">${ownEsc(g.name)}<i>${g.n}사</i>${extra || ""}</button>`;
+      data-k="${g.key}" title="지배 계열 ${g.n}사">${ownEsc(g.name)}<i>${g.n}</i>${extra || ""}</button>`;
 
   if (!q) {
     const top = OWN_NAMES.slice(0, 40);
     host.innerHTML = `<div class="own-pills">${top.map((g) => btn(g)).join("")}</div>
-      <p class="sub-note">계열사가 많은 순 상위 ${top.length}개 · 전체 ${OWN_NAMES.length}개 —
-        회사명이나 <b>계열사명</b>(예: 호텔신라)을 검색하세요.</p>`;
+      <p class="sub-note">시가총액 상위 ${top.length}개 · 전체 ${OWN_NAMES.length}개 —
+        회사명이나 <b>계열사명</b>(예: 호텔신라)을 검색하면 그 회사가 속한 지분도를 찾아줍니다.</p>`;
   } else {
     const groups = OWN_NAMES.filter((g) => hit(g.name));
-    // 계열사 검색: 정제명 → 그 계열사를 품은 그룹들
     const mem = OWN_SEARCH?.members || {};
-    const memHits = Object.keys(mem).filter((k) => hit(k)).slice(0, 14);
+    const memHits = Object.keys(mem).filter((k) => hit(k)).slice(0, 12);
     const gName = (k) => OWN_NAMES.find((g) => g.key === k)?.name || k;
-    const inGroup = new Set(groups.map((g) => g.key));
+    /* 계열사 매칭을 **맨 위에** 둔다(사용자 요청): 한 회사가 여러 그룹 그래프에 걸치므로
+       "어느 지분도에 들어 있는지"를 먼저 보여주고 고르게 한다. 골라 들어가면 그 회사를 강조한다. */
+    const memHtml = memHits.map((k) => {
+      const keys = (mem[k] || []).filter((x) => OWN_IDX.includes(x));
+      if (!keys.length) return "";
+      return `<div class="own-memrow"><span class="own-memnm">${ownEsc(k)}</span>
+        <span class="own-memcnt">지분도 ${keys.length}개</span>
+        ${keys.map((x, i) => `<button class="own-pill sm${x === ownSel ? " active" : ""}"
+          data-k="${x}" data-hl="${ownEsc(k)}"
+          title="${i === 0 ? "이 회사와 가장 가까운 그룹" : ""}">${ownEsc(gName(x))}${i === 0 ? " ★" : ""}</button>`).join("")}</div>`;
+    }).join("");
     host.innerHTML =
-      (groups.length ? `<div class="own-pills">${groups.slice(0, 20).map((g) => btn(g)).join("")}</div>` : "") +
-      (memHits.length ? `<div class="own-mem">${memHits.map((k) => {
-        const keys = (mem[k] || []).filter((x) => OWN_IDX.includes(x));
-        if (!keys.length) return "";
-        return `<div class="own-memrow"><span class="own-memnm">${ownEsc(k)}</span>
-          <span class="sub-note">→</span>
-          ${keys.map((x) => `<button class="own-pill sm${x === ownSel ? " active" : ""}"
-            data-k="${x}">${ownEsc(gName(x))} 지분도</button>`).join("")}</div>`;
-      }).join("")}</div>` : "") +
-      (!groups.length && !memHits.length
-        ? `<p class="mini-note">'${ownEsc(ownQ)}' 검색 결과가 없습니다. 지분도는 시총 상위 그룹부터 수집합니다.</p>`
-        : (inGroup.size || memHits.length) ? "" : "");
+      (memHtml ? `<div class="own-sec-lab">🔎 '${ownEsc(ownQ)}'이(가) 포함된 지분도 — 골라서 여세요
+        <span class="sub-note">★=이 회사와 가장 가까운(상위에 있는) 그룹</span></div>
+        <div class="own-mem">${memHtml}</div>` : "") +
+      (groups.length ? `<div class="own-sec-lab">🏛 그룹 지분도</div>
+        <div class="own-pills">${groups.slice(0, 20).map((g) => btn(g)).join("")}</div>` : "") +
+      (!groups.length && !memHtml
+        ? `<p class="mini-note">'${ownEsc(ownQ)}' 검색 결과가 없습니다. 지분도는 시총 상위 그룹부터 수집합니다.</p>` : "");
   }
-  host.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => ownLoad(b.dataset.k));
+  host.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => ownLoad(b.dataset.k, b.dataset.hl));
 }
 
-async function ownLoad(key) {
+async function ownLoad(key, hl) {
   ownSel = key;
+  ownHL = hl || null;          // 검색으로 들어온 회사 — 도식에서 노랗게 강조
   ownPickRender();
   $("#own-body").innerHTML = `<p class="mini-note">불러오는 중…</p>`;
   OWN_G = await fetch(`data/ownership/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -3283,7 +3291,8 @@ function ownRender() {
 
   const chip = (n, rate, sub) => {
     const nm = ownEsc(n.name.replace(/\s*\(.*?\)\s*$/, "").trim() || n.name);
-    return `<div class="own-node${n.listed ? " listed" : ""}" ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
+    return `<div class="own-node${n.listed ? " listed" : ""}${ownHL && n.id === ownHL ? " hl" : ""}"
+      ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
       <span class="own-rate">${rate != null ? ownPct(rate) : ""}</span>
       <span class="own-nm">${n.listed ? "★ " : ""}${nm}</span>
       ${sub ? `<span class="own-sub">${sub}</span>` : ""}</div>`;
@@ -3308,6 +3317,7 @@ function ownRender() {
   }).join("");
 
   const nListed = g.nodes.filter((n) => n.listed).length;
+  const hlNode = ownHL ? g.nodes.find((n) => n.id === ownHL) : null;
   host.innerHTML = `
     <div class="own-head"><b>${ownEsc(g.name)}</b> 소유지분도
       <span class="sub-note">${g.year}년 사업보고서 기준 · 계열 ${g.nodes.length}사(상장 ${nListed}) · 수집 ${g.at}</span>
@@ -3315,6 +3325,7 @@ function ownRender() {
         <button data-v="dia" class="${ownView === "dia" ? "active" : ""}">도식</button>
         <button data-v="list" class="${ownView === "list" ? "active" : ""}">목록</button></span>
       ${ownView === "dia" ? `<button class="own-toggle" id="own-fit">${ownFit ? "원래 크기" : "화면에 맞추기"}</button>` : ""}
+      ${hlNode ? `<span class="own-hl-tag">🔎 ${ownEsc(hlNode.name)} 강조 중</span>` : ""}
       ${inv.length ? `<button class="own-toggle" id="own-inv">${ownShowInv
         ? "지배 계열사만" : `단순투자 ${inv.length}건 포함`}</button>` : ""}</div>
     ${ownView === "dia" ? ownDiagram(g, byId, out, root, kids) : `
@@ -3351,10 +3362,25 @@ function ownRender() {
     const avail = (host.querySelector(".og-wrap") || host).clientWidth || w;
     svg.style.width = (ownFit ? Math.min(w, avail) : w) + "px";
     svg.style.maxWidth = "none";
+    // 검색으로 들어온 회사는 큰 도식(삼성전자 2,230px)에서 화면 밖일 수 있다 → 그 자리로 스크롤
+    const hl = svg.querySelector(".og-hl");
+    if (hl) setTimeout(() => hl.scrollIntoView({ block: "center", inline: "center" }), 60);
   }
 }
 
 const DEV_HISTORY = [
+  ["v269", "2026-08-02", "지분도 누락 보완·검색 신설 / 자산시장 압축 + 지표 보강",
+   "**지분도**: SK에 SK하이닉스가, 두산에 두산테스나가 없던 문제를 고쳤습니다. 원인이 셋이었습니다 — "
+   + "①비상장 중간지주(두산포트폴리오홀딩스)에서 계보가 끊겼고 ②같은 회사가 '에스케이하이닉스'와 "
+   + "'SK하이닉스'로 갈라져 있었으며 ③도식이 자회사 수 순으로 열을 골라 상장 계열사가 밀려났습니다. "
+   + "회사 선택은 드롭다운 대신 **검색**으로 바꿨습니다. **계열사 이름으로도 검색**되어, 예를 들어 "
+   + "'호텔신라'를 치면 그 회사가 들어 있는 지분도 목록이 먼저 뜨고 골라서 열면 도식에서 노랗게 강조됩니다. "
+   + "화살표에 겹쳐 보이던 지분율 숫자도 정리했습니다.\n\n"
+   + "**자산시장**: 차트 4개를 2열로 묶어 스크롤을 줄이고, 빠져 있던 지표를 채웠습니다. "
+   + "**자산군 성과 비교**(코스피·S&P500·나스닥·아파트·금·비트코인을 같은 기간 100에서 출발시켜 비교, "
+   + "해외 자산은 원화 환산 선택 가능)와 **유동성·물가**(M2 증가율·소비자물가·실질금리)를 새로 넣었습니다. "
+   + "작업 중 원/달러·신용스프레드 등 11개 시계열이 수집 실패로 비어 있던 것을 발견해 함께 복구했습니다.\n\n"
+   + "**종목조회** 검색창은 내재가치 탭과 같은 모양으로 통일했습니다."],
   ["v267", "2026-08-02", "지분도 글자가 커지던 문제 수정", "도식 폭을 줄인 뒤 글자가 갑자기 커 보이던 문제를 고쳤습니다. 도식이 작아졌는데도 화면 폭에 맞춰 늘리다 보니 1.7배로 확대되고 있었습니다. 이제 **넘칠 때만 축소**하고 원래 크기보다 키우지 않습니다."],
   ["v264", "2026-08-02", "소유지분도 폭 압축 — 한 화면에 들어오게", "계열사를 한 줄로 늘어놓아 도식이 3,470px까지 벌어지던 것을 고쳤습니다. **공정위 원본과 같은 방식**으로 자회사가 없는 계열사(대개 100% 자회사)는 한 열에 세로로 묶고, 자회사가 있는 계열사만 각자 열을 차지합니다. 기본은 **화면 폭에 맞춰 축소**되며 '원래 크기' 버튼으로 확대해 볼 수 있습니다. 지분도 영역도 좌우 여백을 넓게 씁니다."],
   ["v263", "2026-08-02", "소유지분도를 공정위式 도식으로", "카드 나열로는 지배관계가 한눈에 안 들어와, **공정거래위원회 소유지분도와 같은 도식**으로 바꿨습니다. 도형 규약도 그대로 따릅니다 — 타원=동일인(개인), 마름모=주요주주·지주회사, 오각형=계열사, 사각형=하위 계열사. 화살표에 지분율이 붙고 **★ 상장사는 눌러서 종목조회로** 갑니다. 목록 보기로 전환하는 버튼도 남겼습니다."],
@@ -7251,7 +7277,12 @@ function renderAssets() {
       부동산·채권·환율은 <b>한국은행 ECOS</b>, 주가·코인은 yfinance. 2000년 이후 월간 데이터로
       19개 시장의 <b>교차상관(−12~+12개월)</b>을 전수 계산해 선행관계를 추렸습니다.
       <span class="sub-note">${d.generated} 갱신 · 상관은 인과가 아니며 표본이 월 단위라 참고 지표입니다.</span>`;
-    asCards(); asPerf(); asLeadTable(); asRealEstate(); asBond(); asFx(); asGold();
+    asCards(); asPerf(); asLeadTable(); asRealEstate(); asBond(); asFx(); asGold(); asLiq();
+    $("#as-liq-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asLiqMode = b.dataset.m;
+      $("#as-liq-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asLiq();
+    });
     $("#as-perf-cur").querySelectorAll("button").forEach((b) => b.onclick = () => {
       asPerfCur = b.dataset.c;
       $("#as-perf-cur").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
@@ -7349,6 +7380,46 @@ function asPerf() {
     <p class="sub-note">${span} 월말 기준 ·
       ${asPerfCur === "krw" ? "해외 자산은 <b>원/달러 환산</b>(환차손익 포함)" : "각 자산의 <b>현지 통화</b> 기준"} ·
       배당·임대수익 제외한 <b>가격 수익</b>. 부동산은 KB 가격지수라 거래비용·보유세가 빠져 있습니다.</p>`;
+}
+
+/* 💧 유동성·물가(v269) — M2는 수집만 하고 화면에 없었다.
+   증가율: 통화량이 자산가격보다 먼저 움직이는지 보기 위한 것(로테이션 표와 짝).
+   실질금리 = 국고채 10년 − 소비자물가 상승률. **마이너스면 현금이 손해**라 위험자산·부동산으로 돈이 민다. */
+let asLiqMode = "growth";
+function asLiq() {
+  const KO = ASSETS.names_ko || {}, leg = $("#as-liq-legend");
+  const yoy = (k, ko, color) => {
+    const s = asS(k);
+    if (!s) return null;
+    const v = s.v.map((x, i) => (i >= 12 && s.v[i - 12] ? (x / s.v[i - 12] - 1) * 100 : null));
+    const keep = v.map((_, i) => i).filter((i) => v[i] != null);
+    return { name: ko, color, t: keep.map((i) => s.t[i]), v: keep.map((i) => v[i]) };
+  };
+  let defs, opt = { zero: true, fmt: (v) => v.toFixed(1) + "%", from: "2005-01" }, note;
+  if (asLiqMode === "growth") {
+    defs = [yoy("m2", "M2 통화량", "#4391ff"), yoy("cpi", "소비자물가", "#f5445a"),
+            yoy("apt_kr", "전국 아파트", "#22c07a")].filter(Boolean);
+    note = "전년 같은 달 대비 증가율. <b>통화량이 물가·집값보다 먼저 방향을 트는지</b> 보는 그림입니다.";
+  } else {
+    const b = asS("bond10"), c = asS("cpi");
+    if (!b || !c) { $("#as-liq").innerHTML = `<p class="mini-note">데이터 없음</p>`; return; }
+    const cAt = Object.fromEntries(c.t.map((m, i) => [m, i]));
+    const t = [], v = [];
+    b.t.forEach((m, i) => {
+      const ci = cAt[m];
+      if (ci == null || ci < 12 || !c.v[ci - 12]) return;
+      const infl = (c.v[ci] / c.v[ci - 12] - 1) * 100;
+      t.push(m); v.push(b.v[i] - infl);
+    });
+    defs = [{ name: "실질금리(국고10년−물가)", color: "#f0b34c", t, v },
+            { name: "국고채 10년", color: "#9aa4b2", t: b.t, v: b.v, dash: "3 3", w: 1.4 }];
+    note = "실질금리가 <b>0 아래</b>면 예금·채권으로 물가를 못 이깁니다 — 돈이 주식·부동산·금으로 미는 국면입니다.";
+  }
+  leg.innerHTML = defs.map((d) => `<span class="cr-chip" style="cursor:default">
+    <i style="background:${d.color}"></i>${d.name}</span>`).join("")
+    + `<span class="sub-note">${note}</span>`;
+  asLines("#as-liq", defs, { ...opt, h: 300 });
+  void KO;
 }
 
 function asCards() {

@@ -1188,10 +1188,10 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .lk-sticky-gap { flex: 1 1 auto; }
 .lk-sticky.empty .lk-sticky-gap { flex: 0 0 10px; }
 /* v269: 내재가치 탭 검색과 같은 모양 — 라벨(회색 소문자) + 넓은 라운드 입력 */
-.lk-sticky-search { display: flex; align-items: center; gap: 8px;
-  font-size: .9rem; color: var(--muted); }
-.lk-sticky-search input { padding: 9px 14px; font-size: .92rem; width: min(420px, 60vw);
-  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+.lk-sticky-search { display: flex; align-items: center; gap: 7px;
+  font-size: .82rem; color: var(--muted); }
+.lk-sticky-search input { padding: 5px 10px; font-size: .84rem; width: min(240px, 46vw);
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card);
   color: var(--ink); outline: none; }
 .lk-sticky-search input:focus { border-color: var(--accent); }
 
@@ -2197,3 +2197,13 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   .as-grid { grid-template-columns: 1fr; }
   .as-perf { grid-template-columns: 1fr; }
 }
+
+/* 검색 결과 — '이 회사가 포함된 지분도' 목록을 최상단에(v269b) */
+.own-sec-lab { font-size: .85rem; font-weight: 700; margin: 10px 0 6px; display: flex;
+  align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.own-sec-lab:first-child { margin-top: 0; }
+.own-memcnt { font-size: .74rem; color: var(--muted); margin-right: 2px; }
+.og-hl { fill: none; stroke: #ffd166; stroke-width: 2; }
+.own-node.hl { outline: 2px solid #ffd166; }
+.own-hl-tag { font-size: .78rem; color: #ffd166; border: 1px solid #ffd166;
+  border-radius: 999px; padding: 2px 9px; margin-left: 6px; }
