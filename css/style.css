@@ -2245,7 +2245,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 /* 좁은 레일에서는 원칙 목록을 1열로 — 2열이면 글자가 뭉갠다 */
 /* ⚠내부 스크롤(overflow-y)은 스크롤바 폭 15px을 먹고, 부모 span은 폭이 내용에 맞춰져
    원칙 카드만 336px로 좁아 보였다(프로파일은 400px) → 스크롤 없이 레일 폭을 그대로 쓴다. */
-.lk-side #lookup-chips { display: block; width: 100%; }
+.lk-side #lookup-chips { display: block; width: 100%; margin-left: 0; }   /* .sig-chips의 margin-left:8px 상쇄 */
 .lk-side .rule-legend-wrap { display: block; width: 100%; max-height: none; overflow: visible; }
 .lk-side .rl-block { margin-bottom: 8px; }
 .lk-side .rl-item { font-size: .76rem; }
