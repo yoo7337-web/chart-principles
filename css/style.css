@@ -1713,7 +1713,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; }
 .rl-block { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; }
 .rl-block.sel { border-color: rgba(240,179,76,.38); background: rgba(240,179,76,.05); }
-.rl-block.unsel { opacity: .92; }
+.rl-block.unsel { opacity: .92; border-color: rgba(67,145,255,.38); background: rgba(67,145,255,.05); }
 .rl-block-h { display: flex; align-items: baseline; gap: 8px; font-weight: 700; font-size: .84rem;
   margin-bottom: 6px; }
 .rl-block-h .sub-note { font-weight: 400; }
