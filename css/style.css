@@ -2287,3 +2287,8 @@ header h1 { margin-right: auto; }
 
 /* 투자지표를 좁은 레일에서 읽히게(v283) — 4열 그리드는 폭이 안 나온다 */
 .lk-side #lookup-metrics .lk-mgrid { grid-template-columns: 1fr 1fr; }
+
+/* 기업개요 헤더의 사업 심층 버튼 + 그룹 관계 링크 크기 정리(v284) */
+#ov-deep .today-chart-btn { padding: 3px 10px; font-size: .76rem; font-weight: 600; }
+#ov-deep .sub-note { font-size: .68rem; margin-left: 5px; }
+#ov-own-go { font-size: .76rem; }

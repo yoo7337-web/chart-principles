@@ -3611,6 +3611,9 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v284", "2026-08-02", "기업개요 — 사업 심층 버튼을 헤더 우측으로",
+   "'📚 사업 심층 보기'를 카드 맨 아래에서 **헤더 오른쪽**으로 올렸습니다. "
+   + "'소유지분도 전체 보기' 링크도 주변 글씨 크기에 맞춰 줄였습니다."],
   ["v283", "2026-08-02", "종목조회 배치 — 투자지표를 오른쪽으로 · 수급 옆은 종목 프로파일",
    "**투자지표**를 오른쪽 분할 화면(원칙 목록과 같은 열)으로 옮기고, 원칙 영역이 오른쪽 폭을 덜 쓰던 것도 "
    + "맞췄습니다(내부 스크롤바 때문에 좁아 보였습니다). **수급 옆 카드는 증권가 컨센서스 → 종목 프로파일**로 "
@@ -9284,13 +9287,13 @@ function renderLookupOverview(st) {
         `<span class="ov-fact"><span class="ov-fact-k">${k}</span>${v}</span>`).join("")}</div></div>`;
   }
   host.innerHTML = `<h3 class="lk-h3">🏢 기업 개요 ${ind ? `<span class="badge dim">${ind}</span>` : ""}
-      ${co.website || pr?.url ? `<a class="ext-link" href="${co.website || pr.url}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}</h3>
+      ${co.website || pr?.url ? `<a class="ext-link" href="${co.website || pr.url}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}
+      <span style="flex:1"></span><span id="ov-deep"></span></h3>
     ${co.overview ? `<div class="ov-sec"><b>무엇을 하는 회사인가</b><p class="lk-ov-text">${intro}</p></div>` : ""}
     ${pfHtml}
     ${biz ? `<div class="ov-sec"><b>🧩 사업 구조·전략</b><ul class="ov-biz">${biz.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}
     ${mixHtml}${shHtml}
     <div id="ov-group"></div>
-    <div id="ov-bizdeep"></div>
     <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART(주주·기업정보)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
   loadBizDeep(st);
   ovGroup(st);
@@ -9389,7 +9392,7 @@ async function fetchBizDeep(key) {
 async function loadBizDeep(st) {
   const key = `${st.market}_${st.ticker}`;
   const d = await fetchBizDeep(key);
-  const el = document.getElementById("ov-bizdeep");
+  const el = document.getElementById("ov-deep");   // v284: 카드 하단 → **헤더 우측**(사용자 요청)
   if (!d || !el || LOOKUP_ST !== st) return;
   el.innerHTML = bizDeepHtml(d);
   el.querySelector(".bd-open").onclick = () => openBizDeep(d, st.name);
