@@ -2207,3 +2207,31 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .own-node.hl { outline: 2px solid #ffd166; }
 .own-hl-tag { font-size: .78rem; color: #ffd166; border: 1px solid #ffd166;
   border-radius: 999px; padding: 2px 9px; margin-left: 6px; }
+
+/* 딜 구조도 — 대상의 기존 지배구조 반영(v271) */
+.ds-body { grid-template-columns: 320px minmax(0, 1fr); }
+.ds-arrow.nohead { marker-end: none; }
+.ds-node.go { cursor: pointer; }
+.ds-node.go:hover .ds-box { stroke: var(--accent); }
+.ds-own-note { font-size: .68rem; color: var(--muted); margin: 2px 0 0; line-height: 1.35; }
+@media (max-width: 860px) { .ds-body { grid-template-columns: 1fr; } .ds-left { max-width: 320px; } }
+
+/* 관심종목 카드 보강(v272) */
+.ws-grid > .ws-ind { grid-column: 1 / -1; }          /* 산업 맥락은 좌우 전폭 */
+.ws-ind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; align-items: start; }
+.ws-rets { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; }
+.ws-ret { display: inline-flex; align-items: baseline; gap: 4px; font-size: .82rem; }
+.ws-cons-bar { position: relative; height: 6px; background: var(--line); border-radius: 3px;
+  margin: 12px 0 16px; }
+.ws-cons-bar .cur { position: absolute; top: -3px; width: 3px; height: 12px;
+  background: var(--accent); border-radius: 2px; }
+.ws-cons-bar .lo { position: absolute; left: 0; top: 9px; font-size: .7rem; }
+.ws-cons-bar .hi { position: absolute; right: 0; top: 9px; font-size: .7rem; }
+@media (max-width: 1000px) { .ws-ind-cols { grid-template-columns: 1fr; } }
+
+/* 관심종목 재무 카드(v273) — 값을 그래프 안에 */
+.ws-fin-tg { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.ws-fin-tg i { margin-left: 6px; }
+.ws-fin-val { font-size: 7.4px; fill: var(--muted); }
+.ws-fin-val.kdn { fill: var(--kdn); }
+.ws-fin-spark { height: 50px; }

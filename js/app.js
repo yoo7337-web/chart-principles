@@ -2614,6 +2614,7 @@ function dsRender() {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
   });
   dsFillNews();
+  dsEnrich(host);          // 지분도 데이터로 구조도 보강(있는 딜만 교체)
   host.querySelectorAll("[data-aibtn]").forEach((b) => {
     const id = b.dataset.aibtn;
     if (dealAiLoad()[id]) { b.style.display = "none"; dsRenderAi(id); }
@@ -2623,6 +2624,118 @@ function dsRender() {
 
 /* 구조도(v247) — 좁은 좌측 열에 맞춰 **세로 흐름**으로. 가로형은 폭을 많이 먹고 글자도 커진다.
    노드 2~3개를 위→아래로 연결하고 화살표에 금액·지분율을 얹는다. */
+/* 딜 구조도 보강(v271) — "누가 누구를 샀다"만으로는 **어떤 구조의 회사를 샀는지**가 안 보인다.
+   대상 회사의 기존 지배구조(모회사·자회사)를 소유지분도 데이터에서 찾아 함께 그린다.
+   ⚠추가 수집 없음: app/data/ownership 의 그래프와 search.json 색인을 그대로 쓴다. */
+let DS_OWN_IDX = null;
+const DS_OWN_CACHE = {};
+
+function dsOwnClean(nm) {
+  // 공시 회사명은 지저분하다 — 영문 병기, 각주, 줄바꿈이 섞여 온다.
+  //   예) "SK실트론(주) (SK Siltron Co., Ltd.)" · 라프텔은 이름 뒤에 줄바꿈 + (Laftel)
+  //   → 첫 줄만 쓰고 **괄호 안은 전부 버린다**.
+  let s = String(nm || "").split(String.fromCharCode(10))[0];
+  s = s.replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, "");
+  s = s.replace(/\([^)]*\)?/g, "");
+  s = s.replace(/\s+/g, "").trim();
+  const alias = [["에스케이", "SK"], ["엘지", "LG"], ["지에스", "GS"], ["케이티앤지", "KT&G"],
+                 ["케이티", "KT"], ["씨제이", "CJ"], ["에이치디현대", "HD현대"], ["엘엑스", "LX"]];
+  for (const [a, b] of alias) if (s.startsWith(a)) return b + s.slice(a.length);
+  return s;
+}
+
+async function dsOwnCtx(name) {
+  /* 회사명 → {parents:[{name,rate,listed,ticker}], kids:[...]} · 없으면 null */
+  if (!name) return null;
+  if (DS_OWN_IDX === null) {
+    DS_OWN_IDX = await fetch("data/ownership/search.json" + _cb)
+      .then((r) => (r.ok ? r.json() : false)).catch(() => false);
+  }
+  if (!DS_OWN_IDX) return null;
+  const id = dsOwnClean(name);
+  const keys = DS_OWN_IDX.members?.[id];
+  if (!keys || !keys.length) return null;
+  const k = keys[0];                        // 색인이 '루트에 가까운 그룹' 순으로 정렬돼 있다
+  if (!DS_OWN_CACHE[k]) {
+    DS_OWN_CACHE[k] = await fetch(`data/ownership/${k}.json` + _cb)
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  }
+  const g = DS_OWN_CACHE[k];
+  if (!g) return null;
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+  if (!byId[id]) return null;
+  const info = (nid, rate) => ({ name: byId[nid]?.name || nid, rate,
+                                 listed: !!byId[nid]?.listed, ticker: byId[nid]?.ticker });
+  const parents = g.edges.filter((e) => e.t === id && byId[e.f] && byId[e.f].lvl >= 0)
+    .sort((a, b) => b.rate - a.rate).slice(0, 2).map((e) => info(e.f, e.rate));
+  const kids = g.edges.filter((e) => e.f === id && byId[e.t] && ownIsCtrl(byId[e.t], e.rate))
+    .sort((a, b) => b.rate - a.rate).slice(0, 4).map((e) => info(e.t, e.rate));
+  return (parents.length || kids.length) ? { parents, kids, group: g.name } : null;
+}
+
+/* 대상의 지배구조 + 인수자 — 세로축은 소유(위=지배), 가로축은 이번 거래 */
+function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
+  const W = 320, BW = 168, LX = 6, BH = 34;
+  const rx = LX + BW / 2;
+  const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
+  const yP = 6, yT = ctx.parents.length ? 78 : 30, yK = yT + BH + 30;
+  let svg = "";
+  const box = (bx, by, bw, bh, cls, name, sub, tk) => `
+    <g class="ds-node${tk ? " go" : ""}"${tk ? ` data-go="kr_${tk}"` : ""}>
+      <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="7" class="ds-box ds-box-${cls}"/>
+      <text x="${bx + bw / 2}" y="${by + (sub ? 15 : bh / 2 + 4)}" class="ds-box-t">${tk ? "★" : ""}${dsName(name).slice(0, 13)}</text>
+      ${sub ? `<text x="${bx + bw / 2}" y="${by + 27}" class="ds-box-s">${dsEsc(sub)}</text>` : ""}
+    </g>`;
+  // ① 위: 기존 지배회사
+  ctx.parents.forEach((pn, i) => {
+    const w = ctx.parents.length > 1 ? BW / 2 - 4 : BW;
+    const bx = LX + i * (w + 8);
+    svg += box(bx, yP, w, BH, "seller", pn.name, "지배회사", pn.ticker);
+    svg += `<path d="M${bx + w / 2},${yP + BH} L${bx + w / 2},${yT - 6}" class="ds-arrow"/>
+      <text x="${bx + w / 2 + 3}" y="${yP + BH + 16}" class="ds-arrow-t">${pn.rate != null ? pn.rate + "%" : ""}</text>`;
+  });
+  // ② 가운데: 대상
+  svg += box(LX, yT, BW, BH + 6, "tgt", x.target || x.corp, "대상", null);
+  // ③ 오른쪽: 인수자 → 대상 (이번 거래)
+  if (acquirer) {
+    const ax = LX + BW + 40, aw = W - ax - 6;
+    svg += box(ax, yT, aw, BH + 6, "acq", acquirer, acqLabel, null);
+    svg += `<path d="M${ax - 4},${yT + BH / 2 + 3} L${LX + BW + 6},${yT + BH / 2 + 3}" class="ds-arrow"/>
+      <text x="${ax - 6}" y="${yT - 4}" class="ds-arrow-t" text-anchor="end">${dsEsc(amtTxt || "취득")}</text>`;
+  }
+  // ④ 아래: 대상의 자회사
+  let bottom = yT + BH + 6;
+  ctx.kids.forEach((kn, i) => {
+    const by = yK + i * 26;
+    svg += `<path d="M${LX + 14},${yT + BH + 6} L${LX + 14},${by + 10} L${LX + 26},${by + 10}" class="ds-arrow nohead"/>
+      <text x="${LX + 17}" y="${by + 7}" class="ds-arrow-t">${kn.rate != null ? kn.rate + "%" : ""}</text>`;
+    svg += box(LX + 26, by, BW - 26, 20, "sub", kn.name, null, kn.ticker);
+    bottom = by + 20;
+  });
+  const H = Math.max(bottom + 8, yT + BH + 16);
+  return `<svg viewBox="0 0 ${W} ${H}" class="ds-svg">
+    <defs><marker id="dsah" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="#7cb1ff"/></marker></defs>${svg}</svg>
+    <p class="ds-own-note">세로=소유구조(위가 지배) · 가로=이번 거래 · 출처: ${dsEsc(ctx.group)} 소유지분도</p>`;
+}
+
+/* 카드가 그려진 뒤 비동기로 구조도를 교체 — 지분도 파일이 없으면 기존 그림 유지 */
+async function dsEnrich(host) {
+  const cells = [...host.querySelectorAll(".ds-left[data-deal]")];
+  for (const el of cells) {
+    let x;
+    try { x = JSON.parse(el.dataset.deal); } catch { continue; }
+    if (x.side === "merge") continue;                    // 합병은 존속·소멸 그림이 더 맞다
+    const ctx = await dsOwnCtx(x.target || x.corp);
+    if (!ctx) continue;
+    const acq = x.side === "out" ? (x.counter || null) : x.corp;
+    el.innerHTML = dsDiagramOwn(x, ctx, acq, x.side === "out" ? "인수자" : "인수자");
+    el.querySelectorAll("[data-go]").forEach((g) => g.onclick = () => {
+      gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(g.dataset.go);
+    });
+  }
+}
+
 function dsDiagram(x) {
   // 유형별 노드 순서: [윗박스, 아랫박스...] + 화살표 라벨
   const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
@@ -2987,6 +3100,8 @@ function dsBiz(x) {
   return cards.length ? `<div class="ds-biz">${cards.join("")}</div>` : "";
 }
 
+const dsAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
 function dsCard(x) {
   const facts = [
     ["거래금액", dsAmt(x.amount)],
@@ -3005,7 +3120,9 @@ function dsCard(x) {
       <a class="ext-link" href="${x.url}" target="_blank" rel="noopener">공시 원문 ↗</a>
     </div>
     <div class="ds-body">
-      <div class="ds-left">${dsDiagram(x)}</div>
+      <div class="ds-left" data-deal="${dsAttr(JSON.stringify({
+        side: x.side, corp: x.corp, target: x.target, counter: x.counter,
+        amount: x.amount, stake_after: x.stake_after }))}">${dsDiagram(x)}</div>
       <div class="ds-right">
         ${facts.length ? `<div class="ds-facts">${facts.map(([k, v]) =>
           `<span><span class="sub-note">${k}</span> <b>${dsEsc(v)}</b></span>`).join("")}</div>` : ""}
@@ -3377,6 +3494,20 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v274", "2026-08-02", "딜 구조도에 지배구조 반영 · 관심종목 카드 확대 · 배당을 Snapshot으로",
+   "**딜 구조**: '누가 누구를 샀다'만 보이던 구조도에 **대상 회사의 기존 지배구조**를 넣었습니다. "
+   + "위에 지배회사, 가운데 대상, 아래 그 자회사를 그리고 인수자를 오른쪽에서 화살표로 붙입니다 "
+   + "(예: SK → SK실트론 ← 두산). 소유지분도 데이터를 재사용하며, 지분도에 없는 해외·소규모 딜은 기존 그림을 유지합니다.\n\n"
+   + "**관심종목**: 산업 맥락 카드를 좌우 전폭으로 넓히고 **동종업계 상대주가 추이**(6개월, 시작=100)를 "
+   + "옆에 붙였습니다. 수급 카드에 **증권가 컨센서스**(목표주가·투자의견), 밸류에이션 카드에 **시가총액·기간 수익률**을 "
+   + "추가했습니다. 재무 그래프는 **분기/연간 전환**이 가능해졌고, 값을 그래프 안에 표기하면서 오른쪽·아래 숫자는 뺐습니다.\n\n"
+   + "**종목조회**: 배당을 별도 섹션에서 **Snapshot의 '배당' 뷰**로 옮기고, 다른 뷰처럼 아래에 금액 표(주당배당금·"
+   + "배당수익률·배당성향·전년 대비)를 붙였습니다.\n\n"
+   + "**소유지분도 수록 기준 수정**: 대상 선정에 쓰던 순위가 **시장별 순위**여서 '상위 300'이 실제로는 "
+   + "코스피 150 + 코스닥 150이었습니다(이마트가 빠진 이유). 실제 시가총액 기준으로 바꾸고 상위 400으로 넓혔습니다.\n\n"
+   + "**추정치 가드**: 시세 제공처가 일부 종목에 비정상적으로 큰 추정 EPS를 주고 있어(삼성전자 2026년 추정 "
+   + "47,929원 — 2025년 실적의 7.3배, 2,685종목 중 93건) 선행 PER·추정 배당이 사실과 다르게 표시됐습니다. "
+   + "실적 대비 3배를 넘는 추정치는 화면에서 제외합니다."],
   ["v270", "2026-08-02", "지분도 표기 정리 — '합계' 노드·각주·가려진 지분율",
    "지분도에서 눈에 거슬리던 것들을 정리했습니다. 공시 표의 **'합계' 행이 회사처럼 그려지던 것**을 없앴고, "
    + "회사명 뒤에 붙던 **(주1)·(계열회사)·(*1) 같은 각주**를 떼어냈습니다(1,539건). 각주 때문에 "
@@ -6867,6 +6998,203 @@ function renderWatch() {
   wsShow(wsSel);
 }
 
+/* 동종업계 상대주가 추이(v272) — 산업 카드의 남는 오른쪽을 쓴다.
+   같은 기간을 100에서 출발시켜 겹쳐 그리면 "업종이 오른 건지 이 종목만 오른 건지"가 바로 보인다.
+   ⚠새 수집 없음: 이미 있는 stocks/{key}.json 시계열을 재사용(캐시). */
+const WS_REL = {};
+async function wsRelSeries(key) {
+  if (WS_REL[key] !== undefined) return WS_REL[key];
+  WS_REL[key] = await fetch(`data/stocks/${key}.json` + _cb)
+    .then((r) => (r.ok ? r.json() : null)).then((j) => j?.series || null).catch(() => null);
+  return WS_REL[key];
+}
+
+async function wsCons(key, mk, price) {
+  /* 증권가 컨센서스 — 수급 카드 아래가 비어 있어 함께 둔다.
+     ⚠#ws-cons는 수급 카드를 채운 뒤에야 생기므로 반드시 그 다음에 호출한다.
+     ⚠컨센은 company.json에 있는데 수급(stocks/)과 로드 체인이 달라 순서가 보장되지 않는다
+       → 여기서 기다린다(안 그러면 첫 진입에만 '데이터 없음'으로 뜬다). */
+  await loadExtras();
+  if (wsSel !== key) return;
+  const co2 = EXTRAS.company?.map?.[key] || {};
+    const cs = co2.cons || {};
+  const px = price;
+    const el = document.getElementById("ws-cons");
+    if (el) {
+      if (!cs.target && !cs.opinion) {
+        el.innerHTML = `<div class="ws-kv-h">증권가 컨센서스</div>
+          <p class="mini-note">컨센서스 데이터 없음(커버리지가 적은 종목)</p>`;
+      } else {
+        const gap = cs.target && px ? cs.target / px - 1 : null;
+        // 네이버 투자의견은 1=매도 ~ 5=적극매수
+        const opTxt = cs.opinion == null ? null
+          : cs.opinion >= 4.3 ? "적극 매수" : cs.opinion >= 3.5 ? "매수"
+          : cs.opinion >= 2.5 ? "중립" : "비중 축소";
+        el.innerHTML = `<div class="ws-kv-h">증권가 컨센서스 <span class="sub-note">${cs.at || ""} 기준</span></div>
+          ${cs.target ? `<div class="ws-kv-row"><span>목표주가</span><b>${fmtPrice(cs.target, mk)}</b>
+            ${gap != null ? `<i class="${gap >= 0 ? "kup" : "kdn"}">현재가 대비 ${pct(gap, 1)}</i>` : "<i></i>"}</div>` : ""}
+          ${opTxt ? `<div class="ws-kv-row"><span>투자의견</span><b>${opTxt}</b>
+            <i class="sub-note">${cs.opinion.toFixed(2)} / 5.0</i></div>` : ""}
+          ${cs.target && px ? `<div class="ws-cons-bar">
+            <i class="cur" style="left:${Math.max(2, Math.min(96, px / Math.max(cs.target, px) * 100))}%"></i>
+            <span class="sub-note lo">현재 ${fmtPrice(px, mk)}</span>
+            <span class="sub-note hi">목표 ${fmtPrice(cs.target, mk)}</span></div>` : ""}`;
+      }
+  }
+}
+
+/* 관심종목 재무 카드(v273) — 분기/연간 전환 + **각 점에 값 표기**.
+   사용자 요청: 오른쪽 큰 숫자와 아래 기간 라벨은 빼고, 그래프 안에서 값이 읽히게. */
+let wsFinMode = localStorage.getItem("cp_ws_fin") || "q";
+
+function wsFinDraw(key, mk, co, m) {
+  const fin = WS_FIN[key];
+  let blk = fin;
+  if (fin && (fin.cfs || fin.ofs))
+    blk = [fin.cfs, fin.ofs].filter(Boolean).sort((a, b) =>
+      Object.keys(b?.annual || {}).length - Object.keys(a?.annual || {}).length)[0];
+  const src = wsFinMode === "y" ? (blk?.annual || {}) : (blk?.quarter || {});
+  const rows = Object.entries(src).sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(wsFinMode === "y" ? -6 : -8);
+  const hasY = Object.keys(blk?.annual || {}).length >= 2;
+  const hasQ = Object.keys(blk?.quarter || {}).length >= 2;
+  const u2 = mk === "kr" ? "억" : "M$";
+  const short = (v) => {
+    const a = Math.abs(v);
+    if (mk === "kr" && a >= 10000) return (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "조";
+    return Math.round(v).toLocaleString();
+  };
+  const toggle = `<span class="mk-toggle ws-fin-tg" id="ws-fin-mode">
+    ${hasQ ? `<button data-m="q" class="${wsFinMode === "q" ? "active" : ""}">분기</button>` : ""}
+    ${hasY ? `<button data-m="y" class="${wsFinMode === "y" ? "active" : ""}">연간</button>` : ""}
+    <i class="sub-note">${rows.length ? `${rows[0][0]} ~ ${rows[rows.length - 1][0]}` : ""}</i></span>`;
+
+  let bars = "";
+  if (rows.length >= 2) {
+    const spark = (lab2, k2, color) => {
+      const pts = rows.map(([lab3, r], i) => ({ i, lab: lab3, v: r[k2] })).filter((x) => Number.isFinite(x.v));
+      if (pts.length < 2) return "";
+      const vs = pts.map((x) => x.v);
+      let lo = Math.min(...vs), hi = Math.max(...vs);
+      if (lo > 0) lo = Math.min(lo * 0.92, lo);
+      if (hi === lo) { hi += 1; lo -= 1; }
+      const W = 300, H = 50;
+      const X = (i) => 10 + (i / (rows.length - 1)) * (W - 20);
+      const Y = (v) => 14 + (hi - v) / (hi - lo) * (H - 22);
+      const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
+      const area = `${X(pts[0].i).toFixed(1)},${H - 3} ${line} ${X(pts[pts.length - 1].i).toFixed(1)},${H - 3}`;
+      const zero = (lo < 0 && hi > 0)
+        ? `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8b8b93" stroke-dasharray="3 3" stroke-width="0.8"/>` : "";
+      // 점마다 값 — 위아래 번갈아 배치해 서로 겹치지 않게
+      const labs = pts.map((x, j) => {
+        const up = Y(x.v) > 24;                     // 위가 좁으면 아래로
+        const ty = up ? Y(x.v) - 5 : Y(x.v) + 11;
+        const anchor = j === 0 ? "start" : j === pts.length - 1 ? "end" : "middle";
+        return `<text x="${X(x.i).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}"
+          class="ws-fin-val ${x.v < 0 ? "kdn" : ""}">${short(x.v)}</text>`;
+      }).join("");
+      return `<div class="ws-fin-row"><span class="ws-fin-lab">${lab2}</span>
+        <svg viewBox="0 0 ${W} ${H}" class="ws-fin-spark" preserveAspectRatio="none">
+          ${zero}
+          <polygon points="${area}" fill="${color}" opacity="0.14"/>
+          <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.8"/>
+          ${pts.map((x) => `<circle cx="${X(x.i).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="2"
+             fill="${x.v < 0 ? "var(--kdn)" : color}"><title>${x.lab} ${lab2} ${Math.round(x.v).toLocaleString()}${u2}</title></circle>`).join("")}
+          ${labs}
+        </svg></div>`;
+    };
+    bars = spark("매출", "rev", "#4391ff") + spark("영업이익", "op", "#22c07a") + spark("순이익", "np", "#9d7bff");
+  }
+  // 최근 기간 3행(전년 대비)
+  let tb = "";
+  if (rows.length) {
+    const [ll, lr] = rows[rows.length - 1];
+    const prevY = wsFinMode === "y"
+      ? rows[rows.length - 2]
+      : rows.find(([l2]) => l2 === `${String(+ll.slice(0, 2) - 1).padStart(2, "0")}${ll.slice(2)}`);
+    const rowf = (lab, cur, pv) => {
+      if (cur == null) return "";
+      let yTxt = "<i>-</i>";
+      if (pv != null && isFinite(pv)) {
+        if (pv < 0 && cur >= 0) yTxt = `<i class="pos">흑자전환</i>`;
+        else if (pv >= 0 && cur < 0) yTxt = `<i class="neg">적자전환</i>`;
+        else if (Math.abs(pv) > Math.abs(cur) * 0.02) {
+          const yy = (cur / pv - 1) * 100;
+          yTxt = `<i class="${yy >= 0 ? "pos" : "neg"}">${yy >= 0 ? "+" : ""}${yy.toFixed(1)}%</i>`;
+        }
+      }
+      return `<div class="ws-kv-row"><span>${lab}</span><b>${Math.round(cur).toLocaleString()}${u2}</b>${yTxt}</div>`;
+    };
+    tb = `<div class="ws-kv-h">${ll} <span class="sub-note">(${wsFinMode === "y" ? "전년 대비" : "YoY"})</span></div>`
+      + rowf("매출", lr.rev, prevY?.[1]?.rev) + rowf("영업이익", lr.op, prevY?.[1]?.op) + rowf("순이익", lr.np, prevY?.[1]?.np);
+  }
+  const caps = [m?.roe != null && `ROE ${m.roe}%`, m?.debtRatio != null && `부채비율 ${m.debtRatio}%`,
+                m?.quickRatio != null && `당좌비율 ${m.quickRatio}%`].filter(Boolean).join(" · ");
+  const host = document.querySelector(".ws-fin .ws-card-b");
+  if (!host) return;
+  host.innerHTML = toggle + (bars || `<p class="mini-note">${wsFinMode === "y" ? "연간" : "분기"} 재무 없음</p>`)
+    + tb + `<div class="sub-note">${caps}</div>`;
+  host.querySelectorAll("#ws-fin-mode button").forEach((b) => b.onclick = () => {
+    wsFinMode = b.dataset.m;
+    localStorage.setItem("cp_ws_fin", wsFinMode);
+    wsFinDraw(key, mk, co, m);
+  });
+}
+
+async function wsRelChart(key, mk) {
+  // ⚠피어 목록은 company.json에 있다 — 산업 카드는 loadExtras() 밖에서 그려지므로
+  //   여기서 직접 기다린다(안 그러면 peers가 비어 그래프가 통째로 안 나온다).
+  await loadExtras();
+  if (wsSel !== key) return;
+  const peers = (EXTRAS.company?.map?.[key]?.peers || []).slice(0, 3);
+  const nameOf = {};
+  const keys = [key, ...peers.map((x) => {
+    const k = `${x.mk || mk}_${x.ticker}`;
+    nameOf[k] = x.name;                       // ⚠피어 이름은 peers가 갖고 있다(인덱스 매칭은 실패한다)
+    return k;
+  })].filter((k, i, a) => a.indexOf(k) === i);
+  const ss = await Promise.all(keys.map(wsRelSeries));
+  // ⚠await 사이에 카드가 다시 그려지면 먼저 잡아둔 el은 DOM에서 떨어진다 → 여기서 다시 조회
+  const el = document.getElementById("ws-ind-rel");
+  if (!el || wsSel !== key) return;
+  const N = 126;                                   // 약 6개월(거래일)
+  const defs = [];
+  keys.forEach((k, i) => {
+    const s = ss[i];
+    if (!s || s.length < 30) return;
+    // series 원본은 [날짜, 시, 고, 저, 종, 거래량] **배열**이다(객체 아님)
+    const cl = (r) => (Array.isArray(r) ? r[4] : r.c);
+    const cut = s.slice(-N).filter((r) => cl(r) != null);
+    if (cut.length < 20) return;
+    const base = cl(cut[0]);
+    defs.push({ key: k, name: nameOf[k] || (LOOKUP_INDEX || []).find((x) => `${x.mk}_${x.ticker}` === k)?.name
+                  || (MARKET?.heatmap || []).find((x) => `${x.m}_${x.t}` === k)?.name || k,
+                v: cut.map((r) => cl(r) / base * 100) });
+  });
+  if (defs.length < 2) { el.innerHTML = ""; return; }
+  const W = 300, H = 132, P = { l: 4, r: 60, t: 12, b: 14 };
+  const n = Math.max(...defs.map((d) => d.v.length));
+  const all = defs.flatMap((d) => d.v);
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const X = (i, len) => P.l + (W - P.l - P.r) * (len < 2 ? 0 : i / (len - 1));
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / Math.max(1e-6, hi - lo));
+  const C = ["#f5445a", "#4391ff", "#22c07a", "#f0b34c"];
+  const ends = [];
+  const paths = defs.map((d, i) => {
+    const pts = d.v.map((v, j) => `${X(j, d.v.length).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    ends.push({ name: d.name, v: d.v[d.v.length - 1], y: Y(d.v[d.v.length - 1]), c: C[i % 4] });
+    return `<polyline points="${pts}" fill="none" stroke="${C[i % 4]}" stroke-width="${i === 0 ? 2 : 1.3}"/>`;
+  }).join("");
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 11);
+  const labs = ends.map((e) => `<text x="${W - P.r + 4}" y="${e.y + 3}" fill="${e.c}"
+    style="font-size:8.5px">${dsEsc(e.name).slice(0, 7)} ${Math.round(e.v - 100) >= 0 ? "+" : ""}${Math.round(e.v - 100)}%</text>`).join("");
+  el.innerHTML = `<div class="ws-kv-h">동종업계 상대주가 <span class="sub-note">(6개월 · 시작=100)</span></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+      <line x1="${P.l}" y1="${Y(100)}" x2="${W - P.r}" y2="${Y(100)}" stroke="#8b8b93" stroke-dasharray="3 3"/>
+      ${paths}${labs}</svg>`;
+}
+
 const wsCard = (icon, title, act, body, cls = "") =>
   `<div class="ws-card ${cls}"><div class="ws-card-h">${icon} ${title}
     <span style="flex:1"></span>${act ? `<button class="ws-go" data-act="${act}">자세히 →</button>` : ""}</div>
@@ -6917,7 +7245,7 @@ function wsShow(key) {
       ${wsCard("📈", "추이 · 신호 (6개월)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-trend")}
       ${wsCard("📊", "재무 (분기)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-fin")}
       ${wsCard("⚖️", "밸류에이션", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-val")}
-      ${wsCard("👥", "수급 (20일)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-supply")}
+      ${wsCard("👥", "수급 · 컨센서스", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-supply")}
       ${wsCard("🏭", "산업 맥락", "rotation", `<p class="mini-note">불러오는 중…</p>`, "ws-ind")}
       ${wsCard("📢", "공시 · 뉴스", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-feed")}
       ${wsCard("📐", "원칙 성적 (이 종목 10년)", "rank", `<p class="mini-note">불러오는 중…</p>`, "ws-rules")}
@@ -7001,15 +7329,17 @@ function wsShow(key) {
       <div class="sub-note">현재 국면 ${rgKo} · 베타 ${pr.beta ?? "-"} · 변동성 ${pr.vol20 != null ? pr.vol20 + "%" : "-"}</div></div>`);
     // ⑤ 수급
     const sup = st.supply_sum;
-    if (mk !== "kr") fill("ws-supply", `<p class="mini-note">미국 종목은 투자자별 수급이 공개되지 않습니다.</p>`);
-    else if (!sup) fill("ws-supply", `<p class="mini-note">수급 데이터 없음</p>`);
+    const consSlot = `<div id="ws-cons"></div>`;
+    if (mk !== "kr") fill("ws-supply", `<p class="mini-note">미국 종목은 투자자별 수급이 공개되지 않습니다.</p>${consSlot}`);
+    else if (!sup) fill("ws-supply", `<p class="mini-note">수급 데이터 없음</p>${consSlot}`);
     else {
       const amt = (v) => v == null ? "-" : `<b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억"}</b>`;
       fill("ws-supply", `<table class="ws-sup-tb"><tr><th></th><th>외국인</th><th>기관</th><th>개인</th></tr>
         <tr><td>5일</td><td>${amt(sup.frgn_5)}</td><td>${amt(sup.inst_5)}</td><td>${amt(sup.indi_5)}</td></tr>
         <tr><td>20일</td><td>${amt(sup.frgn_20)}</td><td>${amt(sup.inst_20)}</td><td>${amt(sup.indi_20)}</td></tr></table>
-        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 <b>${sup.frgn_ratio}%</b>${sup.frgn_ratio_chg != null ? ` (20일 ${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준(순매매량×종가)</div>`);
+        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 <b>${sup.frgn_ratio}%</b>${sup.frgn_ratio_chg != null ? ` (20일 ${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준(순매매량×종가)</div>${consSlot}`);
     }
+    wsCons(key, mk, price);         // 수급 카드가 채워진 뒤 컨센서스 슬롯을 채운다
     // ⑧ 원칙 성적
     const stats = (st.stats || []).filter((s) => s.n >= 8);
     if (!stats.length) fill("ws-rules", `<p class="mini-note">신호 표본이 부족합니다(원칙당 8건 미만).</p>`);
@@ -7032,74 +7362,11 @@ function wsShow(key) {
       : fetch(`data/financials/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((f) => (WS_FIN[key] = f));
     finP.then((fin) => {
       if (wsSel !== key) return;
-      let blk = fin;
-      if (fin && (fin.cfs || fin.ofs))
-        blk = [fin.cfs, fin.ofs].filter(Boolean).sort((a, b) =>
-          Object.keys(b?.annual || {}).length - Object.keys(a?.annual || {}).length)[0];
-      const qs = Object.entries(blk?.quarter || {}).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
-      let bars = "";
-      if (qs.length >= 2) {
-        /* v219(사용자 피드백): 막대는 값 차이가 작으면 전부 비슷한 높이라 추이가 안 읽힌다
-           → 시리즈별 **면적 스파크라인**(자기 min~max로 증폭, 0선 점선)으로 교체 + 높이 확대. */
-        const spark = (lab2, k2, color) => {
-          const pts = qs.map(([lab3, r], i) => ({ i, lab: lab3, v: r[k2] })).filter((x) => Number.isFinite(x.v));
-          if (pts.length < 2) return "";
-          const vs = pts.map((x) => x.v);
-          let lo = Math.min(...vs), hi = Math.max(...vs);
-          if (lo > 0) lo = Math.min(lo * 0.92, lo);          // 살짝 여백 — 추이는 min~max로 증폭
-          if (hi === lo) { hi += 1; lo -= 1; }
-          const W = 300, H = 44;
-          const X = (i) => 6 + (i / (qs.length - 1)) * (W - 12);
-          const Y = (v) => 5 + (hi - v) / (hi - lo) * (H - 12);
-          const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
-          const area = `${X(pts[0].i).toFixed(1)},${H - 3} ${line} ${X(pts[pts.length - 1].i).toFixed(1)},${H - 3}`;
-          const zero = (lo < 0 && hi > 0)
-            ? `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8b8b93" stroke-dasharray="3 3" stroke-width="0.8"/>` : "";
-          const last = pts[pts.length - 1];
-          const u2 = mk === "kr" ? "억" : "M$";
-          return `<div class="ws-fin-row"><span class="ws-fin-lab">${lab2}</span>
-            <svg viewBox="0 0 ${W} ${H}" class="ws-fin-spark" preserveAspectRatio="none">
-              ${zero}
-              <polygon points="${area}" fill="${color}" opacity="0.14"/>
-              <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.8"/>
-              ${pts.map((x) => `<circle cx="${X(x.i).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="2"
-                 fill="${x.v < 0 ? "var(--kdn)" : color}"><title>${x.lab} ${lab2} ${Math.round(x.v).toLocaleString()}${u2}</title></circle>`).join("")}
-            </svg>
-            <b class="ws-fin-last ${last.v < 0 ? "kdn" : ""}">${Math.round(last.v).toLocaleString()}${u2}</b></div>`;
-        };
-        bars = spark("매출", "rev", "#4391ff") + spark("영업이익", "op", "#22c07a") + spark("순이익", "np", "#9d7bff")
-          + `<div class="ws-bar-lab"><span>${qs[0][0]}</span><span>${qs[qs.length - 1][0]} · 점에 커서=값</span></div>`;
-      }
-      // 최근 분기 3행(매출·영업이익·순이익 + YoY) — 카드에서 바로 실적 레벨이 읽히게
-      let tb = "";
-      if (qs.length) {
-        const [ll, lr] = qs[qs.length - 1];
-        const prevY = qs.find(([l2]) => l2 === `${String(+ll.slice(0, 2) - 1).padStart(2, "0")}${ll.slice(2)}`);
-        const u = mk === "kr" ? "억" : "M$";
-        const rowf = (lab, cur, pv) => {
-          if (cur == null) return "";
-          // ⚠기저(전년 동분기)가 0 근처거나 부호가 바뀌면 %는 허수가 된다(실측 "-5815%") → 흑전/적전으로
-          let yTxt = "<i>-</i>";
-          if (pv != null && isFinite(pv)) {
-            if (pv < 0 && cur >= 0) yTxt = `<i class="pos">흑자전환</i>`;
-            else if (pv >= 0 && cur < 0) yTxt = `<i class="neg">적자전환</i>`;
-            else if (Math.abs(pv) > Math.abs(cur) * 0.02) {
-              const yy = (cur / pv - 1) * 100;
-              yTxt = `<i class="${yy >= 0 ? "pos" : "neg"}">${yy >= 0 ? "+" : ""}${yy.toFixed(1)}%</i>`;
-            }
-          }
-          return `<div class="ws-kv-row"><span>${lab}</span><b>${Math.round(cur).toLocaleString()}${u}</b>${yTxt}</div>`;
-        };
-        tb = `<div class="ws-kv-h">${ll} <span class="sub-note">(YoY)</span></div>`
-          + rowf("매출", lr.rev, prevY?.[1]?.rev) + rowf("영업이익", lr.op, prevY?.[1]?.op) + rowf("순이익", lr.np, prevY?.[1]?.np);
-      }
-      const caps = [m.roe != null && `ROE ${m.roe}%`, m.debtRatio != null && `부채비율 ${m.debtRatio}%`,
-                    m.quickRatio != null && `당좌비율 ${m.quickRatio}%`].filter(Boolean).join(" · ");
-      fill("ws-fin", (bars || `<p class="mini-note">분기 재무 없음</p>`) + tb +
-        `<div class="sub-note">${caps}</div>`);
+      WS_FIN[key] = fin;
+      wsFinDraw(key, mk, co, m);
     });
     // ④ 밸류에이션 — PER·PBR·선행PER + 참고 내재가치(RIM 기본가정)
-    const est = (co.fin_ext || []).filter((r) => r.est && r.eps).pop();
+    const est = finExtOk(co.fin_ext).filter((r) => r.est && r.eps).pop();
     const fwd = est && price ? price / est.eps : null;
     const rec = VAL?.map?.[key];
     let ivLine = "";
@@ -7126,7 +7393,7 @@ function wsShow(key) {
     const tile2 = (MARKET?.heatmap || []).find((x) => `${x.m}_${x.t}` === key);
     const psr = tile2?.mcap && lastFin?.rev ? (tile2.mcap / 1e8) / lastFin.rev : null;
     // EPS 추이(확정+추정) 미니 막대 — 이익 성장의 방향을 카드에서 바로
-    const epsRows = (co.fin_ext || []).filter((r) => r.eps != null).slice(-4);
+    const epsRows = finExtOk(co.fin_ext).filter((r) => r.eps != null).slice(-4);
     let epsBar = "";
     if (epsRows.length >= 2) {
       const mx = Math.max(...epsRows.map((r) => Math.abs(r.eps)), 1);
@@ -7139,7 +7406,20 @@ function wsShow(key) {
     // 52주 위치(현재가가 1년 밴드의 어디쯤인가)
     const pr2 = WS_ST[key]?.profile || {};
     const w52 = pr2.pos52 != null ? pr2.pos52 : null;
-    fill("ws-val", `<div class="ws-kv-row"><span>PER</span><b>${m.per ?? "-"}배</b>
+    // 시가총액·기간수익률 — 카드 아래쪽이 비어 있어 '지금 이 종목의 크기와 성적'을 함께 둔다
+    const mcapTxt = tile2?.mcap ? fmtMcap(tile2.mcap, mk) : null;
+    const RETS = [["1주", "ret_w1", "rel_w1"], ["1개월", "ret_m1", "rel_m1"],
+                  ["3개월", "ret_m3", "rel_m3"], ["1년", "ret_y1", "rel_y1"]];
+    const rr = RETS.filter(([, k2]) => pr2[k2] != null);
+    const retRow = rr.length ? `<div class="ws-kv-h">기간 수익률 <span class="sub-note">(괄호=시장 대비)</span></div>
+      <div class="ws-rets">${rr.map(([lab, k2, k3]) => `<span class="ws-ret">
+        <i class="sub-note">${lab}</i>
+        <b class="${pr2[k2] >= 0 ? "kup" : "kdn"}">${pct(pr2[k2], 1)}</b>
+        ${pr2[k3] != null ? `<i class="sub-note">(${pct(pr2[k3], 1)})</i>` : ""}</span>`).join("")}</div>` : "";
+    fill("ws-val", `${mcapTxt ? `<div class="ws-kv-row"><span>시가총액</span><b>${mcapTxt}</b>
+        <i class="sub-note">${pr2.sector_rank ? `${pr2.sector} ${pr2.sector_rank}/${pr2.sector_n}위` : ""}${
+          w52 != null ? ` · 52주 위치 ${Math.round(w52 * 100)}%` : ""}</i></div>` : ""}
+      <div class="ws-kv-row"><span>PER</span><b>${m.per ?? "-"}배</b>
         ${peerPer ? `<i class="sub-note">동종 평균 ${peerPer.toFixed(1)}배 — ${m.per != null ? (m.per < peerPer ? "낮음" : "높음") : "-"}</i>` : "<i></i>"}</div>
       <div class="ws-kv-row"><span>PBR</span><b>${m.pbr ?? "-"}배</b>
         <i class="sub-note">${peerPbr ? `동종 평균 ${peerPbr.toFixed(1)}배` : ""}${m.bps ? ` · BPS ${Math.round(m.bps).toLocaleString()}` : ""}</i></div>
@@ -7147,7 +7427,8 @@ function wsShow(key) {
       ${fwd ? `<div class="ws-kv-row"><span>선행 PER</span><b>${fwd.toFixed(1)}배</b><i class="sub-note">${est.y} 추정 EPS 기준</i></div>` : ""}
       ${dy ? `<div class="ws-kv-row"><span>배당수익률</span><b>${dy.toFixed(2)}%</b><i class="sub-note">DPS ${Math.round(m.dps).toLocaleString()}원</i></div>` : ""}
       ${epsBar}
-      ${ivLine || `<div class="sub-note">내재가치 데이터 없음</div>`}`);
+      ${ivLine || `<div class="sub-note">내재가치 데이터 없음</div>`}
+      ${retRow}`);
     // ⑦ 공시·뉴스
     const fe = EXTRAS.feed?.map?.[key] || EXTRAS.feed?.[key] || {};
     const disc = (fe.disc || []).slice(0, 4), news = (fe.news || []).slice(0, 3);
@@ -7171,7 +7452,7 @@ function wsShow(key) {
       fill("ws-ind", `${gmeta?.icon || ""} <b>${g.name}</b> — 1개월 <b class="${(g.m1 ?? 0) >= 0 ? "pos" : "neg"}">${pct(g.m1 ?? 0, 1)}</b>
         <span class="sub-note">(${groups.length}개 산업 중 ${rank}위 · 시장 대비 ${pct(g.rs_m1 ?? 0, 1)})</span>
         <div class="sub-note">1주 ${pct(g.w1 ?? 0, 1)} · 3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목</div>
-        <div id="ws-ind-met"></div>
+        <div class="ws-ind-cols"><div id="ws-ind-met"></div><div id="ws-ind-rel"></div></div>
         ${plist.length ? `<div class="ws-kv-h">동종 상위</div>` + plist.map((x) =>
           `<div class="ws-kv-row"><span>${x.name}</span><b class="${(x.chg || 0) >= 0 ? "kup" : "kdn"}">${x.chg != null ? (x.chg >= 0 ? "+" : "") + x.chg.toFixed(1) + "%" : "-"}</b>
              <i class="sub-note">${x.price != null ? Math.round(x.price).toLocaleString() + "원" : ""}</i></div>`).join("") : ""}`);
@@ -7198,6 +7479,7 @@ function wsShow(key) {
         }).filter(Boolean).join("");
         if (rows2) el.innerHTML = `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업 진단과 동일 소스)</span></div>` + rows2;
       });
+      wsRelChart(key, mk);                 // 동종업계 상대주가 추이
     }
   }
 }
@@ -9285,10 +9567,22 @@ function renderLookupStability(st) {
    배당수익률은 저장값(최신 1개)뿐이라 추이를 못 봤다 → **그해 DPS ÷ 그해 평균 종가**로 직접 계산해
    "지금이 역사적으로 배당 매력이 높은 구간인가"를 볼 수 있게 한다.
    KR = fin_ext[].dps(연도별) + profile(배당성향·시가배당률) / US = dividend.history(분기 지급) 연 합계. */
+/* 추정치 신뢰 가드(v274) — 소스(네이버 연간 컨센서스)가 간혹 **비정상적으로 큰 추정 EPS**를 준다.
+   실측 2026-08-02: 삼성전자 2026 추정 EPS 47,929원(2025 실적 6,564원의 7.3배) · 2,685종목 중 93건.
+   원본 API가 그대로 그 값을 주므로 우리 파싱 문제가 아니다 → **표시 단계에서 버린다**
+   (그대로 두면 선행 PER 5.5배, 배당 추정 7,691원처럼 사실과 다른 숫자가 화면에 나간다). */
+function finExtOk(list) {
+  const rows = list || [];
+  const act = rows.filter((r) => !r.est && Number.isFinite(r.eps) && r.eps !== 0);
+  if (!act.length) return rows;
+  const base = Math.abs(act[act.length - 1].eps);
+  return rows.filter((r) => !r.est || !Number.isFinite(r.eps) || Math.abs(r.eps) <= base * 3);
+}
+
 function divRows(st, co) {
   const out = [];
   if (st.market === "kr") {
-    (co.fin_ext || []).forEach((r) => {
+    finExtOk(co.fin_ext).forEach((r) => {
       if (r.dps == null || !r.dps) return;
       out.push({ y: String(r.y).slice(0, 4), dps: r.dps, est: !!r.est });
     });
@@ -9312,16 +9606,15 @@ function yearAvgClose(series, y) {
   return v.length >= 20 ? v.reduce((a, b) => a + b, 0) / v.length : null;
 }
 
-function renderLookupDividend(st) {
-  const host = $("#lookup-dividend");
-  if (!host) return;
+/* 배당(v274) — 별도 섹션이 아니라 **Snapshot의 '배당' 뷰**로 들어간다(사용자 요청).
+   HTML만 만들어 돌려주고, 어디에 붙일지는 부르는 쪽이 정한다. null이면 배당 데이터가 없는 종목. */
+function divPanel(st) {
   const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`] || {};
   const rows = divRows(st, co);
   const pr = co.profile || {};
   const curYld = st.market === "kr" ? pr.yld : null;
   const curPayout = st.market === "kr" ? pr.payout : (co.dividend?.payout ?? co.metrics?.payout);
-  if (rows.length < 2 && curYld == null && !co.dividend?.dps) { host.style.display = "none"; return; }
-  host.style.display = "";
+  if (rows.length < 2 && curYld == null && !co.dividend?.dps) return null;
   const cur = st.market === "kr" ? "원" : "$";
   const fmtD = (v) => (st.market === "kr" ? Math.round(v).toLocaleString() : v.toFixed(2));
 
@@ -9379,14 +9672,40 @@ function renderLookupDividend(st) {
         ? `📌 현재 배당수익률이 최근 평균보다 <b class="neg">${Math.abs(vs).toFixed(1)}%p 낮습니다</b> — 주가 상승 또는 배당 축소로 배당 매력↓.`
         : `📌 현재 배당수익률은 최근 평균과 비슷한 수준입니다.`}</p>`;
 
-  host.innerHTML = `<h3 class="lk-h3">💰 배당 <span class="sub-note">(주당배당금 ${cur} · 배당수익률=그해 배당÷그해 평균주가로 산출${
-    st.market === "kr" ? " · 출처 DART·네이버" : " · 출처 Yahoo"}${rows.some((r) => r.est) ? " · (E)=추정" : ""})</span></h3>
-    <div class="div-tiles">${tiles.map(([k, v, s]) =>
+  // 아래 금액 표 — Snapshot의 다른 뷰와 같은 형식(사용자 요청: 그래프만이 아니라 숫자도)
+  const payoutOf = (r) => {
+    const fx = (co.fin_ext || []).find((f) => String(f.y).slice(0, 4) === String(r.y));
+    return fx?.eps ? (r.dps / fx.eps) * 100 : null;
+  };
+  const tbl = rows.length ? `<table class="fin-table"><thead><tr><th>항목</th>
+      ${rows.map((r) => `<th class="num">${r.y}${r.est ? "(E)" : ""}</th>`).join("")}</tr></thead><tbody>
+    <tr><td>주당배당금(${cur})</td>${rows.map((r) => `<td class="num">${fmtD(r.dps)}</td>`).join("")}</tr>
+    <tr><td>배당수익률</td>${rows.map((r) => `<td class="num">${r.yld != null ? r.yld.toFixed(2) + "%" : "-"}</td>`).join("")}</tr>
+    <tr><td>배당성향</td>${rows.map((r) => {
+      const pv = payoutOf(r);
+      return `<td class="num">${pv != null && isFinite(pv) ? pv.toFixed(1) + "%" : "-"}</td>`;
+    }).join("")}</tr>
+    <tr><td>전년 대비</td>${rows.map((r, i) => {
+      const pv = i > 0 ? rows[i - 1].dps : null;
+      const g = pv ? (r.dps / pv - 1) * 100 : null;
+      return `<td class="num ${g == null ? "" : g >= 0 ? "pos" : "neg"}">${g == null ? "-" : (g >= 0 ? "+" : "") + g.toFixed(1) + "%"}</td>`;
+    }).join("")}</tr></tbody></table>` : "";
+
+  return `<div class="div-tiles">${tiles.map(([k, v, s]) =>
       `<div class="div-tile"><span class="sub-note">${k}</span><b>${v}</b>${s ? `<span class="sub-note">${s}</span>` : ""}</div>`).join("")}</div>
     ${rows.length >= 2 ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${line}${labels}</svg>
     <p class="legend" style="margin-top:2px"><span style="color:#e0a93f">■</span> 주당배당금 ·
-      <span style="color:#4391ff">●─</span> 배당수익률(%)</p>` : `<p class="mini-note">연도별 배당 이력이 부족해 추이 그래프는 생략했습니다.</p>`}
-    ${verdict}`;
+      <span style="color:#4391ff">●─</span> 배당수익률(%) ·
+      <span class="sub-note">배당수익률=그해 배당÷그해 평균주가${st.market === "kr" ? " · 출처 DART·네이버" : " · 출처 Yahoo"}</span></p>`
+      : `<p class="mini-note">연도별 배당 이력이 부족해 추이 그래프는 생략했습니다.</p>`}
+    ${verdict}${tbl}`;
+}
+
+/* 기존 별도 섹션은 숨긴다 — 내용이 Snapshot으로 옮겨갔다 */
+function renderLookupDividend(st) {
+  const host = $("#lookup-dividend");
+  if (host) host.style.display = "none";
+  void st;
 }
 
 // 실적 서프라이즈 (미국): EPS 발표치 vs 예상치 + 서프라이즈%
@@ -9804,7 +10123,7 @@ function renderValueBand(st) {
     `<text x="${X(i)}" y="${H - 5}" text-anchor="${i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"}"
       class="cr-ax">${pts[i].t.slice(0, 7)}</text>`).join("");
 
-  const estRow = (co?.fin_ext || []).filter((r) => r.est && r.eps > 0).slice(-1)[0];
+  const estRow = finExtOk(co?.fin_ext).filter((r) => r.est && r.eps > 0).slice(-1)[0];
   const nowPx = freshQuote(st)?.price ?? now.c;
   const fwdPer = bandMode === "per" && estRow ? nowPx / estRow.eps : null;
   const fwdHtml = fwdPer && isFinite(fwdPer) && fwdPer > 0
@@ -9862,7 +10181,8 @@ function bandTabs(host, st) {
 
 /* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
 let ftView = "perf", ftMode = "annual", ftFs = "cfs";
-const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"], ["cash", "현금흐름"]];
+const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"],
+                  ["cash", "현금흐름"], ["div", "배당"]];
 // Snapshot 표시 단위 — 저장값(KR 억원 / US 백만$) 기준 배율. 상세 재무제표와 동일 체계.
 let ftUnitSel = null;
 function ftUnits(mk) { return mk === "kr" ? FIN_UNITS_KR : FIN_UNITS_US; }
@@ -9905,6 +10225,18 @@ function renderFinTrends(st) {
   if (!fin?.[ftFs] || !(ftFs === "cfs" ? hasCfs : hasOfs))
     ftFs = hasCfs ? "cfs" : hasOfs ? "ofs" : (cfsLen >= ofsLen ? "cfs" : "ofs");
   const rows = ftRows(st);
+  // 배당 뷰는 financials가 아니라 배당 이력을 쓰므로 rows 조건과 무관하게 먼저 처리한다
+  if (ftView === "div") {
+    const dv = divPanel(st);
+    host.style.display = "";
+    host.innerHTML = `<h3 class="lk-h3">📊 Snapshot <span class="sub-note">(배당)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle ft-view">${FT_VIEWS.map(([id, lab]) =>
+          `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span></h3>
+      ${dv || `<p class="mini-note">배당 이력이 없는 종목입니다.</p>`}`;
+    host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
+    return;
+  }
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
   const _u = ftUnits(st.market);
