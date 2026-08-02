@@ -2808,7 +2808,7 @@ function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
     svg += ab.svg;
     const my = yTgt + Math.min(tgt.h, ab.h) / 2;
     svg += `<path d="M${AX - 4},${my} L${LX + BW + 6},${my}" class="ds-arrow"/>
-      <text x="${(LX + BW + AX) / 2}" y="${my - 8}" class="ds-arrow-t"
+      <text x="${(LX + BW + AX) / 2}" y="${yTgt - 5}" class="ds-arrow-t"
         text-anchor="middle">${dsEsc(amtTxt || "취득")}</text>`;
   }
 

@@ -2047,7 +2047,9 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ds-box-seller { stroke: rgba(245,68,90,.4); }
 .ds-box-t { fill: #e9e9ee; font-size: 13px; font-weight: 700; text-anchor: middle; }
 .ds-box-s { fill: #9ca3af; font-size: 10px; text-anchor: middle; }
-.ds-arrow { stroke: #7cb1ff; stroke-width: 2; marker-end: url(#dsah); }
+/* ⚠fill을 지정하지 않으면 SVG path 기본값이 **검정 채움**이라 ㄱ자 배선이 면으로 칠해져
+   그 위의 지분율 숫자를 덮는다(실측: SK실트론 자회사 지분율이 검은 덩어리에 가림). */
+.ds-arrow { fill: none; stroke: #7cb1ff; stroke-width: 2; marker-end: url(#dsah); }
 .ds-arrow-t { fill: #cfe0fb; font-size: 12px; font-weight: 700; }
 .ds-arrow-s { fill: #9ca3af; font-size: 10px; }
 .ds-arrow-t.mid, .ds-arrow-s.mid { text-anchor: middle; }
