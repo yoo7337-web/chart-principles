@@ -2723,16 +2723,16 @@ function dsWrap(name, boxW, fs, maxLines = 2) {
   const s = dsName(name);
   const lim = boxW - 10;
   if (dsTextW(s, fs) <= lim) return [s];
+  // 공백이 있으면 **단어 단위**로 끊는다 — 글자 단위로 자르면 'THE GROWHUB LIMITE / D'처럼 어색해진다
+  const units = s.includes(" ") ? s.split(/(\s+)/).filter((u) => u.trim() !== "") : [...s];
+  const glue = s.includes(" ") ? " " : "";
   const lines = [];
   let cur = "";
-  for (const ch of s) {
-    if (dsTextW(cur + ch, fs) > lim) {
-      lines.push(cur);
-      cur = ch;
-      if (lines.length === maxLines - 1 && dsTextW(s.slice(s.indexOf(cur)), fs) > lim) break;
-    } else cur += ch;
+  for (const u of units) {
+    const next = cur ? cur + glue + u : u;
+    if (cur && dsTextW(next, fs) > lim) { lines.push(cur); cur = u; } else cur = next;
   }
-  lines.push(cur);
+  if (cur) lines.push(cur);
   if (lines.length > maxLines) {
     const keep = lines.slice(0, maxLines);
     keep[maxLines - 1] = keep[maxLines - 1].slice(0, -1) + "…";
@@ -2763,13 +2763,22 @@ function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
   const W = DS_W, LX = 8, BW = 236, AX = LX + BW + 42, AW = W - AX - 8;
   const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
   const parents = ctx?.parents || [], kids = ctx?.kids || [];
-  const seller = !parents.length && x.counter && x.counter !== acquirer ? x.counter : null;
+  /* 📌원칙: **대상을 지금 지배하고 있는 회사(=이번 거래의 매도자)는 반드시 대상 위에** 지분율과 함께 그린다.
+     그래야 "어떤 구조의 회사를 누가 넘기는가"가 보인다.
+     ⚠매도자는 side에 따라 다른 필드다 — 매각(out)이면 **공시 제출자(corp)**가 매도자이고 counter가 인수자,
+       취득(in)이면 counter가 매도자다. 이걸 뒤집어 읽어 엔켐(자회사 지분 매각)이 구조도에서 빠졌다. */
+  const sellerName = x.side === "out" ? x.corp : (x.counter || null);
+  const ups = parents.map((n) => [n.name, n.rate != null ? n.rate + "%" : "", "지배회사", n.ticker]);
+  if (sellerName) {
+    const sk = dsOwnClean(sellerName);
+    const i = ups.findIndex((u) => dsOwnClean(u[0]) === sk);
+    if (i >= 0) ups[i][2] = "매도자 · 지배회사";      // 지분도에도 있으면 라벨만 합친다
+    else ups.unshift([sellerName, "", "매도자", null]);
+  }
   let svg = "";
   let y = 6;
 
-  // ① 위: 기존 지배회사(없으면 이번 거래의 매도자)
-  const ups = parents.length ? parents.map((n) => [n.name, `${n.rate != null ? n.rate + "%" : ""}`, "지배회사", n.ticker])
-    : seller ? [[seller, "", "매도자", null]] : [];
+  // ① 위: 대상을 지배하는 회사(매도자 포함)
   let yTgt = 6;
   if (ups.length) {
     const uw = ups.length > 1 ? (BW - 8) / 2 : BW;
@@ -2799,17 +2808,21 @@ function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
     svg += ab.svg;
     const my = yTgt + Math.min(tgt.h, ab.h) / 2;
     svg += `<path d="M${AX - 4},${my} L${LX + BW + 6},${my}" class="ds-arrow"/>
-      <text x="${AX - 6}" y="${my - 7}" class="ds-arrow-t" text-anchor="end">${dsEsc(amtTxt || "취득")}</text>`;
+      <text x="${(LX + BW + AX) / 2}" y="${my - 8}" class="ds-arrow-t"
+        text-anchor="middle">${dsEsc(amtTxt || "취득")}</text>`;
   }
 
   // ④ 아래: 대상의 자회사
   let bottom = yTgt + tgt.h;
   let ky = bottom + 22;
+  const IND = 46;                       // 배선 + 지분율 라벨 자리(우측정렬이라 여유가 필요하다)
   kids.forEach((kn) => {
-    const b = dsBox(LX + 34, ky, BW - 34, "sub", kn.name, null, kn.ticker, 10);
-    svg += `<path d="M${LX + 14},${bottom} L${LX + 14},${ky + b.h / 2} L${LX + 32},${ky + b.h / 2}" class="ds-arrow nohead"/>
-      <text x="${LX + 17}" y="${ky + b.h / 2 - 3}" class="ds-arrow-t">${kn.rate != null ? kn.rate + "%" : ""}</text>`;
+    const b = dsBox(LX + IND, ky, BW - IND, "sub", kn.name, null, kn.ticker, 10);
+    svg += `<path d="M${LX + 8},${bottom} L${LX + 8},${ky + b.h / 2} L${LX + IND - 4},${ky + b.h / 2}" class="ds-arrow nohead"/>`;
     svg += b.svg;
+    // ⚠라벨을 박스보다 먼저 그리면 박스가 덮어 '100%'가 '00%'로 보인다 → 박스 다음에, 배선 왼쪽에 우측정렬
+    svg += `<text x="${LX + IND - 8}" y="${(ky + b.h / 2 + 3).toFixed(1)}" class="ds-arrow-t"
+      text-anchor="end">${kn.rate != null ? kn.rate + "%" : ""}</text>`;
     ky += b.h + 6;
   });
   const H = Math.max(ky + 4, yTgt + tgt.h + 10);
