@@ -7497,7 +7497,8 @@ function wsShow(key) {
       fill("ws-supply", `<table class="ws-sup-tb"><tr><th></th><th>외국인</th><th>기관</th><th>개인</th></tr>
         <tr><td>5일</td><td>${amt(sup.frgn_5)}</td><td>${amt(sup.inst_5)}</td><td>${amt(sup.indi_5)}</td></tr>
         <tr><td>20일</td><td>${amt(sup.frgn_20)}</td><td>${amt(sup.inst_20)}</td><td>${amt(sup.indi_20)}</td></tr></table>
-        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 <b>${sup.frgn_ratio}%</b>${sup.frgn_ratio_chg != null ? ` (20일 ${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준(순매매량×종가)</div>${consSlot}`);
+        <div class="sub-note">${sup.frgn_ratio != null ? `외국인 보유율 <b>${sup.frgn_ratio}%</b>${sup.frgn_ratio_chg != null ? ` (20일 ${sup.frgn_ratio_chg >= 0 ? "+" : ""}${sup.frgn_ratio_chg}%p)` : ""}` : ""} · 순매수 대금 기준(순매매량×종가)
+        · 기타법인 제외라 세 주체 합은 0이 아닙니다</div>${consSlot}`);
     }
     wsCons(key, mk, price);         // 수급 카드가 채워진 뒤 컨센서스 슬롯을 채운다
     // ⑧ 원칙 성적
@@ -9075,7 +9076,9 @@ function drawSupply(st) {
   lookupSupply.timeScale().fitContent();
   $("#lookup-supply-legend").innerHTML =
     `─ <span style="color:#4391ff">외국인</span> · <span style="color:#f59e0b">기관</span>${hasIndi ? ` · <span style="color:#c084fc">개인</span>` : ""} 누적 순매수 (좌축, 억원) ·
-     <span style="color:#22c07a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)`;
+     <span style="color:#22c07a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)
+     · ⚠<b>기타법인은 집계에서 빠져 세 주체의 합이 0이 되지 않습니다</b>
+     (하루 기준 거래량의 0.3% 수준이지만 누적하면 금액이 커집니다)`;
 }
 
 function renderLookupStory(st) {
