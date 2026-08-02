@@ -3611,6 +3611,9 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v286", "2026-08-02", "수급 영역을 종목 프로파일과 같은 카드·높이로",
+   "수급이 제목+차트만 떠 있어 옆의 종목 프로파일과 모양이 달랐습니다. 같은 카드 테두리·같은 제목 크기로 "
+   + "맞추고, 카드 높이도 프로파일과 동일하게 맞춰 남는 공간만큼 차트를 키웠습니다(220 → 377px)."],
   ["v285", "2026-08-02", "종목조회 — 원칙 카드가 차트와 나란히 시작하도록",
    "처음 종목을 열면 원칙 카드가 기업개요 옆에 붙어 차트와 어긋나 보이던 문제를 고쳤습니다. "
    + "헤더와 기업개요를 좌우 분할 **바깥의 전폭 영역**으로 빼서, 그 아래부터 왼쪽 차트와 오른쪽 원칙이 "
@@ -9052,16 +9055,24 @@ function renderLookupProfile(st) {
 }
 
 function drawSupply(st) {
-  const ids = ["lookup-supply-h", "lookup-supply", "lookup-supply-legend"];
+  const card = $("#lookup-supply-card");
   if (lookupSupply) { lookupSupply.remove(); lookupSupply = null; }
   const sup = st.supply;
   if (!sup || !sup.length) {  // US 또는 데이터 없음
-    ids.forEach((id) => { $("#" + id).style.display = "none"; });
+    card.style.display = "none";
     return;
   }
-  ids.forEach((id) => { $("#" + id).style.display = ""; });
+  card.style.display = "";
+  $("#lookup-supply-legend").style.display = "";
   const el = $("#lookup-supply");
-  lookupSupply = LightweightCharts.createChart(el, baseChartOpts(el, 220));
+  /* 옆 카드(종목 프로파일)와 높이를 맞춘다 — 그리드 stretch로 카드가 늘어나므로
+     남는 공간만큼 차트를 키운다(최소 220px). 프로파일이 아직 없으면 기본 높이. */
+  const peer = $("#lookup-profile");
+  const peerH = peer && getComputedStyle(peer).display !== "none" ? peer.offsetHeight : 0;
+  const chrome = 92;                     // 카드 제목 + 범례 + 패딩 몫
+  const H = Math.max(220, Math.min(560, peerH ? peerH - chrome : 220));
+  el.style.height = H + "px";
+  lookupSupply = LightweightCharts.createChart(el, baseChartOpts(el, H));
   const line = (key, color, scale) => {
     const s = lookupSupply.addLineSeries({ color, lineWidth: 2, priceLineVisible: false,
       lastValueVisible: true, priceScaleId: scale });

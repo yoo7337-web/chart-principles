@@ -2292,3 +2292,8 @@ header h1 { margin-right: auto; }
 #ov-deep .today-chart-btn { padding: 3px 10px; font-size: .76rem; font-weight: 600; }
 #ov-deep .sub-note { font-size: .68rem; margin-left: 5px; }
 #ov-own-go { font-size: .76rem; }
+
+/* 수급 카드를 옆의 종목 프로파일과 같은 높이로(v286) — 차트가 남는 공간을 채운다 */
+.lk-suprow { align-items: stretch; }
+.lk-suprow > .card-flat { margin-top: 16px; display: flex; flex-direction: column; }
+#lookup-supply-card #lookup-supply { flex: 1 1 auto; min-height: 220px; }
