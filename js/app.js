@@ -3051,6 +3051,7 @@ function ownIsCtrl(n, rate) {
 }
 let ownShowInv = false;
 let ownView = "dia";        // dia=공정위式 도식 / list=카드 목록
+let ownFit = true;          // 화면 폭에 맞춰 축소(끄면 원래 크기 + 가로 스크롤)
 function ownPct(v) { return (v >= 100 ? "100" : v.toFixed(v >= 10 ? 1 : 2)) + "%"; }
 const ownEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -3096,56 +3097,90 @@ function ownArrow(x1, y1, x2, y2, rate, side) {
 }
 
 function ownDiagram(g, byId, out, root, kids) {
-  const { col, gap, boxH, subH, subGap } = OWN_W;
+  /* 폭 압축(v264): 18개 계열사를 한 줄로 늘어놓으면 3,470px가 되어 한눈에 안 들어온다.
+     공정위 원본도 **자회사 없는 100% 계열사는 한 열에 세로로 쌓아** 폭을 줄인다 → 같은 방식.
+       · 자회사 있는 계열사 = 각자 한 열(아래로 손자회사)
+       · 자회사 없는 계열사 = STACK개씩 묶어 한 열에 세로로 */
+  const COL = 138, GAP = 10, BOX = 34, SUB = 26, SGAP = 4;
+  const LIMIT = 48;          // 도식에 그릴 계열사 상한 — 초과분은 목록 보기로 안내(삼성전자 341사)
+  // ⚠계열이 많은 그룹(삼성전자 373사)은 '자회사 있는 계열사'만도 수십 개라 폭이 5,000px까지 간다
+  //   → 열은 MAXCOL개로 제한하고(지분율·자회사수 순), 나머지는 세로 스택으로 보낸다.
+  const MAXCOL = 10;
+  const nSub = (e) => (out[byId[e.t].id] || []).filter((x) => ownIsCtrl(byId[x.t], x.rate)).length;
+  const withAll = kids.filter((e) => nSub(e) > 0)
+    .sort((a, b) => (nSub(b) - nSub(a)) || (b.rate - a.rate));
+  const kidsWith = withAll.slice(0, MAXCOL);
+  const kidsNoneAll = kids.filter((e) => !kidsWith.includes(e));
+  const kidsNone = kidsNoneAll.slice(0, Math.max(0, LIMIT - kidsWith.length));
+  const omitted = kidsNoneAll.length - kidsNone.length;
+  // 스택 열 수를 제한해 폭이 무한정 늘어나지 않게(세로로 길어지는 편이 읽기 낫다)
+  const stackCols = Math.max(1, Math.min(6, Math.ceil(kidsNone.length / 8)));
+  const per = Math.ceil(kidsNone.length / stackCols) || 1;
+  const stacks = [];
+  for (let i = 0; i < kidsNone.length; i += per) stacks.push(kidsNone.slice(i, i + per));
+  const nCol = kidsWith.length + stacks.length;
+
   const holders = g.edges.filter((e) => e.t === root.id && byId[e.f] && byId[e.f].lvl === -1)
     .sort((a, b) => b.rate - a.rate);
-  const nCol = Math.max(kids.length, holders.length, 1);
-  const W = Math.max(900, nCol * (col + gap) + gap);
-  const yPerson = 14, yHolder = 92, yRoot = 186, yKid = 292, ySub = 292 + boxH + 34;
-
-  // 최상단: 개인 최대주주(동일인)와 법인 최대주주를 구분
-  const person = holders.filter((e) => !/[(주)㈜]|회사|법인|Ltd|Inc/i.test(byId[e.f].name));
+  const person = holders.filter((e) => !/\(주\)|㈜|회사|법인|Ltd|Inc/i.test(byId[e.f].name));
   const corp = holders.filter((e) => !person.includes(e));
+
+  const W = Math.max(880, nCol * (COL + GAP) + GAP);
+  const yPer = 10, yHold = 78, yRoot = 158, yKid = 244, ySub = yKid + BOX + 26;
+  const cx = W / 2;
   let svg = "";
 
-  // 동일인(개인) — 가운데 위
-  const cx = W / 2;
   person.slice(0, 2).forEach((e, i) => {
-    const w = 120, x = cx - w / 2 + (i - (person.length - 1) / 2) * 140;
-    svg += ownShape(x, yPerson, w, 34, "person") + ownLabel(x, yPerson, w, 34, byId[e.f]);
-    svg += ownArrow(x + w / 2, yPerson + 34, cx, yRoot, e.rate);
+    const w = 108, x = cx - w / 2 + (i - (person.length - 1) / 2) * 124;
+    svg += ownShape(x, yPer, w, 30, "person") + ownLabel(x, yPer, w, 30, byId[e.f]);
+    svg += ownArrow(x + w / 2, yPer + 30, cx, yRoot, e.rate);
   });
-  // 법인 최대주주 — 좌우로 배치
   corp.slice(0, 6).forEach((e, i) => {
-    const w = col, half = Math.ceil(corp.length / 2);
-    const left = i < half;
-    const idx = left ? i : i - half;
-    const x = left ? gap + idx * (w + gap) : W - gap - (idx + 1) * (w + gap) + gap;
-    svg += ownShape(x, yHolder, w, boxH, "holder") + ownLabel(x, yHolder, w, boxH, byId[e.f]);
-    svg += ownArrow(x + w / 2, yHolder + boxH, cx, yRoot, e.rate, left ? "start" : "end");
+    const half = Math.ceil(corp.length / 2), left = i < half, idx = left ? i : i - half;
+    const x = left ? GAP + idx * (COL + GAP) : W - GAP - (idx + 1) * (COL + GAP) + GAP;
+    svg += ownShape(x, yHold, COL, BOX, "holder") + ownLabel(x, yHold, COL, BOX, byId[e.f]);
+    svg += ownArrow(x + COL / 2, yHold + BOX, cx, yRoot, e.rate, left ? "start" : "end");
   });
-  // 루트(지주)
-  const rw = 190, rx = cx - rw / 2;
-  svg += ownShape(rx, yRoot, rw, 46, "root") + ownLabel(rx, yRoot, rw, 46, root);
+  const rw = 178, rx = cx - rw / 2;
+  svg += ownShape(rx, yRoot, rw, 42, "root") + ownLabel(rx, yRoot, rw, 42, root);
 
-  // 계열사 열 + 하위
-  kids.forEach((e, i) => {
-    const x = gap + i * (col + gap);
-    const n = byId[e.t];
-    svg += ownArrow(cx, yRoot + 46, x + col / 2, yKid, e.rate);
-    svg += ownShape(x, yKid, col, boxH, "unit") + ownLabel(x, yKid, col, boxH, n);
-    const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate))
-      .sort((a, b) => b.rate - a.rate);
+  let maxBottom = ySub;
+  // ① 자회사 있는 계열사 — 각자 한 열
+  kidsWith.forEach((e, i) => {
+    const x = GAP + i * (COL + GAP), n = byId[e.t];
+    svg += ownArrow(cx, yRoot + 42, x + COL / 2, yKid, e.rate);
+    svg += ownShape(x, yKid, COL, BOX, "unit") + ownLabel(x, yKid, COL, BOX, n);
+    const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).sort((a, b) => b.rate - a.rate);
     gk.forEach((e2, j) => {
-      const sy = ySub + j * (subH + subGap);
-      svg += `<path d="M${x + 16},${yKid + boxH} L${x + 16},${sy + subH / 2} L${x + 26},${sy + subH / 2}" class="og-ar"/>
-        <text x="${x + 20}" y="${sy + subH / 2 - 4}" class="og-rt">${ownPct(e2.rate)}</text>`;
-      svg += ownShape(x + 26, sy, col - 26, subH, "sub") + ownLabel(x + 26, sy, col - 26, subH, byId[e2.t], true);
+      const sy = ySub + j * (SUB + SGAP);
+      svg += `<path d="M${x + 14},${yKid + BOX} L${x + 14},${sy + SUB / 2} L${x + 22},${sy + SUB / 2}" class="og-ar"/>
+        <text x="${x + 17}" y="${sy + SUB / 2 - 4}" class="og-rt">${ownPct(e2.rate)}</text>`;
+      svg += ownShape(x + 22, sy, COL - 22, SUB, "sub") + ownLabel(x + 22, sy, COL - 22, SUB, byId[e2.t], true);
+      maxBottom = Math.max(maxBottom, sy + SUB);
     });
   });
-  const maxSub = Math.max(0, ...kids.map((e) => (out[byId[e.t].id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).length));
-  const H = ySub + maxSub * (subH + subGap) + 20;
-  return `<div class="og-wrap"><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none" class="og-svg">
+  // ② 자회사 없는 계열사 — 한 열에 세로로 쌓기(공정위 원본과 같은 압축)
+  stacks.forEach((grp, si) => {
+    const x = GAP + (kidsWith.length + si) * (COL + GAP);
+    grp.forEach((e, j) => {
+      const y = yKid + j * (BOX + 8), n = byId[e.t];
+      if (j === 0) svg += ownArrow(cx, yRoot + 42, x + COL / 2, yKid, e.rate);
+      else svg += `<path d="M${x - 6},${yKid + BOX / 2} L${x - 6},${y + BOX / 2} L${x - 1},${y + BOX / 2}" class="og-ar"/>
+        <text x="${x - 4}" y="${y + BOX / 2 - 4}" class="og-rt">${ownPct(e.rate)}</text>`;
+      svg += ownShape(x, y, COL, BOX, "unit") + ownLabel(x, y, COL, BOX, n);
+      const sn = nSub(e);
+      if (sn) svg += `<text x="${x + COL - 6}" y="${y + BOX - 5}" class="og-sn">+${sn}</text>`;
+      maxBottom = Math.max(maxBottom, y + BOX);
+    });
+  });
+  if (omitted > 0) {
+    svg += `<text x="${W - GAP}" y="${maxBottom + 16}" class="og-omit" text-anchor="end">`
+      + `+ ${omitted}사는 도식에서 생략 — '목록' 보기에서 전체 확인</text>`;
+    maxBottom += 22;
+  }
+  const H = maxBottom + 16;
+  return `<div class="og-wrap"><svg viewBox="0 0 ${W} ${H}" class="og-svg" data-w="${W}"
+      preserveAspectRatio="xMidYMin meet">
     <defs><marker id="ogah" markerWidth="7" markerHeight="7" refX="5" refY="2.2" orient="auto">
       <path d="M0,0 L0,4.4 L6,2.2 z" fill="#8aa0c0"/></marker></defs>${svg}</svg></div>`;
 }
@@ -3223,6 +3258,7 @@ function ownRender() {
       <span class="mk-toggle own-view" id="own-view">
         <button data-v="dia" class="${ownView === "dia" ? "active" : ""}">도식</button>
         <button data-v="list" class="${ownView === "list" ? "active" : ""}">목록</button></span>
+      ${ownView === "dia" ? `<button class="own-toggle" id="own-fit">${ownFit ? "원래 크기" : "화면에 맞추기"}</button>` : ""}
       ${inv.length ? `<button class="own-toggle" id="own-inv">${ownShowInv
         ? "지배 계열사만" : `단순투자 ${inv.length}건 포함`}</button>` : ""}</div>
     ${ownView === "dia" ? ownDiagram(g, byId, out, root, kids) : `
@@ -3248,9 +3284,19 @@ function ownRender() {
   if (tg) tg.onclick = () => { ownShowInv = !ownShowInv; ownRender(); };
   const vw = document.getElementById("own-view");
   if (vw) vw.querySelectorAll("button").forEach((b) => b.onclick = () => { ownView = b.dataset.v; ownRender(); });
+  const ft = document.getElementById("own-fit");
+  if (ft) ft.onclick = () => { ownFit = !ownFit; ownRender(); };
+  // 폭 맞춤: viewBox 비율대로 축소해 한 화면에 담는다(끄면 원래 크기 + 가로 스크롤)
+  const svg = host.querySelector(".og-svg");
+  if (svg) {
+    const w = +svg.dataset.w || 900;
+    svg.style.width = ownFit ? "100%" : w + "px";
+    svg.style.maxWidth = ownFit ? "100%" : "none";
+  }
 }
 
 const DEV_HISTORY = [
+  ["v264", "2026-08-02", "소유지분도 폭 압축 — 한 화면에 들어오게", "계열사를 한 줄로 늘어놓아 도식이 3,470px까지 벌어지던 것을 고쳤습니다. **공정위 원본과 같은 방식**으로 자회사가 없는 계열사(대개 100% 자회사)는 한 열에 세로로 묶고, 자회사가 있는 계열사만 각자 열을 차지합니다. 기본은 **화면 폭에 맞춰 축소**되며 '원래 크기' 버튼으로 확대해 볼 수 있습니다. 지분도 영역도 좌우 여백을 넓게 씁니다."],
   ["v263", "2026-08-02", "소유지분도를 공정위式 도식으로", "카드 나열로는 지배관계가 한눈에 안 들어와, **공정거래위원회 소유지분도와 같은 도식**으로 바꿨습니다. 도형 규약도 그대로 따릅니다 — 타원=동일인(개인), 마름모=주요주주·지주회사, 오각형=계열사, 사각형=하위 계열사. 화살표에 지분율이 붙고 **★ 상장사는 눌러서 종목조회로** 갑니다. 목록 보기로 전환하는 버튼도 남겼습니다."],
   ["v261", "2026-08-02", "🏛 소유지분도 탭 신설", "공정거래위원회 소유지분도(PDF·이미지)와 같은 그림을 **데이터로** 재현했습니다. DART 정기보고서의 '타법인 출자현황'·'최대주주 현황'에서 지분율을 그대로 가져와 최대주주 → 지주·모회사 → 출자 계열사 순으로 보여주고, 계열사가 다시 자회사를 가지면 접어서 펼칩니다. **★는 상장사이며 누르면 종목조회로 이동**합니다. 검증: 하림지주 — 김홍국 21.1%·제일사료 88.11%·팬오션 54.72%, 계열 72사 중 상장 5사로 공정위 지분도와 일치."],
   ["v258", "2026-08-02", "딜 배경 설명(기사 기반) + 대금 정보 통합", "①**🤖 기사로 배경 설명** — 버튼을 누르면 그 딜의 관련 기사 제목과 공시 사실을 함께 읽고 '왜 지금 이 거래인지·어떤 협상 경과와 업황 속에서 나왔는지'를 3~5문장으로 정리합니다. 공시 수치 반복 대신 **맥락**을 채우며, 기사 제목에 없는 내용은 쓰지 않도록 강제했습니다. 한 번 만들면 저장돼 다시 부르지 않습니다(무료 한도 보호). ②자금조달·대금지급을 접이식에서 빼내 **인수 설명 문단에 합쳤습니다**. ③회사명 조사 처리를 보완했습니다(SK으로부터 → SK로부터)."],

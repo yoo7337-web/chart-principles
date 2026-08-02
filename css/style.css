@@ -2155,3 +2155,10 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .og-i.root { transform: rotate(45deg); border-color: #4391ff; background: rgba(67,145,255,.2); }
 .og-i.unit { border-color: #22c07a; background: rgba(34,192,122,.15); }
 .og-i.sub { border-color: #6b7280; }
+
+/* 🏛 지분도 폭 확장 (v264) — 도식은 페이지 여백을 넘어 넓게 쓴다 */
+#tab-ownership .og-wrap { margin-left: calc(-1 * min(80px, 5vw)); margin-right: calc(-1 * min(80px, 5vw)); }
+#tab-ownership .og-svg { display: block; margin: 0 auto; }
+.og-rt { font-size: 8.5px; }
+.og-sn { fill: #22c07a; font-size: 8px; font-weight: 700; text-anchor: end; }
+.og-omit { fill: #9ca3af; font-size: 10px; }
