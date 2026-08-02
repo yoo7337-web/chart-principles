@@ -2104,3 +2104,28 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ds-ai { border-top: 1px dashed var(--line); padding-top: 8px; }
 .ds-ai > b { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
 .ds-ai p { font-size: .83rem; line-height: 1.7; }
+
+/* 🏛 소유지분도 (v261) */
+#tab-ownership { margin-top: 18px; }
+.own-pick { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; color: inherit; font-size: .86rem; min-width: 200px; }
+.own-head { font-size: 1rem; margin-bottom: 10px; }
+.own-head .sub-note { display: block; font-size: .76rem; margin-top: 2px; }
+.own-sec { margin: 4px 0; }
+.own-lab { display: block; font-size: .76rem; color: var(--muted); margin-bottom: 5px; }
+.own-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+.own-grid.sm { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); margin-top: 6px; }
+.own-node { display: flex; align-items: baseline; gap: 7px; background: #212127; border: 1px solid var(--line);
+  border-radius: 9px; padding: 7px 11px; font-size: .84rem; }
+.own-node.listed { border-color: rgba(67,145,255,.5); background: rgba(67,145,255,.1); cursor: pointer; }
+.own-node.listed:hover { background: rgba(67,145,255,.2); }
+.own-rate { font-weight: 700; color: #e0a93f; flex: none; font-size: .8rem; min-width: 44px; }
+.own-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.own-sub { font-size: .7rem; color: var(--muted); flex: none; }
+.own-root .own-node { background: rgba(34,192,122,.12); border-color: rgba(34,192,122,.45);
+  max-width: 320px; font-size: .95rem; font-weight: 700; }
+.own-arrow { text-align: center; color: var(--muted); font-size: .8rem; margin: 3px 0; }
+.own-branch { display: flex; flex-direction: column; }
+.own-gk summary { cursor: pointer; font-size: .74rem; color: var(--muted); padding: 3px 0 0 8px; }
+.own-toggle { margin-left: 8px; font-size: .72rem; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+  background: rgba(67,145,255,.14); border: 1px solid rgba(67,145,255,.35); color: #7cb1ff; }

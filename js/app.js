@@ -81,7 +81,7 @@ function logoUrl(mk, tk) {
 //   빠지면 그룹 버튼을 눌러도 activateTab(undefined)가 되어 화면이 비어 보인다(v245 딜 구조 실사고).
 const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatmap", journal: "holdings",
                          watch: "watch",            // 관심종목은 탭 1개짜리 상위 그룹(v210)
-                         dealstruct: "dealstruct" };
+                         dealstruct: "dealstruct", ownership: "ownership" };
 
 /* ---------- 소탭(통합 페이지) — nav에는 부모탭만, 자식은 섹션 상단 pill로 전환 ----------
    기존 섹션(id=tab-X)·렌더·딥링크는 그대로 두고 표시만 부모탭으로 묶는다. */
@@ -114,7 +114,7 @@ const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
-  diary: "투자 다이어리", dealstruct: "딜 구조" };
+  diary: "투자 다이어리", dealstruct: "딜 구조", ownership: "소유지분도" };
 let navStack = [];
 let navSuppress = false;
 let currentTab = "heatmap";
@@ -167,6 +167,7 @@ function activateTab(tabId) {
   if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "diary" && !diaryRendered) initDiary();
   if (tabId === "dealstruct" && !dealsStructRendered) initDealsStruct();
+  if (tabId === "ownership" && !ownRendered) initOwnership();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
@@ -3034,7 +3035,115 @@ function initDealsStruct() {
   renderDealsStruct();
 }
 
+
+/* ---------- 🏛 소유지분도 (v261) — DART 타법인출자현황으로 그룹 지배구조 ----------
+   공정위 지분도(PDF)와 같은 그림을 데이터로 재현한다. ★=상장사 → 종목조회로 이동.
+   노드가 수십 개라 SVG 배선 대신 **계층 카드**로 그린다(읽기·클릭이 쉽다). */
+let OWN_IDX = null, OWN_G = null, ownSel = null, ownRendered = false;
+
+/* 출자 목적 분류 — 공정위 지분도는 '지배' 관계만 그린다. 보험·지주는 단순투자 지분이 수백 건이라
+   섞으면 계열 1,300사처럼 보인다(현대해상 실측) → 기본은 지배관계만, 투자분은 토글. */
+function ownIsCtrl(n, rate) {
+  const p = String(n.purpose || "");
+  if (/경영\s*(참여|참가)|지배|출자|설립/.test(p)) return true;
+  if (/단순|일반\s*투자|스타트업|벤처|재무/.test(p)) return false;
+  return (rate ?? 0) >= 20;            // 목적 표기가 없으면 지분율로 판단
+}
+let ownShowInv = false;
+function ownPct(v) { return (v >= 100 ? "100" : v.toFixed(v >= 10 ? 1 : 2)) + "%"; }
+const ownEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+async function initOwnership() {
+  ownRendered = true;
+  if (!LOOKUP_INDEX) await aiIndexReady();
+  if (!OWN_IDX) {
+    OWN_IDX = await fetch("data/ownership/index.json" + _cb).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  }
+  const sel = $("#own-pick");
+  const names = OWN_IDX.map((k) => {
+    const code = k.slice(3);
+    const s = (LOOKUP_INDEX || []).find((x) => x.ticker === code);
+    return { key: k, code, name: s?.name || code };
+  }).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  sel.innerHTML = names.map((n) => `<option value="${n.key}">${ownEsc(n.name)}</option>`).join("");
+  if (!names.length) {
+    $("#own-body").innerHTML = `<p class="mini-note">아직 수집된 지분도가 없습니다 —
+      <code>python analysis\\ownership.py --top 300</code> 실행 필요</p>`;
+    return;
+  }
+  sel.onchange = () => ownLoad(sel.value);
+  ownLoad(ownSel && OWN_IDX.includes(ownSel) ? ownSel : names[0].key);
+}
+
+async function ownLoad(key) {
+  ownSel = key;
+  $("#own-pick").value = key;
+  $("#own-body").innerHTML = `<p class="mini-note">불러오는 중…</p>`;
+  OWN_G = await fetch(`data/ownership/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  ownRender();
+}
+
+function ownRender() {
+  const host = $("#own-body");
+  if (!OWN_G) { host.innerHTML = `<p class="mini-note">지분도를 불러오지 못했습니다.</p>`; return; }
+  const g = OWN_G;
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+  const out = g.edges.reduce((m, e) => ((m[e.f] = m[e.f] || []).push(e), m), {});
+  const root = g.nodes.find((n) => n.lvl === 0);
+  const holders = (out[""] || []).concat(g.edges.filter((e) => e.t === root?.id && byId[e.f]?.lvl === -1)
+    .map((e) => ({ ...e })));
+
+  const chip = (n, rate, sub) => {
+    const nm = ownEsc(n.name.replace(/\s*\(.*?\)\s*$/, "").trim() || n.name);
+    return `<div class="own-node${n.listed ? " listed" : ""}" ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
+      <span class="own-rate">${rate != null ? ownPct(rate) : ""}</span>
+      <span class="own-nm">${n.listed ? "★ " : ""}${nm}</span>
+      ${sub ? `<span class="own-sub">${sub}</span>` : ""}</div>`;
+  };
+
+  // 1) 최대주주 → 루트
+  const hs = holders.map((e) => chip(byId[e.f], e.rate)).join("");
+  // 2) 루트 → 자회사(지분율 높은 순), 자회사가 다시 자회사를 가지면 접이식으로
+  const allKids = (out[root.id] || []).slice().sort((a, b) => b.rate - a.rate);
+  const ctrl = allKids.filter((e) => ownIsCtrl(byId[e.t], e.rate));
+  const inv = allKids.filter((e) => !ownIsCtrl(byId[e.t], e.rate));
+  const kids = ownShowInv ? allKids : ctrl;
+  const kidHtml = kids.map((e) => {
+    const n = byId[e.t];
+    const gk = (out[n.id] || []).slice().sort((a, b) => b.rate - a.rate);
+    const purpose = n.purpose && n.purpose !== "경영참여" ? n.purpose : null;
+    return `<div class="own-branch">
+      ${chip(n, e.rate, purpose)}
+      ${gk.length ? `<details class="own-gk"><summary>하위 ${gk.length}사</summary>
+        <div class="own-grid sm">${gk.map((e2) => chip(byId[e2.t], e2.rate)).join("")}</div></details>` : ""}
+    </div>`;
+  }).join("");
+
+  const nListed = g.nodes.filter((n) => n.listed).length;
+  host.innerHTML = `
+    <div class="own-head"><b>${ownEsc(g.name)}</b> 소유지분도
+      <span class="sub-note">${g.year}년 사업보고서 기준 · 계열 ${g.nodes.length}사(상장 ${nListed}) · 수집 ${g.at}</span></div>
+    ${hs ? `<div class="own-sec"><span class="own-lab">최대주주·특수관계인</span>
+      <div class="own-grid">${hs}</div>
+      <div class="own-arrow">▼</div></div>` : ""}
+    <div class="own-sec own-root">${chip(root, null, "지주·모회사")}</div>
+    <div class="own-arrow">▼</div>
+    <div class="own-sec"><span class="own-lab">${ownShowInv ? "출자처" : "지배 계열사"} ${kids.length}사
+      ${inv.length ? `<button class="own-toggle" id="own-inv">${ownShowInv
+        ? "지배 계열사만 보기" : `단순투자 ${inv.length}건 포함해 보기`}</button>` : ""}</span>
+      <div class="own-grid">${kidHtml}</div></div>
+    <p class="sub-note" style="margin-top:10px">출처: DART 정기보고서 '타법인 출자현황'·'최대주주 현황'.
+      ★는 상장사(클릭하면 종목조회로 이동). 비상장 자회사는 사업보고서를 내지 않으면 하위가 비어 있을 수 있습니다.</p>`;
+
+  host.querySelectorAll("[data-go]").forEach((el) => el.onclick = () => {
+    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.go);
+  });
+  const tg = document.getElementById("own-inv");
+  if (tg) tg.onclick = () => { ownShowInv = !ownShowInv; ownRender(); };
+}
+
 const DEV_HISTORY = [
+  ["v261", "2026-08-02", "🏛 소유지분도 탭 신설", "공정거래위원회 소유지분도(PDF·이미지)와 같은 그림을 **데이터로** 재현했습니다. DART 정기보고서의 '타법인 출자현황'·'최대주주 현황'에서 지분율을 그대로 가져와 최대주주 → 지주·모회사 → 출자 계열사 순으로 보여주고, 계열사가 다시 자회사를 가지면 접어서 펼칩니다. **★는 상장사이며 누르면 종목조회로 이동**합니다. 검증: 하림지주 — 김홍국 21.1%·제일사료 88.11%·팬오션 54.72%, 계열 72사 중 상장 5사로 공정위 지분도와 일치."],
   ["v258", "2026-08-02", "딜 배경 설명(기사 기반) + 대금 정보 통합", "①**🤖 기사로 배경 설명** — 버튼을 누르면 그 딜의 관련 기사 제목과 공시 사실을 함께 읽고 '왜 지금 이 거래인지·어떤 협상 경과와 업황 속에서 나왔는지'를 3~5문장으로 정리합니다. 공시 수치 반복 대신 **맥락**을 채우며, 기사 제목에 없는 내용은 쓰지 않도록 강제했습니다. 한 번 만들면 저장돼 다시 부르지 않습니다(무료 한도 보호). ②자금조달·대금지급을 접이식에서 빼내 **인수 설명 문단에 합쳤습니다**. ③회사명 조사 처리를 보완했습니다(SK으로부터 → SK로부터)."],
   ["v253", "2026-08-02", "딜 카드에 관련 기사 연결", "각 딜에 **그 딜을 다룬 기사**를 붙였습니다. M&A 전문 기사 아카이브(3,500건)와 종목별 뉴스 아카이브에서 인수자·대상회사·매도자 이름으로 찾고, **공시일 전후(-21~+14일) 기사만** 골라 최대 6건을 보여줍니다. 제목을 누르면 원문으로 이동합니다. 예: 두산-SK실트론 딜에 'SK, 두산에 SK실트론 지분 70% 판다…매각가 2.3조원' 기사가 붙습니다."],
   ["v252", "2026-08-02", "딜 구조 여백 정리 + 문장 다듬기", "딜 구조 본문이 상단 메뉴에 바짝 붙어 있던 것을 띄웠고, 회사명 받침에 따라 조사(이/가·을/를·로부터)를 자동으로 골라 문장이 자연스럽게 읽히도록 했습니다."],

@@ -1,0 +1,1 @@
+{"name": "티씨케이", "code": "064760", "at": "2026-08-02", "year": 2025, "nodes": [{"id": "티씨케이", "name": "티씨케이", "lvl": 0, "listed": true, "ticker": "064760"}, {"id": "TOKAICARBONCO.,LTD.", "name": "TOKAI CARBON CO.,LTD.", "lvl": -1, "listed": false, "ticker": null, "kind": "holder"}], "edges": [{"f": "TOKAICARBONCO.,LTD.", "t": "티씨케이", "rate": 52.6}]}

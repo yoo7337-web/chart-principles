@@ -1,0 +1,1 @@
+{"name": "HPSP", "code": "403870", "at": "2026-08-02", "year": 2025, "nodes": [{"id": "HPSP", "name": "HPSP", "lvl": 0, "listed": true, "ticker": "403870"}, {"id": "히트2025홀딩스", "name": "히트2025홀딩스 유한회사", "lvl": -1, "listed": false, "ticker": null, "kind": "holder"}], "edges": [{"f": "히트2025홀딩스", "t": "HPSP", "rate": 39.23}]}
