@@ -3139,7 +3139,8 @@ function ownDiagram(g, byId, out, root, kids) {
   const person = holders.filter((e) => !/\(주\)|㈜|회사|법인|Ltd|Inc/i.test(byId[e.f].name));
   const corp = holders.filter((e) => !person.includes(e));
 
-  const W = Math.max(880, nCol * (COL + GAP) + GAP);
+  const GAPL = 44;                     // 스택 왼쪽 지분율 라벨 자리(우측정렬이라 여백이 필요하다)
+  const W = Math.max(880, nCol * (COL + GAP) + GAPL + GAP);
   const yPer = 10, yHold = 78, yRoot = 158, yKid = 244, ySub = yKid + BOX + 26;
   const cx = W / 2;
   let svg = "";
@@ -3161,27 +3162,30 @@ function ownDiagram(g, byId, out, root, kids) {
   let maxBottom = ySub;
   // ① 자회사 있는 계열사 — 각자 한 열
   kidsWith.forEach((e, i) => {
-    const x = GAP + i * (COL + GAP), n = byId[e.t];
+    const x = GAPL + i * (COL + GAP), n = byId[e.t];
     svg += ownArrow(cx, yRoot + 42, x + COL / 2, yKid, e.rate);
     svg += ownShape(x, yKid, COL, BOX, "unit") + ownLabel(x, yKid, COL, BOX, n);
     const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).sort((a, b) => b.rate - a.rate);
+    /* ⚠지분율 라벨을 박스보다 **먼저** 그리면 박스가 덮어 숫자가 잘려 보인다(신세계 실측: '61.2%'가 '6'만 보임).
+       → 박스를 먼저 그리고 라벨을 마지막에, 그리고 배선 왼쪽 여백(IND)을 라벨 폭만큼 확보한다. */
+    const IND = 34;
     gk.forEach((e2, j) => {
       const sy = ySub + j * (SUB + SGAP);
-      svg += `<path d="M${x + 14},${yKid + BOX} L${x + 14},${sy + SUB / 2} L${x + 22},${sy + SUB / 2}" class="og-ar"/>
-        <text x="${x + 17}" y="${sy + SUB / 2 - 4}" class="og-rt">${ownPct(e2.rate)}</text>`;
-      svg += ownShape(x + 22, sy, COL - 22, SUB, "sub") + ownLabel(x + 22, sy, COL - 22, SUB, byId[e2.t], true);
+      svg += `<path d="M${x + 8},${yKid + BOX} L${x + 8},${sy + SUB / 2} L${x + IND},${sy + SUB / 2}" class="og-ar"/>`;
+      svg += ownShape(x + IND, sy, COL - IND, SUB, "sub") + ownLabel(x + IND, sy, COL - IND, SUB, byId[e2.t], true);
+      svg += `<text x="${x + IND - 2}" y="${sy + SUB / 2 - 3}" class="og-rt" text-anchor="end">${ownPct(e2.rate)}</text>`;
       maxBottom = Math.max(maxBottom, sy + SUB);
     });
   });
   // ② 자회사 없는 계열사 — 한 열에 세로로 쌓기(공정위 원본과 같은 압축)
   stacks.forEach((grp, si) => {
-    const x = GAP + (kidsWith.length + si) * (COL + GAP);
+    const x = GAPL + (kidsWith.length + si) * (COL + GAP);
     grp.forEach((e, j) => {
       const y = yKid + j * (BOX + 8), n = byId[e.t];
       if (j === 0) svg += ownArrow(cx, yRoot + 42, x + COL / 2, yKid, e.rate);
-      else svg += `<path d="M${x - 6},${yKid + BOX / 2} L${x - 6},${y + BOX / 2} L${x - 1},${y + BOX / 2}" class="og-ar"/>
-        <text x="${x - 4}" y="${y + BOX / 2 - 4}" class="og-rt">${ownPct(e.rate)}</text>`;
+      else svg += `<path d="M${x - 7},${yKid + BOX / 2} L${x - 7},${y + BOX / 2} L${x - 1},${y + BOX / 2}" class="og-ar"/>`;
       svg += ownShape(x, y, COL, BOX, "unit") + ownLabel(x, y, COL, BOX, n);
+      if (j > 0) svg += `<text x="${x - 9}" y="${y + BOX / 2 - 3}" class="og-rt" text-anchor="end">${ownPct(e.rate)}</text>`;
       const sn = nSub(e);
       if (sn) svg += `<text x="${x + COL - 6}" y="${y + BOX - 5}" class="og-sn">+${sn}</text>`;
       maxBottom = Math.max(maxBottom, y + BOX);
@@ -3320,7 +3324,8 @@ function ownRender() {
   const hlNode = ownHL ? g.nodes.find((n) => n.id === ownHL) : null;
   host.innerHTML = `
     <div class="own-head"><b>${ownEsc(g.name)}</b> 소유지분도
-      <span class="sub-note">${g.year}년 사업보고서 기준 · 계열 ${g.nodes.length}사(상장 ${nListed}) · 수집 ${g.at}</span>
+      <span class="sub-note">${g.year}년 사업보고서 기준 · <b>직접 지배 ${ctrl.length}사</b>
+        · 전체 계열 ${g.nodes.length}사(상장 ${nListed})${inv.length ? ` · 단순투자 ${inv.length}건` : ""} · 수집 ${g.at}</span>
       <span class="mk-toggle own-view" id="own-view">
         <button data-v="dia" class="${ownView === "dia" ? "active" : ""}">도식</button>
         <button data-v="list" class="${ownView === "list" ? "active" : ""}">목록</button></span>
@@ -3328,6 +3333,9 @@ function ownRender() {
       ${hlNode ? `<span class="own-hl-tag">🔎 ${ownEsc(hlNode.name)} 강조 중</span>` : ""}
       ${inv.length ? `<button class="own-toggle" id="own-inv">${ownShowInv
         ? "지배 계열사만" : `단순투자 ${inv.length}건 포함`}</button>` : ""}</div>
+    ${ownView === "dia" && ctrl.length <= 3 && inv.length > 10 ? `<p class="mini-note">
+      이 회사는 <b>지배 계열사가 ${ctrl.length}곳</b>뿐이고 나머지 ${inv.length}건은 <b>단순투자 지분</b>입니다
+      (증권·보험사에 흔합니다). 위의 '단순투자 ${inv.length}건 포함'을 누르면 전부 표시됩니다.</p>` : ""}
     ${ownView === "dia" ? ownDiagram(g, byId, out, root, kids) : `
       ${hs ? `<div class="own-sec"><span class="own-lab">최대주주·특수관계인</span>
         <div class="own-grid">${hs}</div><div class="own-arrow">▼</div></div>` : ""}
@@ -3369,6 +3377,14 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v270", "2026-08-02", "지분도 표기 정리 — '합계' 노드·각주·가려진 지분율",
+   "지분도에서 눈에 거슬리던 것들을 정리했습니다. 공시 표의 **'합계' 행이 회사처럼 그려지던 것**을 없앴고, "
+   + "회사명 뒤에 붙던 **(주1)·(계열회사)·(*1) 같은 각주**를 떼어냈습니다(1,539건). 각주 때문에 "
+   + "'호텔신라'가 세 회사로 갈라져 있던 검색 결과도 하나로 합쳐집니다. "
+   + "하위 계열사의 **지분율 숫자가 박스에 가려 안 보이던 문제**도 고쳤습니다. "
+   + "그리고 공시에 적힌 이름과 거래소 종목명이 다른 회사들(한국전력기술=한전기술, 현대자동차=현대차, "
+   + "엘에스일렉트릭=LS ELECTRIC)이 상장으로 인식되도록 **종목코드 기준 매칭**을 넣었습니다(50개 추가 인식). "
+   + "머리말 숫자도 도식과 기준이 달라 헷갈리던 것을 '직접 지배 N사 · 전체 계열 M사 · 단순투자 K건'으로 나눴습니다."],
   ["v269", "2026-08-02", "지분도 누락 보완·검색 신설 / 자산시장 압축 + 지표 보강",
    "**지분도**: SK에 SK하이닉스가, 두산에 두산테스나가 없던 문제를 고쳤습니다. 원인이 셋이었습니다 — "
    + "①비상장 중간지주(두산포트폴리오홀딩스)에서 계보가 끊겼고 ②같은 회사가 '에스케이하이닉스'와 "
