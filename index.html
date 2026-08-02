@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=306">
-<script src="firebase-config.js?v=306"></script>
-<script src="js/auth.js?v=306"></script>
+<link rel="stylesheet" href="css/style.css?v=307">
+<script src="firebase-config.js?v=307"></script>
+<script src="js/auth.js?v=307"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=306"></script>
+<script src="js/sync.js?v=307"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -383,14 +383,16 @@
       <span class="sub-note" id="lk-sticky-hint">위 <b>🔍 종목 조회</b> 검색창에 종목명을 입력하세요</span>
       <span class="lk-sticky-gap"></span>
     </div>
-    <!-- 검색 아래 전체를 2단: 좌=본문(헤더·차트·개요~원칙성적) / 우=레일(호가·프로파일·메모) -->
-    <div class="lk-grid">
-    <div class="lk-main">
+    <!-- v285: 헤더·기업개요는 **그리드 밖 전폭**. 안에 두면 오른쪽 레일의 첫 카드(원칙)가
+         기업개요 옆에서 시작해 차트와 어긋난다(사용자 제보). 밖으로 빼면 원칙이 차트와 나란해진다. -->
     <div id="lookup-head" class="lookup-head" style="display:none"></div>
     <div id="lookup-industry" class="lk-industry" style="display:none"></div>
     <div id="lookup-report" class="lk-report" style="display:none"></div>
     <div id="lookup-links" class="ext-links" style="display:none"></div>
     <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+    <!-- 아래부터 2단: 좌=차트·실적 / 우=레일(원칙·투자지표·호가·컨센·메모) -->
+    <div class="lk-grid">
+    <div class="lk-main">
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="1m" id="tf-1m" style="display:none">당일 1분</button><button data-tf="5m" id="tf-5m" style="display:none">5분</button><button data-tf="60m" id="tf-60m" style="display:none">60분</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
@@ -1222,7 +1224,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=306"></script>
+<script src="js/app.js?v=307"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">
