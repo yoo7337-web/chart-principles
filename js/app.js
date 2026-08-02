@@ -2666,10 +2666,21 @@ async function dsOwnCtx(name) {
   if (!byId[id]) return null;
   const info = (nid, rate) => ({ name: byId[nid]?.name || nid, rate,
                                  listed: !!byId[nid]?.listed, ticker: byId[nid]?.ticker });
-  const parents = g.edges.filter((e) => e.t === id && byId[e.f] && byId[e.f].lvl >= 0)
-    .sort((a, b) => b.rate - a.rate).slice(0, 2).map((e) => info(e.f, e.rate));
+  const self = byId[id];
+  /* ⚠법인 키워드를 요구하면 접미어 없는 사명이 빠진다(SK스퀘어·삼성물산 실측 누락).
+     → 반대로 **개인 이름만 제외**한다. 한국인 이름은 대개 공백 없는 순한글 2~3자다. */
+  const isCorp = (n) => !/^[가-힣]{2,3}$/.test(String(n.name).replace(/\s/g, ""));
+  /* 상위 = ①소유구조에서 자기보다 위에 있는 지배회사 ②법인 최대주주.
+     ⚠단순히 '자기로 들어오는 간선'을 다 담으면 **자기 자회사가 모회사 주식을 조금 들고 있는 것**까지
+       상위로 뒤집혀 나온다(실측: 삼성전자 상위에 동진쎄미켐 0%). 지분율 1% 미만·개인은 뺀다. */
+  const up = g.edges.filter((e) => e.t === id && byId[e.f] && (e.rate || 0) >= 1
+      && (byId[e.f].lvl < (self?.lvl ?? 0) || byId[e.f].lvl === -1) && isCorp(byId[e.f]))
+    .sort((a, b) => b.rate - a.rate).slice(0, 3).map((e) => info(e.f, e.rate));
+  const parents = up;
+  // 하위는 **상장 계열사를 먼저** — 해외 판매법인(SPC)이 100%라 지분율만으로 정렬하면 그것만 나온다
   const kids = g.edges.filter((e) => e.f === id && byId[e.t] && ownIsCtrl(byId[e.t], e.rate))
-    .sort((a, b) => b.rate - a.rate).slice(0, 4).map((e) => info(e.t, e.rate));
+    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || b.rate - a.rate)
+    .slice(0, 6).map((e) => info(e.t, e.rate));
   return (parents.length || kids.length) ? { parents, kids, group: g.name } : null;
 }
 
@@ -3494,6 +3505,13 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v275", "2026-08-02", "종목조회 재배치 — 기업개요 최상단 · 신호는 차트 옆 · 그룹 관계 추가",
+   "종목을 열면 **기업개요가 가장 먼저** 보이도록 위로 올렸습니다(어떤 회사인지 먼저 확인). "
+   + "원칙 신호 필터와 채택/참고 원칙 목록은 차트를 읽는 도구이므로 **차트 오른쪽 열**로 옮겼습니다.\n\n"
+   + "기업개요에 **🏛 그룹 관계**를 새로 넣었습니다 — 소유지분도 데이터를 재사용해 그 회사의 "
+   + "**상위(지배) 회사와 하위(자회사)**를 지분율과 함께 보여줍니다. ★는 상장사로 눌러서 바로 이동할 수 있고, "
+   + "'소유지분도 전체 보기'로 그룹 도식까지 이어집니다. 예) 삼성전자 → 상위 삼성생명 8.52%·삼성물산 5.05%, "
+   + "하위 레인보우로보틱스 35%·삼성바이오로직스 31.2%·제일기획 25.2%."],
   ["v274", "2026-08-02", "딜 구조도에 지배구조 반영 · 관심종목 카드 확대 · 배당을 Snapshot으로",
    "**딜 구조**: '누가 누구를 샀다'만 보이던 구조도에 **대상 회사의 기존 지배구조**를 넣었습니다. "
    + "위에 지배회사, 가운데 대상, 아래 그 자회사를 그리고 인수자를 오른쪽에서 화살표로 붙입니다 "
@@ -9147,9 +9165,46 @@ function renderLookupOverview(st) {
     ${pfHtml}
     ${biz ? `<div class="ov-sec"><b>🧩 사업 구조·전략</b><ul class="ov-biz">${biz.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}
     ${mixHtml}${shHtml}
+    <div id="ov-group"></div>
     <div id="ov-bizdeep"></div>
     <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART(주주·기업정보)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
   loadBizDeep(st);
+  ovGroup(st);
+}
+
+/* 🏛 그룹 관계(v275) — 기업개요에서 "이 회사 위·아래에 누가 있나"를 바로 보여준다.
+   소유지분도(app/data/ownership)를 재사용하므로 추가 수집이 없다. ★=상장사(클릭 시 그 종목으로 이동). */
+async function ovGroup(st) {
+  const el = document.getElementById("ov-group");
+  if (!el) return;
+  // ⚠LOOKUP_INDEX 항목의 시장 필드는 `mk`가 아니라 **`market`**이다(실측)
+  const name = (LOOKUP_INDEX || []).find((x) => x.market === st.market && x.ticker === st.ticker)?.name
+    || (MARKET?.heatmap || []).find((x) => x.m === st.market && x.t === st.ticker)?.name
+    || st.name;
+  if (st.market !== "kr" || !name) return;          // 지분도는 국내만
+  const ctx = await dsOwnCtx(name);
+  if (!ctx || (!ctx.parents.length && !ctx.kids.length)) return;
+  const chip = (n) => `<span class="ov-rel${n.ticker ? " go" : ""}"${n.ticker ? ` data-go="kr_${n.ticker}"` : ""}>
+    ${n.ticker ? "★" : ""}${dsEsc(n.name)}${n.rate != null ? `<i>${n.rate}%</i>` : ""}</span>`;
+  el.innerHTML = `<div class="ov-sec"><b>🏛 그룹 관계</b>
+    <span class="sub-note">${dsEsc(ctx.group)} 소유지분도 기준 · 지분율은 보유 비율</span>
+    ${ctx.parents.length ? `<div class="ov-relrow"><span class="ov-rel-lab">상위(지배) 회사</span>
+      ${ctx.parents.map(chip).join("")}</div>` : ""}
+    ${ctx.kids.length ? `<div class="ov-relrow"><span class="ov-rel-lab">하위(자회사)</span>
+      ${ctx.kids.map(chip).join("")}</div>` : ""}
+    <div class="ov-relrow"><a class="ext-link" href="#" id="ov-own-go">소유지분도 전체 보기 →</a></div></div>`;
+  el.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => loadLookup(b.dataset.go));
+  const go = document.getElementById("ov-own-go");
+  if (go) go.onclick = (e) => {
+    e.preventDefault();
+    gotoTabFull("ownership");
+    if (!ownRendered) initOwnership();
+    // ⚠배열엔 `in`을 쓰면 인덱스 검사가 된다 — includes로 판정
+    setTimeout(() => {
+      const own = `kr_${st.ticker}`;
+      ownLoad((OWN_IDX || []).includes(own) ? own : ownSel, dsOwnClean(name));
+    }, 300);
+  };
 }
 
 /* ---------- 📚 사업 심층 (v221) — 사업보고서 '사업의 내용'/10-K Item 1 발췌 ---------- */

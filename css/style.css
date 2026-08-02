@@ -2235,3 +2235,29 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-fin-val { font-size: 7.4px; fill: var(--muted); }
 .ws-fin-val.kdn { fill: var(--kdn); }
 .ws-fin-spark { height: 50px; }
+
+/* 종목조회 차트 2단(v275) — 좌=차트 / 우=신호·원칙 */
+.lk-chartrow { display: grid; grid-template-columns: minmax(0, 1fr) 336px; gap: 12px; align-items: start; }
+.lk-chartcol { min-width: 0; }
+.lk-sigcol { min-width: 0; }
+.lk-sigcol #lookup-filter { display: block; margin: 0; }
+.lk-sigcol #lookup-filter > label { display: block; font-size: .78rem; margin-bottom: 3px; }
+.lk-sigcol .sig-nonebtn { margin: 4px 0 8px; }
+/* 좁은 열에서는 원칙 목록을 1열로 — 2열이면 글자가 뭉갠다 */
+.lk-sigcol .rule-legend-wrap { display: block; max-height: 520px; overflow-y: auto; }
+.lk-sigcol .rl-block { margin-bottom: 8px; }
+.lk-sigcol .rl-item { font-size: .76rem; }
+.lk-sigcol .rl-desc { display: none; }          /* 좁아서 설명은 숨기고 hover(title)로 */
+.lk-sigcol .sig-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 기업개요를 본문 최상단으로 올렸으니 폭을 넓게 쓴다 */
+.lk-main > .lk-overview { margin-bottom: 12px; }
+@media (max-width: 1200px) { .lk-chartrow { grid-template-columns: 1fr; } }
+
+/* 기업개요 — 그룹 관계(v275) */
+.ov-relrow { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 5px; }
+.ov-rel-lab { font-size: .74rem; color: var(--muted); min-width: 84px; }
+.ov-rel { display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 9px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: .8rem; }
+.ov-rel i { font-style: normal; font-size: .72rem; color: var(--muted); }
+.ov-rel.go { cursor: pointer; }
+.ov-rel.go:hover { border-color: var(--accent); }
