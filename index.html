@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=267">
-<script src="firebase-config.js?v=267"></script>
-<script src="js/auth.js?v=267"></script>
+<link rel="stylesheet" href="css/style.css?v=268">
+<script src="firebase-config.js?v=268"></script>
+<script src="js/auth.js?v=268"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=267"></script>
+<script src="js/sync.js?v=268"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -195,7 +195,25 @@
 
   <section id="tab-assets" class="panel">
     <div id="as-cards" class="cr-cards"></div>
-    <div class="card-flat">
+    <!-- v269 신설: '어느 자산이 실제로 돈을 벌어줬나' — 같은 기간·같은 시작점(100)으로 비교.
+         해외 자산은 원화로 환산해야 한국 투자자의 실제 수익이 된다(환율 토글). -->
+    <div class="card-flat" style="margin-top:12px">
+      <h3 class="lk-h3">📊 자산군 성과 비교 <span class="sub-note">— 같은 기간 100에서 출발시켜 비교</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="as-perf-cur">
+          <button data-c="krw" class="active">원화 환산</button>
+          <button data-c="local">현지 통화</button>
+        </span>
+        <span class="mk-toggle" id="as-perf-range" style="margin-left:6px">
+          <button data-r="1">1년</button><button data-r="3">3년</button>
+          <button data-r="5" class="active">5년</button><button data-r="10">10년</button>
+          <button data-r="0">2000~</button>
+        </span></h3>
+      <div class="as-perf"><div id="as-perf"></div><div id="as-perf-tbl"></div></div>
+    </div>
+    <!-- v269: 4개 차트가 각자 전폭이라 스크롤이 길었다 → 2열 그리드로 압축(내용은 그대로) -->
+    <div class="as-grid">
+    <div class="card-flat as-wide">
       <h3 class="lk-h3">🔄 자산시장 로테이션 <span class="sub-note">— 어느 시장이 어느 시장을 몇 개월 앞서 움직였나</span>
         <span style="flex:1"></span>
         <span class="mk-toggle" id="as-lead-mode">
@@ -205,7 +223,7 @@
         </span></h3>
       <div id="as-lead"></div>
     </div>
-    <div class="card-flat" style="margin-top:14px">
+    <div class="card-flat">
       <h3 class="lk-h3">🏠 부동산 <span class="sub-note">(KB 주택가격지수 · 2000~ 월간)</span>
         <span style="flex:1"></span>
         <span class="mk-toggle" id="as-re-mode">
@@ -216,7 +234,7 @@
       <div id="as-re-legend" class="cr-legend"></div>
       <div id="as-re"></div>
     </div>
-    <div class="card-flat" style="margin-top:14px">
+    <div class="card-flat">
       <h3 class="lk-h3">📉 채권·금리 <span class="sub-note">(국고채·회사채 · 스프레드는 위험선호의 척도)</span>
         <span style="flex:1"></span>
         <span class="mk-toggle" id="as-bond-mode">
@@ -226,7 +244,7 @@
       <div id="as-bond-legend" class="cr-legend"></div>
       <div id="as-bond"></div>
     </div>
-    <div class="card-flat" style="margin-top:14px">
+    <div class="card-flat">
       <h3 class="lk-h3">💱 환율 <span class="sub-note">(원화 대비 주요 통화 · 달러·유로 지수)</span>
         <span style="flex:1"></span>
         <span class="mk-toggle" id="as-fx-mode">
@@ -237,7 +255,7 @@
       <div id="as-fx-legend" class="cr-legend"></div>
       <div id="as-fx"></div>
     </div>
-    <div class="card-flat" style="margin-top:14px">
+    <div class="card-flat">
       <h3 class="lk-h3">🥇 금·귀금속과 증시 <span class="sub-note">(안전자산과 위험자산의 관계)</span>
         <span style="flex:1"></span>
         <span class="mk-toggle" id="as-gold-mode">
@@ -247,6 +265,7 @@
       <div id="as-gold-legend" class="cr-legend"></div>
       <div id="as-gold"></div>
     </div>
+    </div><!-- /as-grid -->
     <div class="criteria" id="as-context" style="margin-top:14px"></div>
   </section>
 
@@ -343,8 +362,9 @@
     <!-- v213: 위·아래 헤더가 같은 정보였다 → 위 sticky 바는 제거하고, 검색·원칙 선택을
          아래 종목 헤더(#lookup-head)로 합쳐 **그 영역을 고정**한다. 미선택 시엔 안내+검색만 보인다. -->
     <!-- v218: 검색창을 맨 왼쪽으로(사용자 요청 — 우측 끝은 시선 이동이 큼) -->
+    <!-- v269: 검색창 디자인을 내재가치 탭과 통일(라벨 + 넓은 입력) -->
     <div id="lk-sticky" class="lk-sticky empty">
-      <label class="lk-sticky-search">🔍 <input type="text" id="lookup-q" placeholder="종목 검색 (예: 현대차, NVDA)" list="lookup-list" autocomplete="off">
+      <label class="lk-sticky-search">종목 검색 <input type="text" id="lookup-q" placeholder="이름 또는 티커 (예: 삼성전자, AAPL)" list="lookup-list" autocomplete="off">
       <datalist id="lookup-list"></datalist></label>
       <span class="sub-note" id="lk-sticky-hint">종목을 검색하세요</span>
       <span class="lk-sticky-gap"></span>
@@ -1026,9 +1046,12 @@
       현황으로 그립니다. 공정위 소유지분도와 같은 내용을 데이터로 재현한 것입니다.
       <b>★는 상장사</b>이며 누르면 종목조회로 이동합니다.
       <span class="sub-note">비상장 자회사는 사업보고서 제출 의무가 없어 하위 단계가 비어 있을 수 있습니다.</span></div>
-    <div class="home-topbar" style="margin:14px 0 10px">
-      <label>회사 <select id="own-pick" class="own-pick"></select></label>
+    <!-- v269: 드롭다운 300개는 훑기 어렵다 → 검색 + 목록. 계열사명으로도 검색된다(호텔신라 → 삼성 계열) -->
+    <div class="controls" style="margin:14px 0 8px">
+      <label>회사 검색 <input type="text" id="own-q" autocomplete="off"
+        placeholder="그룹명 또는 계열사명 (예: 삼성물산, 호텔신라)"></label>
     </div>
+    <div id="own-list" class="own-list"></div>
     <div id="own-body"></div>
   </section>
 
@@ -1182,7 +1205,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=267"></script>
+<script src="js/app.js?v=268"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

@@ -3086,14 +3086,19 @@ function ownLabel(x, y, w, h, n, small) {
   </g>`;
 }
 
-function ownArrow(x1, y1, x2, y2, rate, side) {
+function ownArrow(x1, y1, x2, y2, rate, side, at) {
   const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
   const path = x1 === x2
     ? `M${x1},${y1} L${x2},${y2}`
     : `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`;   // ㄱ자 배선
+  /* 라벨 위치(v269): 중간점에 두면 **한 점으로 수렴하는 화살표들의 지분율이 겹쳐** 읽을 수 없다
+     (최대주주 여럿 → 루트 하나). 여러 화살표가 공유하는 끝점 말고 **서로 다른 쪽 끝**에 붙인다.
+       at="src" = 출발점 아래(최대주주 → 루트: 출발 x가 제각각) / 기본 = 도착점 위(루트 → 계열사) */
+  const lx = at === "src" ? x1 : x2 + 4;
+  const ly = at === "src" ? y1 + 11 : (x1 === x2 ? my - 3 : my - 4);
   return `<path d="${path}" class="og-ar"/>
-    <text x="${x1 === x2 ? mx + 4 : x2 + 4}" y="${x1 === x2 ? my - 3 : my - 4}"
-      class="og-rt" text-anchor="${side || "start"}">${ownPct(rate)}</text>`;
+    <text x="${lx}" y="${ly}" class="og-rt"
+      text-anchor="${at === "src" ? "middle" : (side || "start")}">${ownPct(rate)}</text>`;
 }
 
 function ownDiagram(g, byId, out, root, kids) {
@@ -3107,10 +3112,16 @@ function ownDiagram(g, byId, out, root, kids) {
   //   → 열은 MAXCOL개로 제한하고(지분율·자회사수 순), 나머지는 세로 스택으로 보낸다.
   const MAXCOL = 10;
   const nSub = (e) => (out[byId[e.t].id] || []).filter((x) => ownIsCtrl(byId[x.t], x.rate)).length;
+  /* 열 선정 기준(v269): 자회사 '수'만 보면 **상장 계열사가 밀려난다**
+     (실측: SK스퀘어는 자회사가 1개뿐이라 상위 10열에 못 들어 SK하이닉스가 도식에서 통째로 빠졌다)
+     → 그 열이 품는 **상장사 수**를 1순위로 본다. 사람이 찾는 건 대개 상장 계열사다. */
+  const nListed = (e) => (byId[e.t].listed ? 1 : 0)
+    + (out[byId[e.t].id] || []).filter((x) => ownIsCtrl(byId[x.t], x.rate) && byId[x.t].listed).length;
   const withAll = kids.filter((e) => nSub(e) > 0)
-    .sort((a, b) => (nSub(b) - nSub(a)) || (b.rate - a.rate));
+    .sort((a, b) => (nListed(b) - nListed(a)) || (nSub(b) - nSub(a)) || (b.rate - a.rate));
   const kidsWith = withAll.slice(0, MAXCOL);
-  const kidsNoneAll = kids.filter((e) => !kidsWith.includes(e));
+  const kidsNoneAll = kids.filter((e) => !kidsWith.includes(e))
+    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || (b.rate - a.rate));
   const kidsNone = kidsNoneAll.slice(0, Math.max(0, LIMIT - kidsWith.length));
   const omitted = kidsNoneAll.length - kidsNone.length;
   // 스택 열 수를 제한해 폭이 무한정 늘어나지 않게(세로로 길어지는 편이 읽기 낫다)
@@ -3133,13 +3144,13 @@ function ownDiagram(g, byId, out, root, kids) {
   person.slice(0, 2).forEach((e, i) => {
     const w = 108, x = cx - w / 2 + (i - (person.length - 1) / 2) * 124;
     svg += ownShape(x, yPer, w, 30, "person") + ownLabel(x, yPer, w, 30, byId[e.f]);
-    svg += ownArrow(x + w / 2, yPer + 30, cx, yRoot, e.rate);
+    svg += ownArrow(x + w / 2, yPer + 30, cx, yRoot, e.rate, null, "src");
   });
   corp.slice(0, 6).forEach((e, i) => {
     const half = Math.ceil(corp.length / 2), left = i < half, idx = left ? i : i - half;
     const x = left ? GAP + idx * (COL + GAP) : W - GAP - (idx + 1) * (COL + GAP) + GAP;
     svg += ownShape(x, yHold, COL, BOX, "holder") + ownLabel(x, yHold, COL, BOX, byId[e.f]);
-    svg += ownArrow(x + COL / 2, yHold + BOX, cx, yRoot, e.rate, left ? "start" : "end");
+    svg += ownArrow(x + COL / 2, yHold + BOX, cx, yRoot, e.rate, null, "src");
   });
   const rw = 178, rx = cx - rw / 2;
   svg += ownShape(rx, yRoot, rw, 42, "root") + ownLabel(rx, yRoot, rw, 42, root);
@@ -3185,31 +3196,76 @@ function ownDiagram(g, byId, out, root, kids) {
       <path d="M0,0 L0,4.4 L6,2.2 z" fill="#8aa0c0"/></marker></defs>${svg}</svg></div>`;
 }
 
+let OWN_SEARCH = null, OWN_NAMES = [], ownQ = "";
+
 async function initOwnership() {
   ownRendered = true;
   if (!LOOKUP_INDEX) await aiIndexReady();
   if (!OWN_IDX) {
     OWN_IDX = await fetch("data/ownership/index.json" + _cb).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+    OWN_SEARCH = await fetch("data/ownership/search.json" + _cb)
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
   }
-  const sel = $("#own-pick");
-  const names = OWN_IDX.map((k) => {
+  OWN_NAMES = OWN_IDX.map((k) => {
     const code = k.slice(3);
     const s = (LOOKUP_INDEX || []).find((x) => x.ticker === code);
-    return { key: k, code, name: s?.name || code };
-  }).sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  sel.innerHTML = names.map((n) => `<option value="${n.key}">${ownEsc(n.name)}</option>`).join("");
-  if (!names.length) {
+    return { key: k, code, name: s?.name || OWN_SEARCH?.groups?.[k]?.name || code,
+             n: OWN_SEARCH?.groups?.[k]?.n || 0 };
+  }).sort((a, b) => b.n - a.n);
+  if (!OWN_NAMES.length) {
     $("#own-body").innerHTML = `<p class="mini-note">아직 수집된 지분도가 없습니다 —
       <code>python analysis\\ownership.py --top 300</code> 실행 필요</p>`;
     return;
   }
-  sel.onchange = () => ownLoad(sel.value);
-  ownLoad(ownSel && OWN_IDX.includes(ownSel) ? ownSel : names[0].key);
+  const q = $("#own-q");
+  if (q) q.oninput = () => { ownQ = q.value.trim(); ownPickRender(); };
+  ownPickRender();
+  ownLoad(ownSel && OWN_IDX.includes(ownSel) ? ownSel : OWN_NAMES[0].key);
+}
+
+/* 회사 선택 — 드롭다운은 300개를 훑기 어렵다 → 목록 + 검색.
+   ⚠검색은 **그룹명만이 아니라 계열사명으로도** 걸린다(사용자 요청: "호텔신라를 치면 어느 도식에 있는지").
+   근거 데이터는 ownership.py가 만드는 search.json(계열사 정제명 → 그 이름이 등장하는 그룹들). */
+function ownPickRender() {
+  const host = $("#own-list");
+  if (!host) return;
+  const q = ownQ.replace(/\s+/g, "");
+  const hit = (s) => q && String(s).replace(/\s+/g, "").toLowerCase().includes(q.toLowerCase());
+  const btn = (g, extra) => `<button class="own-pill${g.key === ownSel ? " active" : ""}"
+      data-k="${g.key}">${ownEsc(g.name)}<i>${g.n}사</i>${extra || ""}</button>`;
+
+  if (!q) {
+    const top = OWN_NAMES.slice(0, 40);
+    host.innerHTML = `<div class="own-pills">${top.map((g) => btn(g)).join("")}</div>
+      <p class="sub-note">계열사가 많은 순 상위 ${top.length}개 · 전체 ${OWN_NAMES.length}개 —
+        회사명이나 <b>계열사명</b>(예: 호텔신라)을 검색하세요.</p>`;
+  } else {
+    const groups = OWN_NAMES.filter((g) => hit(g.name));
+    // 계열사 검색: 정제명 → 그 계열사를 품은 그룹들
+    const mem = OWN_SEARCH?.members || {};
+    const memHits = Object.keys(mem).filter((k) => hit(k)).slice(0, 14);
+    const gName = (k) => OWN_NAMES.find((g) => g.key === k)?.name || k;
+    const inGroup = new Set(groups.map((g) => g.key));
+    host.innerHTML =
+      (groups.length ? `<div class="own-pills">${groups.slice(0, 20).map((g) => btn(g)).join("")}</div>` : "") +
+      (memHits.length ? `<div class="own-mem">${memHits.map((k) => {
+        const keys = (mem[k] || []).filter((x) => OWN_IDX.includes(x));
+        if (!keys.length) return "";
+        return `<div class="own-memrow"><span class="own-memnm">${ownEsc(k)}</span>
+          <span class="sub-note">→</span>
+          ${keys.map((x) => `<button class="own-pill sm${x === ownSel ? " active" : ""}"
+            data-k="${x}">${ownEsc(gName(x))} 지분도</button>`).join("")}</div>`;
+      }).join("")}</div>` : "") +
+      (!groups.length && !memHits.length
+        ? `<p class="mini-note">'${ownEsc(ownQ)}' 검색 결과가 없습니다. 지분도는 시총 상위 그룹부터 수집합니다.</p>`
+        : (inGroup.size || memHits.length) ? "" : "");
+  }
+  host.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => ownLoad(b.dataset.k));
 }
 
 async function ownLoad(key) {
   ownSel = key;
-  $("#own-pick").value = key;
+  ownPickRender();
   $("#own-body").innerHTML = `<p class="mini-note">불러오는 중…</p>`;
   OWN_G = await fetch(`data/ownership/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   ownRender();
@@ -7175,7 +7231,10 @@ function asLines(host, defs, opt = {}) {
   const xl = months.map((m, i) => (i % step === 0 || i === months.length - 1)
     ? `<text x="${X(m)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === months.length - 1 ? "end" : "middle"}"
         class="cr-ax">${m}</text>` : "").join("");
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${grid}${zero}${paths}${labels}${xl}</svg>`;
+  // ⚠height를 픽셀로 고정하면 2열 배치에서 위아래 여백만 생긴다(viewBox가 letterbox됨)
+  //   → 높이는 viewBox 비율이 정하게 두고 폭에만 맞춘다.
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="height:auto;display:block">`
+    + `${grid}${zero}${paths}${labels}${xl}</svg>`;
 }
 
 const asS = (k) => ASSETS?.series?.[k];
@@ -7192,7 +7251,17 @@ function renderAssets() {
       부동산·채권·환율은 <b>한국은행 ECOS</b>, 주가·코인은 yfinance. 2000년 이후 월간 데이터로
       19개 시장의 <b>교차상관(−12~+12개월)</b>을 전수 계산해 선행관계를 추렸습니다.
       <span class="sub-note">${d.generated} 갱신 · 상관은 인과가 아니며 표본이 월 단위라 참고 지표입니다.</span>`;
-    asCards(); asLeadTable(); asRealEstate(); asBond(); asFx(); asGold();
+    asCards(); asPerf(); asLeadTable(); asRealEstate(); asBond(); asFx(); asGold();
+    $("#as-perf-cur").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asPerfCur = b.dataset.c;
+      $("#as-perf-cur").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asPerf();
+    });
+    $("#as-perf-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      asPerfYears = +b.dataset.r;
+      $("#as-perf-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      asPerf();
+    });
     $("#as-fx-mode").querySelectorAll("button").forEach((b) => b.onclick = () => {
       asFxMode = b.dataset.m;
       $("#as-fx-mode").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
@@ -7214,6 +7283,72 @@ function renderAssets() {
       asBond();
     });
   });
+}
+
+/* 📊 자산군 성과 비교(v269) — "어느 시장이 어느 시장을 앞섰나"(로테이션)와 별개로,
+   **실제로 어느 자산이 돈을 벌어줬나**를 같은 기간·같은 출발점(100)에서 비교한다.
+   ⚠해외 자산을 현지 통화로 보면 한국 투자자의 실제 수익이 아니다 → 기본은 **원/달러로 환산**.
+     (엔·유로 표시 자산은 없어 달러 환산만으로 충분하다. 부동산·코스피는 이미 원화.) */
+let asPerfCur = "krw", asPerfYears = 5;
+const AS_PERF = [
+  { k: "kospi", ko: "코스피", usd: false, c: "#f5445a" },
+  { k: "sp500", ko: "S&P500", usd: true, c: "#4391ff" },
+  { k: "nasdaq", ko: "나스닥", usd: true, c: "#38bdf8" },
+  { k: "apt_kr", ko: "전국 아파트", usd: false, c: "#22c07a" },
+  { k: "apt_se", ko: "서울 아파트", usd: false, c: "#a3e635" },
+  { k: "gold", ko: "금", usd: true, c: "#f0b34c" },
+  { k: "btc", ko: "비트코인", usd: true, c: "#fb923c" },
+  { k: "usdkrw", ko: "원/달러", usd: false, c: "#9d7bff" },
+];
+
+function asPerf() {
+  const host = $("#as-perf"), tbl = $("#as-perf-tbl");
+  if (!host) return;
+  const fx = asS("usdkrw");
+  const fxAt = fx ? Object.fromEntries(fx.t.map((m, i) => [m, fx.v[i]])) : {};
+  const last = asS("kospi")?.t.slice(-1)[0] || "";
+  // 기간 시작 월(0=전 구간)
+  const from = asPerfYears
+    ? `${(+last.slice(0, 4) - asPerfYears)}-${last.slice(5, 7)}` : "2000-01";
+
+  const defs = [], rows = [];
+  AS_PERF.forEach((a) => {
+    const s = asS(a.k);
+    if (!s) return;
+    const idx = s.t.map((m, i) => i).filter((i) => s.t[i] >= from && s.v[i] != null);
+    if (idx.length < 6) return;
+    // 원화 환산: 달러 표시 자산 × 원/달러(해당 월). 환율이 없는 달은 건너뛴다.
+    const conv = (i) => {
+      const v = s.v[i];
+      if (!(asPerfCur === "krw" && a.usd)) return v;
+      const r = fxAt[s.t[i]];
+      return r ? v * r : null;
+    };
+    const tt = [], vv = [];
+    idx.forEach((i) => { const v = conv(i); if (v != null) { tt.push(s.t[i]); vv.push(v); } });
+    if (vv.length < 6) return;
+    const base = vv[0];
+    defs.push({ name: a.ko, color: a.c, t: tt, v: vv.map((x) => x / base * 100) });
+    const yrs = Math.max(0.5, (tt.length - 1) / 12);
+    const tot = vv[vv.length - 1] / base - 1;
+    rows.push({ ko: a.ko, c: a.c, tot, cagr: Math.pow(1 + tot, 1 / yrs) - 1,
+                from: tt[0], to: tt[tt.length - 1] });
+  });
+  if (!defs.length) { host.innerHTML = `<p class="mini-note">데이터 없음</p>`; return; }
+  asLines("#as-perf", defs, { fmt: (v) => v.toFixed(0), h: 330 });
+
+  rows.sort((a, b) => b.tot - a.tot);
+  const pc = (v) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+  const span = rows[0] ? `${rows[0].from} ~ ${rows[0].to}` : "";
+  tbl.innerHTML = `<table class="as-perf-t"><thead><tr>
+      <th>자산</th><th>누적</th><th>연평균</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td><i style="background:${r.c}"></i>${r.ko}</td>
+      <td class="${r.tot >= 0 ? "kup" : "kdn"}">${pc(r.tot)}</td>
+      <td class="${r.cagr >= 0 ? "kup" : "kdn"}">${pc(r.cagr)}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="sub-note">${span} 월말 기준 ·
+      ${asPerfCur === "krw" ? "해외 자산은 <b>원/달러 환산</b>(환차손익 포함)" : "각 자산의 <b>현지 통화</b> 기준"} ·
+      배당·임대수익 제외한 <b>가격 수익</b>. 부동산은 KB 가격지수라 거래비용·보유세가 빠져 있습니다.</p>`;
 }
 
 function asCards() {
@@ -7315,7 +7450,7 @@ function asRealEstate() {
   leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
     <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
     (asReMode === "supply" ? `<span class="sub-note">첫 시점=100으로 맞춘 상대 추이(단위가 달라 직접 비교 불가)</span>` : "");
-  asLines("#as-re", defs, { ...opt, from: "2005-01", h: 320 });
+  asLines("#as-re", defs, { ...opt, from: "2005-01", h: 300 });
 }
 
 /* 💱 환율 — 원화 대비 통화 / 달러·유로 지수 / 원화 강약
@@ -7362,7 +7497,7 @@ function asFx() {
   }
   leg.innerHTML = defs.map((d, i) => `<span class="cr-chip" style="cursor:default">
     <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") + `<span class="sub-note">${note}</span>`;
-  asLines("#as-fx", defs, { ...opt, h: 320 });
+  asLines("#as-fx", defs, { ...opt, h: 300 });
 }
 
 /* 🥇 금·귀금속 ↔ 증시 */
@@ -7379,7 +7514,7 @@ function asGold() {
       <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
       `<span class="sub-note">2016-01=100. 점선=주가지수 — 금이 주식과 <b>같이 갈 때(유동성 장세)</b>와
        <b>엇갈릴 때(위험회피)</b>가 구분됩니다.</span>`;
-    asLines("#as-gold", defs, { fmt: (v) => v.toFixed(0), from: "2016-01", h: 320 });
+    asLines("#as-gold", defs, { fmt: (v) => v.toFixed(0), from: "2016-01", h: 300 });
     return;
   }
   // 관계 표 — 금·은이 증시와 어떤 시차·방향으로 엮이는지
@@ -7428,7 +7563,7 @@ function asBond() {
     <i style="background:${AS_COLORS[i % 7]}"></i>${d.name}</span>`).join("") +
     (asBondMode === "spread"
       ? `<span class="sub-note">장단기 = 국고 10년−3년(경기) · 신용 = 회사채 BBB−−국고 3년(위험선호). 벌어지면 위험회피</span>` : "");
-  asLines("#as-bond", defs, { ...opt, from: "2005-01", h: 320 });
+  asLines("#as-bond", defs, { ...opt, from: "2005-01", h: 300 });
 }
 
 /* ---------- 트렌드 레이더 (trends.json — 네이버 데이터랩+구글 급상승) ---------- */
