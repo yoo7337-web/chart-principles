@@ -2209,12 +2209,12 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   border-radius: 999px; padding: 2px 9px; margin-left: 6px; }
 
 /* 딜 구조도 — 대상의 기존 지배구조 반영(v271) */
-.ds-body { grid-template-columns: 320px minmax(0, 1fr); }
+.ds-body { grid-template-columns: 420px minmax(0, 1fr); }
 .ds-arrow.nohead { marker-end: none; }
 .ds-node.go { cursor: pointer; }
 .ds-node.go:hover .ds-box { stroke: var(--accent); }
 .ds-own-note { font-size: .68rem; color: var(--muted); margin: 2px 0 0; line-height: 1.35; }
-@media (max-width: 860px) { .ds-body { grid-template-columns: 1fr; } .ds-left { max-width: 320px; } }
+@media (max-width: 940px) { .ds-body { grid-template-columns: 1fr; } .ds-left { max-width: 420px; } }
 
 /* 관심종목 카드 보강(v272) */
 .ws-grid > .ws-ind { grid-column: 1 / -1; }          /* 산업 맥락은 좌우 전폭 */

@@ -2709,50 +2709,117 @@ async function dsOwnCtx(name) {
   return (parents.length || kids.length) ? { parents, kids, group: g.name } : null;
 }
 
-/* 대상의 지배구조 + 인수자 — 세로축은 소유(위=지배), 가로축은 이번 거래 */
-function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
-  const W = 320, BW = 168, LX = 6, BH = 34;
-  const rx = LX + BW / 2;
-  const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
-  const yP = 6, yT = ctx.parents.length ? 78 : 30, yK = yT + BH + 30;
-  let svg = "";
-  const box = (bx, by, bw, bh, cls, name, sub, tk) => `
-    <g class="ds-node${tk ? " go" : ""}"${tk ? ` data-go="kr_${tk}"` : ""}>
-      <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="7" class="ds-box ds-box-${cls}"/>
-      <text x="${bx + bw / 2}" y="${by + (sub ? 15 : bh / 2 + 4)}" class="ds-box-t">${tk ? "★" : ""}${dsName(name).slice(0, 13)}</text>
-      ${sub ? `<text x="${bx + bw / 2}" y="${by + 27}" class="ds-box-s">${dsEsc(sub)}</text>` : ""}
-    </g>`;
-  // ① 위: 기존 지배회사
-  ctx.parents.forEach((pn, i) => {
-    const w = ctx.parents.length > 1 ? BW / 2 - 4 : BW;
-    const bx = LX + i * (w + 8);
-    svg += box(bx, yP, w, BH, "seller", pn.name, "지배회사", pn.ticker);
-    svg += `<path d="M${bx + w / 2},${yP + BH} L${bx + w / 2},${yT - 6}" class="ds-arrow"/>
-      <text x="${bx + w / 2 + 3}" y="${yP + BH + 16}" class="ds-arrow-t">${pn.rate != null ? pn.rate + "%" : ""}</text>`;
-  });
-  // ② 가운데: 대상
-  svg += box(LX, yT, BW, BH + 6, "tgt", x.target || x.corp, "대상", null);
-  // ③ 오른쪽: 인수자 → 대상 (이번 거래)
-  if (acquirer) {
-    const ax = LX + BW + 40, aw = W - ax - 6;
-    svg += box(ax, yT, aw, BH + 6, "acq", acquirer, acqLabel, null);
-    svg += `<path d="M${ax - 4},${yT + BH / 2 + 3} L${LX + BW + 6},${yT + BH / 2 + 3}" class="ds-arrow"/>
-      <text x="${ax - 6}" y="${yT - 4}" class="ds-arrow-t" text-anchor="end">${dsEsc(amtTxt || "취득")}</text>`;
+/* 구조도 공통(v280) — 회사명이 길어 잘리던 문제를 **2줄 래핑**으로 푼다.
+   한글은 글자당 폰트크기와 비슷한 폭, 영문·숫자는 그 55% 정도를 먹는다. */
+const DS_W = 420;                       // 구조도 캔버스 폭(좌측 열과 같은 값)
+
+function dsTextW(s, fs) {
+  let w = 0;
+  for (const ch of String(s)) w += /[가-힣ㄱ-ㅎ]/.test(ch) ? fs : fs * 0.56;
+  return w;
+}
+
+function dsWrap(name, boxW, fs, maxLines = 2) {
+  const s = dsName(name);
+  const lim = boxW - 10;
+  if (dsTextW(s, fs) <= lim) return [s];
+  const lines = [];
+  let cur = "";
+  for (const ch of s) {
+    if (dsTextW(cur + ch, fs) > lim) {
+      lines.push(cur);
+      cur = ch;
+      if (lines.length === maxLines - 1 && dsTextW(s.slice(s.indexOf(cur)), fs) > lim) break;
+    } else cur += ch;
   }
+  lines.push(cur);
+  if (lines.length > maxLines) {
+    const keep = lines.slice(0, maxLines);
+    keep[maxLines - 1] = keep[maxLines - 1].slice(0, -1) + "…";
+    return keep;
+  }
+  return lines;
+}
+
+/* 박스 하나 — 이름 줄 수에 따라 높이가 자란다(잘라내지 않는다) */
+function dsBox(x, y, w, cls, name, sub, tk, fs = 11) {
+  const lines = dsWrap(name, w, fs);
+  const h = Math.max(sub ? 34 : 24, lines.length * (fs + 3) + (sub ? 14 : 9));
+  const y0 = y + (h - (lines.length * (fs + 3) + (sub ? 11 : 0))) / 2 + fs;
+  const body = lines.map((l, i) => `<text x="${x + w / 2}" y="${(y0 + i * (fs + 3)).toFixed(1)}"
+      class="ds-box-t" style="font-size:${fs}px">${i === 0 && tk ? "★" : ""}${dsEsc(l)}</text>`).join("");
+  return {
+    h,
+    svg: `<g class="ds-node${tk ? " go" : ""}"${tk ? ` data-go="kr_${tk}"` : ""}>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" class="ds-box ds-box-${cls}"/>
+      ${body}${sub ? `<text x="${x + w / 2}" y="${(y + h - 6).toFixed(1)}" class="ds-box-s">${dsEsc(sub)}</text>` : ""}
+    </g>`,
+  };
+}
+
+/* 대상의 지배구조 + 인수자 — 세로축은 소유(위=지배), 가로축은 이번 거래.
+   ctx가 없으면(지분도 색인에 없는 딜) 소유 계보 없이 **거래 당사자만** 같은 형식으로 그린다. */
+function dsDiagramOwn(x, ctx, acquirer, acqLabel) {
+  const W = DS_W, LX = 8, BW = 236, AX = LX + BW + 42, AW = W - AX - 8;
+  const amtTxt = [dsAmt(x.amount), x.stake_after ? `${x.stake_after}%` : null].filter(Boolean).join(" · ");
+  const parents = ctx?.parents || [], kids = ctx?.kids || [];
+  const seller = !parents.length && x.counter && x.counter !== acquirer ? x.counter : null;
+  let svg = "";
+  let y = 6;
+
+  // ① 위: 기존 지배회사(없으면 이번 거래의 매도자)
+  const ups = parents.length ? parents.map((n) => [n.name, `${n.rate != null ? n.rate + "%" : ""}`, "지배회사", n.ticker])
+    : seller ? [[seller, "", "매도자", null]] : [];
+  let yTgt = 6;
+  if (ups.length) {
+    const uw = ups.length > 1 ? (BW - 8) / 2 : BW;
+    let hMax = 0;
+    ups.slice(0, 2).forEach(([nm, , sub, tk], i) => {
+      const bx = LX + i * (uw + 8);
+      const b = dsBox(bx, y, uw, "seller", nm, sub, tk, ups.length > 1 ? 10 : 11);
+      svg += b.svg;
+      hMax = Math.max(hMax, b.h);
+    });
+    yTgt = y + hMax + 34;
+    ups.slice(0, 2).forEach(([, rate], i) => {
+      const uw2 = ups.length > 1 ? (BW - 8) / 2 : BW;
+      const cx = LX + i * (uw2 + 8) + uw2 / 2;
+      svg += `<path d="M${cx},${y + hMax} L${cx},${yTgt - 5}" class="ds-arrow"/>
+        ${rate ? `<text x="${cx + 4}" y="${y + hMax + 15}" class="ds-arrow-t">${rate}</text>` : ""}`;
+    });
+  }
+
+  // ② 가운데: 대상
+  const tgt = dsBox(LX, yTgt, BW, "tgt", x.target || x.corp, "대상", null, 12);
+  svg += tgt.svg;
+
+  // ③ 오른쪽: 인수자 → 대상
+  if (acquirer) {
+    const ab = dsBox(AX, yTgt, AW, "acq", acquirer, acqLabel, null, 11);
+    svg += ab.svg;
+    const my = yTgt + Math.min(tgt.h, ab.h) / 2;
+    svg += `<path d="M${AX - 4},${my} L${LX + BW + 6},${my}" class="ds-arrow"/>
+      <text x="${AX - 6}" y="${my - 7}" class="ds-arrow-t" text-anchor="end">${dsEsc(amtTxt || "취득")}</text>`;
+  }
+
   // ④ 아래: 대상의 자회사
-  let bottom = yT + BH + 6;
-  ctx.kids.forEach((kn, i) => {
-    const by = yK + i * 26;
-    svg += `<path d="M${LX + 14},${yT + BH + 6} L${LX + 14},${by + 10} L${LX + 26},${by + 10}" class="ds-arrow nohead"/>
-      <text x="${LX + 17}" y="${by + 7}" class="ds-arrow-t">${kn.rate != null ? kn.rate + "%" : ""}</text>`;
-    svg += box(LX + 26, by, BW - 26, 20, "sub", kn.name, null, kn.ticker);
-    bottom = by + 20;
+  let bottom = yTgt + tgt.h;
+  let ky = bottom + 22;
+  kids.forEach((kn) => {
+    const b = dsBox(LX + 34, ky, BW - 34, "sub", kn.name, null, kn.ticker, 10);
+    svg += `<path d="M${LX + 14},${bottom} L${LX + 14},${ky + b.h / 2} L${LX + 32},${ky + b.h / 2}" class="ds-arrow nohead"/>
+      <text x="${LX + 17}" y="${ky + b.h / 2 - 3}" class="ds-arrow-t">${kn.rate != null ? kn.rate + "%" : ""}</text>`;
+    svg += b.svg;
+    ky += b.h + 6;
   });
-  const H = Math.max(bottom + 8, yT + BH + 16);
+  const H = Math.max(ky + 4, yTgt + tgt.h + 10);
+  const note = ctx
+    ? `세로=소유구조(위가 지배) · 가로=이번 거래 · 출처: ${dsEsc(ctx.group)} 소유지분도`
+    : "가로=이번 거래 · 대상의 소유구조는 지분도 수집 범위(시총 상위 400 그룹) 밖입니다";
   return `<svg viewBox="0 0 ${W} ${H}" class="ds-svg">
     <defs><marker id="dsah" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto">
       <path d="M0,0 L0,5 L7,2.5 z" fill="#7cb1ff"/></marker></defs>${svg}</svg>
-    <p class="ds-own-note">세로=소유구조(위가 지배) · 가로=이번 거래 · 출처: ${dsEsc(ctx.group)} 소유지분도</p>`;
+    <p class="ds-own-note">${note}</p>`;
 }
 
 /* 카드가 그려진 뒤 비동기로 구조도를 교체 — 지분도 파일이 없으면 기존 그림 유지 */
@@ -2762,10 +2829,12 @@ async function dsEnrich(host) {
     let x;
     try { x = JSON.parse(el.dataset.deal); } catch { continue; }
     if (x.side === "merge") continue;                    // 합병은 존속·소멸 그림이 더 맞다
+    // ⚠지분도에 없는 딜(해외·소규모 비상장)이 대부분이다 → ctx 없이도 **같은 형식**으로 다시 그린다
+    //   (기존엔 이 경우 옛 3박스 그림이 남아 카드마다 모양이 달랐다)
     const ctx = await dsOwnCtx(x.target || x.corp);
-    if (!ctx) continue;
     const acq = x.side === "out" ? (x.counter || null) : x.corp;
-    el.innerHTML = dsDiagramOwn(x, ctx, acq, x.side === "out" ? "인수자" : "인수자");
+    if (!ctx && !acq && !x.target) continue;
+    el.innerHTML = dsDiagramOwn(x, ctx, acq, "인수자");
     el.querySelectorAll("[data-go]").forEach((g) => g.onclick = () => {
       gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(g.dataset.go);
     });
@@ -3530,6 +3599,12 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v280", "2026-08-02", "딜 구조도 확대 — 이름 잘림 해소 · 모든 딜을 같은 형식으로",
+   "구조도 영역을 **320 → 420px**로 넓히고, 회사명이 13자에서 잘리던 문제를 **줄바꿈**으로 고쳤습니다 "
+   + "('SK Siltron Am' → 'SK Siltron America, Inc.'). 이름이 길면 박스 높이가 자동으로 늘어납니다.\n\n"
+   + "지분도에 없는 딜(해외·소규모 비상장)은 옛 그림이 그대로 남아 카드마다 모양이 달랐는데, "
+   + "이제 **모든 딜이 같은 형식**입니다 — 소유 계보가 있으면 지배회사·자회사까지, 없으면 "
+   + "매도자 → 대상 ← 인수자 구조로 그리고 그 사실을 아래에 명시합니다."],
   ["v279", "2026-08-02", "종목조회 정리 — 신호는 원칙 목록만 · 개요+투자지표 · 수급+컨센서스",
    "신호 영역에서 **라디오 필터 4종·'신호 끄기'·축약 칩**을 뺐습니다. 이제 **채택 원칙 / 참고 원칙(미채택)** "
    + "두 목록만 남고, 항목을 클릭하면 그 원칙의 신호가 차트에 표시됩니다.\n\n"
