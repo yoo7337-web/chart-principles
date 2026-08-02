@@ -6,16 +6,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=288">
-<script src="firebase-config.js?v=288"></script>
-<script src="js/auth.js?v=288"></script>
+<link rel="stylesheet" href="css/style.css?v=292">
+<script src="firebase-config.js?v=292"></script>
+<script src="js/auth.js?v=292"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=288"></script>
+<script src="js/sync.js?v=292"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 <header>
   <h1>📈 시장분석 <span class="sub">— 시장·종목·트렌드 데이터 종합 분석</span></h1>
+  <!-- v277: 종목 조회를 '종목 찾기' 그룹 안에서 꺼내 **제목 라인에 상시 배치**.
+       어느 탭을 보고 있든 종목명을 치면 바로 종목 조회로 이동한다(사용자 요청). -->
+  <label class="hdr-search">🔍 <input type="text" id="hdr-q" autocomplete="off"
+      list="lookup-list" placeholder="종목 조회 (예: 삼성전자, NVDA)"></label>
+  <datalist id="lookup-list"></datalist>
 </header>
 
 <nav class="groups">
@@ -39,7 +44,6 @@
   <button class="tab" data-tab="rotation">산업 진단</button>
   <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="today">오늘의 신호</button>
-  <button class="tab" data-tab="lookup">종목 조회</button>
   <button class="tab" data-tab="value">내재가치</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
   <button class="tab" data-tab="disc">📢 공시 스캐너</button>
@@ -376,9 +380,7 @@
     <!-- v218: 검색창을 맨 왼쪽으로(사용자 요청 — 우측 끝은 시선 이동이 큼) -->
     <!-- v269: 검색창 디자인을 내재가치 탭과 통일(라벨 + 넓은 입력) -->
     <div id="lk-sticky" class="lk-sticky empty">
-      <label class="lk-sticky-search">종목 검색 <input type="text" id="lookup-q" placeholder="이름 또는 티커 (예: 삼성전자, AAPL)" list="lookup-list" autocomplete="off">
-      <datalist id="lookup-list"></datalist></label>
-      <span class="sub-note" id="lk-sticky-hint">종목을 검색하세요</span>
+      <span class="sub-note" id="lk-sticky-hint">위 <b>🔍 종목 조회</b> 검색창에 종목명을 입력하세요</span>
       <span class="lk-sticky-gap"></span>
     </div>
     <!-- 검색 아래 전체를 2단: 좌=본문(헤더·차트·개요~원칙성적) / 우=레일(호가·프로파일·메모) -->
@@ -1218,7 +1220,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=288"></script>
+<script src="js/app.js?v=292"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

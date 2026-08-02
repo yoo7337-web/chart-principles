@@ -2257,3 +2257,13 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ov-rel i { font-style: normal; font-size: .72rem; color: var(--muted); }
 .ov-rel.go { cursor: pointer; }
 .ov-rel.go:hover { border-color: var(--accent); }
+
+/* 🔍 제목 라인 전역 종목 조회(v277) */
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+header h1 { margin-right: auto; }
+.hdr-search { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.hdr-search input { padding: 6px 12px; font-size: .86rem; width: min(280px, 46vw);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+  color: var(--ink); outline: none; }
+.hdr-search input:focus { border-color: var(--accent); }
+@media (max-width: 700px) { .hdr-search input { width: 100%; } }

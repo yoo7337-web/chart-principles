@@ -122,7 +122,16 @@ let currentTab = "heatmap";
 // 그룹 nav·탭바 표시까지 동기화하는 완전 이동 (뒤로가기·해시 복원용)
 function gotoTabFull(tabId) {
   const nav = document.querySelector(`.tabs [data-tab="${navIdOf(tabId)}"]`)?.closest(".tabs");
-  if (!nav) return;
+  /* v277: '종목 조회'는 어느 그룹에도 속하지 않는 **전역 화면**이 됐다(제목 라인 검색으로 진입).
+     nav 버튼이 없으므로 여기서 그냥 return하면 화면이 안 바뀐다 → 소탭 줄만 접고 섹션을 연다.
+     상단 그룹 버튼은 그대로 있어 언제든 원래 그룹으로 돌아갈 수 있다. */
+  if (!nav) {
+    if (!document.getElementById("tab-" + tabId)) return;
+    document.querySelectorAll(".group").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll(".tabs").forEach((n) => { n.style.display = "none"; });
+    activateTab(tabId);
+    return;
+  }
   const group = nav.dataset.groupTabs;
   document.querySelectorAll(".group").forEach((x) => x.classList.toggle("active", x.dataset.group === group));
   document.querySelectorAll(".tabs").forEach((n) => {
@@ -1144,15 +1153,34 @@ function initLookup() {
     LOOKUP_INDEX = j.stocks;
     $("#lookup-list").innerHTML = LOOKUP_INDEX.map((s) =>
       `<option value="${s.market === "kr" ? s.name + " (" + s.ticker + ")" : s.ticker}">`).join("");
-    $("#lookup-q").addEventListener("change", () => {
-      const q = $("#lookup-q").value.trim().toLowerCase();
-      const hit = LOOKUP_INDEX.find((s) =>
-        q === s.ticker.toLowerCase() || q === s.name.toLowerCase() ||
-        q === (s.name + " (" + s.ticker + ")").toLowerCase() ||
-        s.name.toLowerCase().includes(q) || s.ticker.toLowerCase().includes(q));
-      if (hit) loadLookup(hit.market + "_" + hit.ticker);
-    });
   });
+}
+
+/* 🔍 전역 종목 검색(v277) — 헤더에 상시 노출. 어느 탭에서든 종목 조회로 이동한다.
+   ⚠종목조회 탭에 처음 들어가기 전에도 동작해야 하므로 인덱스를 **앱 시작 시** 받아 둔다
+     (전에는 initLookup 안에서만 받아 다른 탭에선 검색이 죽어 있었다). */
+async function initHeaderSearch() {
+  const el = document.getElementById("hdr-q");
+  if (!el) return;
+  if (!LOOKUP_INDEX) await aiIndexReady();
+  const dl = document.getElementById("lookup-list");
+  if (dl && !dl.children.length && LOOKUP_INDEX)
+    dl.innerHTML = LOOKUP_INDEX.map((x) =>
+      `<option value="${x.market === "kr" ? x.name + " (" + x.ticker + ")" : x.ticker}">`).join("");
+  const go = () => {
+    const q = el.value.trim().toLowerCase();
+    if (!q) return;
+    const hit = (LOOKUP_INDEX || []).find((x) =>
+      q === x.ticker.toLowerCase() || q === x.name.toLowerCase() ||
+      q === (x.name + " (" + x.ticker + ")").toLowerCase() ||
+      x.name.toLowerCase().includes(q) || x.ticker.toLowerCase().includes(q));
+    if (!hit) return;
+    gotoTabFull("lookup");
+    if (!lookupRendered) initLookup();
+    loadLookup(hit.market + "_" + hit.ticker);
+  };
+  el.addEventListener("change", go);
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
 }
 
 /* v214: stocks/*.json의 series는 용량 때문에 **압축 배열** [t,o,h,l,c,v]로 저장된다.
@@ -1178,7 +1206,8 @@ function loadLookup(key) {
      "lookup-filter", "lookup-profile", "draw-tools"]
       .forEach((id) => { document.getElementById(id).style.display = ""; });
     $("#lookup-filter").style.display = "flex";
-    $("#lookup-q").value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
+    const hq = document.getElementById("hdr-q");
+    if (hq) hq.value = st.market === "kr" ? `${st.name} (${st.ticker})` : st.ticker;
     // v213: 위 sticky 바의 종목 요약은 아래 헤더(#lookup-head)와 같은 정보라 제거 — 헤더 자체를 고정한다.
     $("#lk-sticky").classList.remove("empty");
     const hint = $("#lk-sticky-hint");
@@ -3505,6 +3534,12 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v277", "2026-08-02", "종목 조회를 제목 라인으로 — 어느 화면에서든 바로 검색",
+   "**종목 조회를 '종목 찾기' 그룹에서 꺼내 제목(시장분석) 옆에 상시 배치**했습니다. "
+   + "이제 시장·원칙·내 투자 어느 화면을 보고 있든 종목명을 입력하면 곧바로 그 종목의 조회 화면으로 넘어갑니다. "
+   + "그룹 버튼을 누르면 보던 곳으로 그대로 돌아옵니다.\n\n"
+   + "Snapshot의 **배당 차트 글자 크기**가 실적·현금흐름 뷰와 달라 보이던 것도 맞췄습니다 "
+   + "(좌표계가 좁아 같은 폰트가 1.4배로 확대돼 보이던 문제)."],
   ["v276", "2026-08-02", "종목조회 재배치 — 기업개요 최상단 · 신호는 우측 레일 · 그룹 관계 추가",
    "종목을 열면 **기업개요가 가장 먼저** 보이도록 위로 올렸습니다(어떤 회사인지 먼저 확인). "
    + "원칙 신호 필터와 채택/참고 원칙 목록은 차트를 읽는 도구이므로 **오른쪽 분할 화면**으로 옮겼습니다 "
@@ -9688,7 +9723,10 @@ function divPanel(st) {
   for (let i = act.length - 1; i > 0; i--) { if (act[i].dps > act[i - 1].dps) streak++; else break; }
 
   // ---- SVG: DPS 막대 + 배당수익률 라인(우축) ----
-  const W = 660, H = 190, padL = 10, padB = 30, padT = 26;
+  /* ⚠Snapshot의 다른 뷰는 viewBox 940×300인데 배당만 660×190이었다.
+     둘 다 width:100%로 그려지므로 좌표계가 좁은 쪽이 **1.42배 확대**돼 글자만 커 보인다
+     → 좌표계와 폰트를 다른 뷰와 동일하게 맞춘다. */
+  const W = 940, H = 270, padL = 10, padB = 34, padT = 30;
   const n = rows.length, gw = (W - padL * 2) / Math.max(1, n);
   const maxD = Math.max(...rows.map((r) => r.dps), 1);
   const yB = (v) => padT + (1 - v / maxD) * (H - padT - padB);
@@ -9697,18 +9735,18 @@ function divPanel(st) {
   const yL = (v) => padT + 4 + (ylMax - v) / (ylMax - ylMin || 1) * (H - padT - padB - 30);
   let bars = "", labels = "", pts = [];
   rows.forEach((r, i) => {
-    const cx = padL + gw * i + gw / 2, bw = Math.min(38, gw * 0.5);
+    const cx = padL + gw * i + gw / 2, bw = Math.min(54, gw * 0.5);
     const y = yB(r.dps), h0 = padT + (H - padT - padB) - y;
     bars += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${Math.max(1, h0)}"
       fill="${r.est ? "#c9b26a" : "#e0a93f"}" rx="2"/>
-      <text x="${cx}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#a37a1c">${fmtD(r.dps)}</text>`;
+      <text x="${cx}" y="${y - 6}" font-size="10.5" text-anchor="middle" fill="#a37a1c">${fmtD(r.dps)}</text>`;
     if (r.yld != null) pts.push([cx, yL(r.yld), r.yld]);
-    labels += `<text x="${cx}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.y}${r.est ? "(E)" : ""}</text>`;
+    labels += `<text x="${cx}" y="${H - 9}" font-size="11.5" text-anchor="middle" fill="#8b8b93">${r.y}${r.est ? "(E)" : ""}</text>`;
   });
   const line = pts.length > 1
     ? `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#4391ff" stroke-width="2"/>` +
       pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.4" fill="#4391ff"/>
-        <text x="${p[0]}" y="${p[1] + (i % 2 ? 13 : -6)}" font-size="8.5" text-anchor="middle" fill="#2b6ed4">${p[2].toFixed(1)}%</text>`).join("")
+        <text x="${p[0]}" y="${p[1] + (i % 2 ? 15 : -7)}" font-size="10.5" text-anchor="middle" fill="#4391ff">${p[2].toFixed(1)}%</text>`).join("")
     : "";
 
   // ---- 요약 타일 ----
@@ -13253,6 +13291,7 @@ Promise.all([
     SELECTED_RULES = new Set((DATA?.rules || []).filter((r) => r.selected).map((r) => r.rule_id));
     renderMetaFooter();   // 최하단 데이터 출처(탭 무관 전역)
     initAiPanel();        // 🤖 전역 AI 어시스턴트(플로팅)
+    initHeaderSearch();   // 🔍 제목 라인 종목 조회(어느 탭에서든)
     document.getElementById("nav-back").onclick = () => {
       const prev = navStack.pop();
       if (!prev) return;
