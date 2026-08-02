@@ -2267,3 +2267,15 @@ header h1 { margin-right: auto; }
   color: var(--ink); outline: none; }
 .hdr-search input:focus { border-color: var(--accent); }
 @media (max-width: 700px) { .hdr-search input { width: 100%; } }
+
+/* 종목조회 배치(v279) — 개요+투자지표 / 수급+컨센서스 각각 2열 */
+.lk-toprow { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 12px; align-items: start; margin-bottom: 12px; }
+.lk-toprow > .lk-overview { margin-bottom: 0; }
+.lk-suprow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px; align-items: start; }
+.lk-supcol { min-width: 0; }
+.lk-suprow > .card-flat { margin-top: 16px; }
+@media (max-width: 1100px) {
+  .lk-toprow, .lk-suprow { grid-template-columns: 1fr; }
+}

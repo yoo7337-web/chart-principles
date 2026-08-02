@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=292">
-<script src="firebase-config.js?v=292"></script>
-<script src="js/auth.js?v=292"></script>
+<link rel="stylesheet" href="css/style.css?v=294">
+<script src="firebase-config.js?v=294"></script>
+<script src="js/auth.js?v=294"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=292"></script>
+<script src="js/sync.js?v=294"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -390,7 +390,11 @@
     <div id="lookup-industry" class="lk-industry" style="display:none"></div>
     <div id="lookup-report" class="lk-report" style="display:none"></div>
     <div id="lookup-links" class="ext-links" style="display:none"></div>
-    <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+    <!-- v279: 기업개요와 투자지표를 한 행에 — "어떤 회사인가"와 "지금 얼마인가"는 같이 봐야 한다 -->
+    <div class="lk-toprow">
+      <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+      <div id="lookup-metrics" class="card-flat" style="display:none"></div>
+    </div>
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="1m" id="tf-1m" style="display:none">당일 1분</button><button data-tf="5m" id="tf-5m" style="display:none">5분</button><button data-tf="60m" id="tf-60m" style="display:none">60분</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
@@ -458,9 +462,15 @@
       </div>
       <div id="why-out" class="lk-why-out" style="display:none"></div>
     </div>
-    <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
-    <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
-    <p class="legend" id="lookup-supply-legend" style="display:none"></p>
+    <!-- v279: 수급 차트가 전폭을 쓰기엔 정보량이 적다 → 좌 절반, 우측은 증권가 컨센서스 -->
+    <div class="lk-suprow">
+      <div class="lk-supcol">
+        <h2 id="lookup-supply-h" style="display:none;margin-top:16px">수급 — 외국인·기관 누적 순매수 <span class="sub-note">(억원, 최근 120일 · 우상향=지속 매집)</span></h2>
+        <div id="lookup-supply" class="chart" style="display:none;height:220px"></div>
+        <p class="legend" id="lookup-supply-legend" style="display:none"></p>
+      </div>
+      <div id="lookup-cons" class="card-flat" style="display:none"></div>
+    </div>
     <!-- ⑤ 실적: 분기 → 연간 → 서프라이즈 → 안정성 → 배당 -->
     <!-- 실적·재무 추이 통합 카드([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) — financials 기반 -->
     <div id="lookup-finq" class="card-flat" style="display:none"></div>
@@ -485,18 +495,12 @@
     <aside class="lk-side">
       <!-- v276: 신호·원칙은 차트와 함께 봐야 하지만 차트 폭을 뺏으면 안 된다(사용자 요청)
            → 본문을 쪼개지 않고 **우측 레일 맨 위**에 둔다. -->
-    <div class="controls" id="lookup-filter" style="display:none">
-      <label><input type="radio" name="sigfilter" value="core" checked> ⭐ 채택 원칙만</label>
-      <label><input type="radio" name="sigfilter" value="all"> 전체 신호</label>
-      <label><input type="radio" name="sigfilter" value="on"> ✅ 현 국면 적용 원칙만</label>
-      <label><input type="radio" name="sigfilter" value="off"> ⛔ 미적용 원칙만</label>
-      <!-- v218: '전체 적용'은 라디오 '전체 신호'와 중복이라 제거 — 해제 버튼만 라디오 크기에 맞춰 유지 -->
-      <button id="sig-none" class="sig-nonebtn" title="차트에서 신호 마커를 모두 숨김(캔들만 보기)">신호 끄기</button>
+      <!-- v278: 라디오 4종·'신호 끄기'·축약 칩은 뺐다(사용자 요청).
+           아래 **채택/참고 원칙 목록**을 클릭하면 그 원칙 신호가 차트에 표시된다 — 그거면 충분하다. -->
+      <div id="lookup-filter" style="display:none">
       <span id="lookup-chips" class="sig-chips"></span>
     </div>
       <!-- ③ 투자지표 → ④ 컨센서스 (기업개요는 v275에서 본문 최상단으로 이동) -->
-      <div id="lookup-metrics" class="card-flat" style="display:none"></div>
-      <div id="lookup-cons" class="card-flat" style="display:none"></div>
       <div id="lookup-micro" style="display:none"></div>
       <div id="lookup-profile" class="card-flat" style="display:none"></div>
       <div id="lookup-memo" class="card-flat" style="display:none"></div>
@@ -1220,7 +1224,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=292"></script>
+<script src="js/app.js?v=294"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

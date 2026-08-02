@@ -1285,12 +1285,6 @@ function loadLookup(key) {
       renderLookupReports(st);
       renderLookupFeed(st);
     });
-    // 라디오·칩을 건드리면 '전체 해제'는 자동 풀린다(숨김 상태가 남아 신호가 안 보이는 혼란 방지)
-    document.querySelectorAll('input[name="sigfilter"]').forEach((r) => {
-      r.onchange = () => { lookupHideSignals = false; drawLookupChart(); };
-    });
-    // v218: '전체 적용' 버튼 제거 — 라디오 '전체 신호'가 같은 일을 한다(중복 UI 정리)
-    $("#sig-none").onclick = () => { lookupHideSignals = true; drawLookupChart(); };
 
     fillRuleSelect(st);   // 원칙 드롭다운(헤더 안) — 전체 + 이 종목에 신호가 있는 원칙만
     drawLookupChart();
@@ -1535,7 +1529,9 @@ function drawLookupChart() {
   vol.setData(s.map((x) => ({ time: x.t, value: x.v, color: x.c >= x.o ? "#fecaca" : "#bfdbfe" })));
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
-  const filt = document.querySelector('input[name="sigfilter"]:checked')?.value || "core";
+  /* v278: 라디오 필터를 없앴다. 기본을 "core"로 두면 **참고(미채택) 원칙을 눌러도 마커가 안 뜬다**
+     → 전체를 그리고, 어떤 원칙을 볼지는 목록 클릭(#lookup-rule)이 결정한다. */
+  const filt = "all";
   // '전체 해제'(sig-none)면 마커를 전부 숨긴다 — 캔들만 깨끗하게 보고 싶을 때
   const shown = (isMin || lookupHideSignals ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
     if (selRule && m.rule_id !== selRule) return false;
@@ -3534,6 +3530,11 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v279", "2026-08-02", "종목조회 정리 — 신호는 원칙 목록만 · 개요+투자지표 · 수급+컨센서스",
+   "신호 영역에서 **라디오 필터 4종·'신호 끄기'·축약 칩**을 뺐습니다. 이제 **채택 원칙 / 참고 원칙(미채택)** "
+   + "두 목록만 남고, 항목을 클릭하면 그 원칙의 신호가 차트에 표시됩니다.\n\n"
+   + "배치도 정리했습니다 — **기업 개요 옆에 투자지표**를 나란히 두고, 전폭을 쓰던 **수급 차트는 왼쪽 절반**으로 "
+   + "줄여 오른쪽에 **증권가 컨센서스**(목표주가·투자의견)를 붙였습니다."],
   ["v277", "2026-08-02", "종목 조회를 제목 라인으로 — 어느 화면에서든 바로 검색",
    "**종목 조회를 '종목 찾기' 그룹에서 꺼내 제목(시장분석) 옆에 상시 배치**했습니다. "
    + "이제 시장·원칙·내 투자 어느 화면을 보고 있든 종목명을 입력하면 곧바로 그 종목의 조회 화면으로 넘어갑니다. "
@@ -9021,13 +9022,7 @@ function renderLookupStory(st) {
 function buildSigChips(st) {
   const cnt = {};
   st.markers.forEach((m) => { cnt[m.rule_id] = (cnt[m.rule_id] || 0) + 1; });
-  const chips = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([rid, n]) => {
-    const s = st.stats.find((x) => x.rule_id === rid);
-    const on = ruleActive(rid, st.market);
-    return `<button class="sig-chip ${on ? "" : "chip-off"}" data-rid="${rid}"
-      title="${s?.name || rid}${on ? "" : " (현 국면 꺼짐)"}">${RULE_ABBR[rid] || rid} ${n}</button>`;
-  }).join("");
-  // 칩은 축약어(이격·BB·R30…)라 뜻을 알 수 없다 → 아래에 **이 종목에 실제로 걸린 원칙만**
+  // v278: 축약어 칩(이격·BB·R30…)은 뜻을 알 수 없어 뺐다 — **이 종목에 실제로 걸린 원칙만**
   // 이름 + 판정 기준(results.json desc)으로 풀어 적는다. 채택 원칙(⭐)과 그 외를 구분 표기.
   // ①채택/미채택 ②그 안에서 매수/매도로 4구획 — 평면 목록은 무엇이 검증된 원칙인지 한눈에 안 들어온다
   const items = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([rid, n]) => {
@@ -9058,8 +9053,8 @@ function buildSigChips(st) {
     + block(items.filter((x) => !x.sel), "참고 원칙 (미채택)",
       "검증 기준 미달 — 근거가 약하니 참고만", "unsel");
   const host = $("#lookup-chips");
-  host.innerHTML = chips + (legend ? `<div class="rule-legend-wrap">${legend}</div>` : "");
-  host.querySelectorAll(".sig-chip, .rl-item").forEach((c) => c.addEventListener("click", () => {
+  host.innerHTML = legend ? `<div class="rule-legend-wrap">${legend}</div>` : "";
+  host.querySelectorAll(".rl-item").forEach((c) => c.addEventListener("click", () => {
     const rs = $("#lookup-rule");
     rs.value = rs.value === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
     drawLookupChart();
