@@ -4410,7 +4410,7 @@ const CHAINS = {
     { key: "game", icon: "🎮", name: "게임", desc: "게임 개발·퍼블리싱", codes: ["259960", "036570", "251270", "263750", "293490"] },
     { key: "ent", icon: "🎤", name: "엔터·콘텐츠", desc: "엔터테인먼트", codes: ["352820", "035900", "041510"] },
     { key: "telecom", icon: "📡", name: "통신", desc: "통신사", codes: ["017670", "030200", "032640"] },
-    { key: "adcomm", icon: "📢", name: "광고·커머스", desc: "광고·이커머스", codes: ["030000", "257720"] },
+    { key: "adcomm", icon: "📢", name: "광고·커머스", desc: "광고·이커머스", codes: ["030000"] },
     { key: "itsvc", icon: "💻", name: "IT서비스·소프트웨어", desc: "IT서비스·소프트웨어", sectors: ["IT서비스", "소프트웨어"] },
     { key: "telecom_eq", icon: "📶", name: "통신장비·핸드셋", desc: "통신장비·핸드셋", sectors: ["통신장비", "핸드셋"] },
     { key: "media_etc", icon: "🎬", name: "기타 미디어·게임", desc: "방송·게임·광고·양방향미디어", sectors: ["방송과엔터테인먼트", "게임엔터테인먼트", "광고", "양방향미디어와서비스", "인터넷과카탈로그소매", "무선통신서비스", "다각화된통신서비스"] },
@@ -4426,7 +4426,9 @@ const CHAINS = {
   ] },
   consumer: { name: "소비재·유통", icon: "🛒", flow: false, stages: [
     { key: "food", icon: "🍜", name: "식음료·담배", desc: "식품·음료·담배", codes: ["003230", "271560", "097950", "004370", "033780", "003380"] },
-    { key: "cosmetic", icon: "💄", name: "화장품·생활", desc: "화장품·생활용품", codes: ["090430", "051900", "161890", "192820", "241710", "439090", "021240"] },
+    // 실리콘투(257720)는 K-뷰티 브랜드를 전 세계에 파는 유통사다 — 네이버 업종이 '인터넷과카탈로그소매'라
+    // 광고·커머스에 들어가 있었고, 그 탓에 동종업계가 예스24·미트박스로 잡혔다(2026-08-03 교정).
+    { key: "cosmetic", icon: "💄", name: "화장품·생활", desc: "화장품·생활용품", codes: ["090430", "051900", "161890", "192820", "241710", "439090", "021240", "257720"] },
     { key: "retail", icon: "🛍️", name: "유통·리테일", desc: "백화점·마트·편의점", codes: ["004170", "023530", "069960", "139480", "282330", "047050"] },
     { key: "fashion", icon: "👕", name: "패션·레저", desc: "의류·호텔·레저", codes: ["111770", "081660", "035250", "034230", "032350", "008770"] },
     { key: "food_etc", icon: "🍚", name: "기타 식음료", desc: "식품·음료·담배·식품소매", sectors: ["식품", "음료", "담배", "식품과기본식료품소매"] },
@@ -10032,13 +10034,38 @@ function drawPeerChartInto(sel, items) {
   });
 }
 
+/* 우리 분류 기준 동종업계(v288) — 네이버 업종 피어는 우리 밸류체인과 따로 놀아서,
+   분류를 고쳐도 동종업계가 그대로였다(실리콘투: 화장품 유통인데 예스24·미트박스와 비교).
+   → **같은 밸류체인 단계**에서 시가총액이 가까운 종목을 뽑는다. 단계가 없으면 네이버 피어를 그대로 쓴다. */
+function ourPeers(ticker, n = 5) {
+  const tiles = MARKET?.heatmap || [];
+  const self = tiles.find((x) => x.m === "kr" && x.t === ticker);
+  if (!self) return null;
+  const mine = stockChainLinks("kr", ticker, self.sector) || [];
+  const link = mine.find((x) => x.stageKey !== "_etc");   // '그 외'는 동종업계로 쓰기엔 너무 넓다
+  if (!link) return null;
+  const stObj = (CHAINS[link.ind]?.stages || []).find((s) => s.key === link.stageKey);
+  if (!stObj) return null;
+  const codes = new Set(scrStageCodes(stObj));
+  codes.delete(ticker);
+  if (codes.size < 2) return null;
+  const cand = tiles.filter((x) => x.m === "kr" && codes.has(x.t) && x.mcap);
+  if (cand.length < 2) return null;
+  cand.sort((a, b) => Math.abs(Math.log((a.mcap || 1) / (self.mcap || 1)))
+                    - Math.abs(Math.log((b.mcap || 1) / (self.mcap || 1))));
+  return { stage: link, list: cand.slice(0, n).map((x) => ({ ticker: x.t, name: x.name, mk: "kr",
+    price: (MARKET?.quotes?.[`kr_${x.t}`] || [])[0] ?? null,
+    chg: (MARKET?.quotes?.[`kr_${x.t}`] || [])[1] ?? x.chg, mcap: x.mcap })) };
+}
+
 function renderLookupPeers(st) {
   const host = $("#lookup-peers");
   const key = `${st.market}_${st.ticker}`;
   const co = EXTRAS.company?.map?.[key];
   const goto = (mk, tk) => `data-goto="${mk}_${tk}"`;
   if (st.market === "kr") {
-    const peers = co?.peers;
+    const ours = ourPeers(st.ticker);
+    const peers = ours ? ours.list : co?.peers;
     if (!peers?.length) { host.style.display = "none"; return; }
     host.style.display = "";
     // 피어 API엔 PER/PBR이 없다 → 이미 전 종목 수집해 둔 company.metrics에서 끌어온다(파이프라인 무변경).
