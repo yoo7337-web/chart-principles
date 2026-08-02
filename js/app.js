@@ -3050,8 +3050,105 @@ function ownIsCtrl(n, rate) {
   return (rate ?? 0) >= 20;            // 목적 표기가 없으면 지분율로 판단
 }
 let ownShowInv = false;
+let ownView = "dia";        // dia=공정위式 도식 / list=카드 목록
 function ownPct(v) { return (v >= 100 ? "100" : v.toFixed(v >= 10 ? 1 : 2)) + "%"; }
 const ownEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/* 소유지분도 도식(v263) — 공정위 소유지분도와 같은 모양으로 그린다.
+   도형 규약(공정위 표기): 타원=동일인(개인) · 마름모=지주/주요 지배회사 · 오각형=계열사 · 사각형=하위 계열사.
+   ★=상장사(클릭 시 종목조회). 화살표 라벨=지분율.
+   카드 나열로는 '누가 누구를 지배하는지'가 안 보여 도식으로 바꿨다(사용자 요청). */
+const OWN_W = { col: 178, gap: 14, boxH: 40, subH: 30, subGap: 6 };
+
+function ownShape(x, y, w, h, kind) {
+  if (kind === "person") return `<ellipse cx="${x + w / 2}" cy="${y + h / 2}" rx="${w / 2}" ry="${h / 2}" class="og-sh og-person"/>`;
+  if (kind === "root" || kind === "holder") {                       // 마름모
+    const cx = x + w / 2, cy = y + h / 2;
+    return `<polygon points="${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}" class="og-sh og-${kind}"/>`;
+  }
+  if (kind === "unit") {                                            // 오각형(집 모양)
+    const cx = x + w / 2;
+    return `<polygon points="${cx},${y} ${x + w},${y + h * 0.32} ${x + w - 6},${y + h} ${x + 6},${y + h} ${x},${y + h * 0.32}" class="og-sh og-unit"/>`;
+  }
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" class="og-sh og-sub"/>`;
+}
+
+function ownLabel(x, y, w, h, n, small) {
+  const nm = ownEsc(String(n.name).replace(/\(주\)|㈜|주식회사|\(유\)/g, "").trim());
+  const star = n.listed ? "★" : "";
+  const fs = small ? 9.5 : 10.5;
+  // 긴 이름은 두 줄로
+  const lines = nm.length > (small ? 10 : 9) ? [nm.slice(0, small ? 10 : 9), nm.slice(small ? 10 : 9, small ? 20 : 18)] : [nm];
+  const y0 = y + h / 2 + (lines.length > 1 ? -3 : 4);
+  return `<g class="og-lb${n.listed ? " listed" : ""}" ${n.listed ? `data-go="kr_${n.ticker}"` : ""}>
+    ${lines.map((s, i) => `<text x="${x + w / 2}" y="${y0 + i * 11}" font-size="${fs}">${i === 0 ? star : ""}${ownEsc(s)}</text>`).join("")}
+  </g>`;
+}
+
+function ownArrow(x1, y1, x2, y2, rate, side) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const path = x1 === x2
+    ? `M${x1},${y1} L${x2},${y2}`
+    : `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`;   // ㄱ자 배선
+  return `<path d="${path}" class="og-ar"/>
+    <text x="${x1 === x2 ? mx + 4 : x2 + 4}" y="${x1 === x2 ? my - 3 : my - 4}"
+      class="og-rt" text-anchor="${side || "start"}">${ownPct(rate)}</text>`;
+}
+
+function ownDiagram(g, byId, out, root, kids) {
+  const { col, gap, boxH, subH, subGap } = OWN_W;
+  const holders = g.edges.filter((e) => e.t === root.id && byId[e.f] && byId[e.f].lvl === -1)
+    .sort((a, b) => b.rate - a.rate);
+  const nCol = Math.max(kids.length, holders.length, 1);
+  const W = Math.max(900, nCol * (col + gap) + gap);
+  const yPerson = 14, yHolder = 92, yRoot = 186, yKid = 292, ySub = 292 + boxH + 34;
+
+  // 최상단: 개인 최대주주(동일인)와 법인 최대주주를 구분
+  const person = holders.filter((e) => !/[(주)㈜]|회사|법인|Ltd|Inc/i.test(byId[e.f].name));
+  const corp = holders.filter((e) => !person.includes(e));
+  let svg = "";
+
+  // 동일인(개인) — 가운데 위
+  const cx = W / 2;
+  person.slice(0, 2).forEach((e, i) => {
+    const w = 120, x = cx - w / 2 + (i - (person.length - 1) / 2) * 140;
+    svg += ownShape(x, yPerson, w, 34, "person") + ownLabel(x, yPerson, w, 34, byId[e.f]);
+    svg += ownArrow(x + w / 2, yPerson + 34, cx, yRoot, e.rate);
+  });
+  // 법인 최대주주 — 좌우로 배치
+  corp.slice(0, 6).forEach((e, i) => {
+    const w = col, half = Math.ceil(corp.length / 2);
+    const left = i < half;
+    const idx = left ? i : i - half;
+    const x = left ? gap + idx * (w + gap) : W - gap - (idx + 1) * (w + gap) + gap;
+    svg += ownShape(x, yHolder, w, boxH, "holder") + ownLabel(x, yHolder, w, boxH, byId[e.f]);
+    svg += ownArrow(x + w / 2, yHolder + boxH, cx, yRoot, e.rate, left ? "start" : "end");
+  });
+  // 루트(지주)
+  const rw = 190, rx = cx - rw / 2;
+  svg += ownShape(rx, yRoot, rw, 46, "root") + ownLabel(rx, yRoot, rw, 46, root);
+
+  // 계열사 열 + 하위
+  kids.forEach((e, i) => {
+    const x = gap + i * (col + gap);
+    const n = byId[e.t];
+    svg += ownArrow(cx, yRoot + 46, x + col / 2, yKid, e.rate);
+    svg += ownShape(x, yKid, col, boxH, "unit") + ownLabel(x, yKid, col, boxH, n);
+    const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate))
+      .sort((a, b) => b.rate - a.rate);
+    gk.forEach((e2, j) => {
+      const sy = ySub + j * (subH + subGap);
+      svg += `<path d="M${x + 16},${yKid + boxH} L${x + 16},${sy + subH / 2} L${x + 26},${sy + subH / 2}" class="og-ar"/>
+        <text x="${x + 20}" y="${sy + subH / 2 - 4}" class="og-rt">${ownPct(e2.rate)}</text>`;
+      svg += ownShape(x + 26, sy, col - 26, subH, "sub") + ownLabel(x + 26, sy, col - 26, subH, byId[e2.t], true);
+    });
+  });
+  const maxSub = Math.max(0, ...kids.map((e) => (out[byId[e.t].id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).length));
+  const H = ySub + maxSub * (subH + subGap) + 20;
+  return `<div class="og-wrap"><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none" class="og-svg">
+    <defs><marker id="ogah" markerWidth="7" markerHeight="7" refX="5" refY="2.2" orient="auto">
+      <path d="M0,0 L0,4.4 L6,2.2 z" fill="#8aa0c0"/></marker></defs>${svg}</svg></div>`;
+}
 
 async function initOwnership() {
   ownRendered = true;
@@ -3122,17 +3219,26 @@ function ownRender() {
   const nListed = g.nodes.filter((n) => n.listed).length;
   host.innerHTML = `
     <div class="own-head"><b>${ownEsc(g.name)}</b> 소유지분도
-      <span class="sub-note">${g.year}년 사업보고서 기준 · 계열 ${g.nodes.length}사(상장 ${nListed}) · 수집 ${g.at}</span></div>
-    ${hs ? `<div class="own-sec"><span class="own-lab">최대주주·특수관계인</span>
-      <div class="own-grid">${hs}</div>
-      <div class="own-arrow">▼</div></div>` : ""}
-    <div class="own-sec own-root">${chip(root, null, "지주·모회사")}</div>
-    <div class="own-arrow">▼</div>
-    <div class="own-sec"><span class="own-lab">${ownShowInv ? "출자처" : "지배 계열사"} ${kids.length}사
+      <span class="sub-note">${g.year}년 사업보고서 기준 · 계열 ${g.nodes.length}사(상장 ${nListed}) · 수집 ${g.at}</span>
+      <span class="mk-toggle own-view" id="own-view">
+        <button data-v="dia" class="${ownView === "dia" ? "active" : ""}">도식</button>
+        <button data-v="list" class="${ownView === "list" ? "active" : ""}">목록</button></span>
       ${inv.length ? `<button class="own-toggle" id="own-inv">${ownShowInv
-        ? "지배 계열사만 보기" : `단순투자 ${inv.length}건 포함해 보기`}</button>` : ""}</span>
-      <div class="own-grid">${kidHtml}</div></div>
-    <p class="sub-note" style="margin-top:10px">출처: DART 정기보고서 '타법인 출자현황'·'최대주주 현황'.
+        ? "지배 계열사만" : `단순투자 ${inv.length}건 포함`}</button>` : ""}</div>
+    ${ownView === "dia" ? ownDiagram(g, byId, out, root, kids) : `
+      ${hs ? `<div class="own-sec"><span class="own-lab">최대주주·특수관계인</span>
+        <div class="own-grid">${hs}</div><div class="own-arrow">▼</div></div>` : ""}
+      <div class="own-sec own-root">${chip(root, null, "지주·모회사")}</div>
+      <div class="own-arrow">▼</div>
+      <div class="own-sec"><span class="own-lab">${ownShowInv ? "출자처" : "지배 계열사"} ${kids.length}사</span>
+        <div class="own-grid">${kidHtml}</div></div>`}
+    <p class="sub-note" style="margin-top:10px">
+      <span class="og-lg"><i class="og-i person"></i>동일인·개인</span>
+      <span class="og-lg"><i class="og-i holder"></i>주요주주</span>
+      <span class="og-lg"><i class="og-i root"></i>지주·모회사</span>
+      <span class="og-lg"><i class="og-i unit"></i>계열사</span>
+      <span class="og-lg"><i class="og-i sub"></i>하위 계열사</span>
+      · 출처: DART 정기보고서 '타법인 출자현황'·'최대주주 현황'.
       ★는 상장사(클릭하면 종목조회로 이동). 비상장 자회사는 사업보고서를 내지 않으면 하위가 비어 있을 수 있습니다.</p>`;
 
   host.querySelectorAll("[data-go]").forEach((el) => el.onclick = () => {
@@ -3140,9 +3246,12 @@ function ownRender() {
   });
   const tg = document.getElementById("own-inv");
   if (tg) tg.onclick = () => { ownShowInv = !ownShowInv; ownRender(); };
+  const vw = document.getElementById("own-view");
+  if (vw) vw.querySelectorAll("button").forEach((b) => b.onclick = () => { ownView = b.dataset.v; ownRender(); });
 }
 
 const DEV_HISTORY = [
+  ["v263", "2026-08-02", "소유지분도를 공정위式 도식으로", "카드 나열로는 지배관계가 한눈에 안 들어와, **공정거래위원회 소유지분도와 같은 도식**으로 바꿨습니다. 도형 규약도 그대로 따릅니다 — 타원=동일인(개인), 마름모=주요주주·지주회사, 오각형=계열사, 사각형=하위 계열사. 화살표에 지분율이 붙고 **★ 상장사는 눌러서 종목조회로** 갑니다. 목록 보기로 전환하는 버튼도 남겼습니다."],
   ["v261", "2026-08-02", "🏛 소유지분도 탭 신설", "공정거래위원회 소유지분도(PDF·이미지)와 같은 그림을 **데이터로** 재현했습니다. DART 정기보고서의 '타법인 출자현황'·'최대주주 현황'에서 지분율을 그대로 가져와 최대주주 → 지주·모회사 → 출자 계열사 순으로 보여주고, 계열사가 다시 자회사를 가지면 접어서 펼칩니다. **★는 상장사이며 누르면 종목조회로 이동**합니다. 검증: 하림지주 — 김홍국 21.1%·제일사료 88.11%·팬오션 54.72%, 계열 72사 중 상장 5사로 공정위 지분도와 일치."],
   ["v258", "2026-08-02", "딜 배경 설명(기사 기반) + 대금 정보 통합", "①**🤖 기사로 배경 설명** — 버튼을 누르면 그 딜의 관련 기사 제목과 공시 사실을 함께 읽고 '왜 지금 이 거래인지·어떤 협상 경과와 업황 속에서 나왔는지'를 3~5문장으로 정리합니다. 공시 수치 반복 대신 **맥락**을 채우며, 기사 제목에 없는 내용은 쓰지 않도록 강제했습니다. 한 번 만들면 저장돼 다시 부르지 않습니다(무료 한도 보호). ②자금조달·대금지급을 접이식에서 빼내 **인수 설명 문단에 합쳤습니다**. ③회사명 조사 처리를 보완했습니다(SK으로부터 → SK로부터)."],
   ["v253", "2026-08-02", "딜 카드에 관련 기사 연결", "각 딜에 **그 딜을 다룬 기사**를 붙였습니다. M&A 전문 기사 아카이브(3,500건)와 종목별 뉴스 아카이브에서 인수자·대상회사·매도자 이름으로 찾고, **공시일 전후(-21~+14일) 기사만** 골라 최대 6건을 보여줍니다. 제목을 누르면 원문으로 이동합니다. 예: 두산-SK실트론 딜에 'SK, 두산에 SK실트론 지분 70% 판다…매각가 2.3조원' 기사가 붙습니다."],

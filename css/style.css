@@ -2129,3 +2129,29 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .own-gk summary { cursor: pointer; font-size: .74rem; color: var(--muted); padding: 3px 0 0 8px; }
 .own-toggle { margin-left: 8px; font-size: .72rem; padding: 2px 8px; border-radius: 999px; cursor: pointer;
   background: rgba(67,145,255,.14); border: 1px solid rgba(67,145,255,.35); color: #7cb1ff; }
+
+/* 🏛 소유지분도 도식 (v263) */
+.og-wrap { overflow-x: auto; padding: 6px 0 10px; }
+.og-svg { height: auto; }
+.og-sh { stroke-width: 1.3; }
+.og-person { fill: #2a2a33; stroke: #b9c6dd; }
+.og-holder { fill: #23232b; stroke: #8aa0c0; }
+.og-root   { fill: rgba(67,145,255,.18); stroke: #4391ff; stroke-width: 1.8; }
+.og-unit   { fill: rgba(34,192,122,.13); stroke: #22c07a; }
+.og-sub    { fill: #212127; stroke: #6b7280; }
+.og-lb text { fill: #e9e9ee; text-anchor: middle; dominant-baseline: middle; }
+.og-lb.listed text { fill: #9bd0ff; font-weight: 700; }
+.og-lb.listed { cursor: pointer; }
+.og-lb.listed:hover text { fill: #4391ff; }
+.og-ar { stroke: #8aa0c0; stroke-width: 1.2; fill: none; marker-end: url(#ogah); }
+.og-rt { fill: #e0a93f; font-size: 9px; font-weight: 700; }
+.own-view { margin-left: 10px; }
+.own-view button { font-size: .74rem; padding: 2px 9px; }
+.og-lg { margin-right: 10px; white-space: nowrap; }
+.og-i { display: inline-block; width: 10px; height: 10px; margin-right: 3px; vertical-align: -1px;
+  border: 1px solid #8aa0c0; background: #23232b; }
+.og-i.person { border-radius: 50%; border-color: #b9c6dd; }
+.og-i.holder { transform: rotate(45deg); }
+.og-i.root { transform: rotate(45deg); border-color: #4391ff; background: rgba(67,145,255,.2); }
+.og-i.unit { border-color: #22c07a; background: rgba(34,192,122,.15); }
+.og-i.sub { border-color: #6b7280; }
