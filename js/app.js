@@ -1286,7 +1286,6 @@ function loadLookup(key) {
       renderLookupFeed(st);
     });
 
-    fillRuleSelect(st);   // 원칙 드롭다운(헤더 안) — 전체 + 이 종목에 신호가 있는 원칙만
     drawLookupChart();
     bindDrawTools();            // 그리기 도구(추세선·박스권) 1회 바인딩
     setDrawMode("");            // 종목 전환 시 이동 모드로 초기화(+저장된 그림 재배치)
@@ -1468,7 +1467,7 @@ function drawLookupChart() {
   const minBars = tf === "1m" ? st._min : (TF_INTRA.has(tf) ? st._hist?.[tf] : null);
   const isMin = TF_INTRA.has(tf) && minBars?.length;
   const s = isMin ? minBars : resampleBars(st.series, tf);
-  const selRule = $("#lookup-rule").value;  // "" = 전체
+  const selRule = lookupRuleSel;           // "" = 전체(원칙 목록 클릭으로 선택)
   $("#lookup-info").innerHTML =
     `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · `
     + (isMin
@@ -1530,7 +1529,7 @@ function drawLookupChart() {
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
   /* v278: 라디오 필터를 없앴다. 기본을 "core"로 두면 **참고(미채택) 원칙을 눌러도 마커가 안 뜬다**
-     → 전체를 그리고, 어떤 원칙을 볼지는 목록 클릭(#lookup-rule)이 결정한다. */
+     → 전체를 그리고, 어떤 원칙을 볼지는 원칙 목록 클릭(lookupRuleSel)이 결정한다. */
   const filt = "all";
   // '전체 해제'(sig-none)면 마커를 전부 숨긴다 — 캔들만 깨끗하게 보고 싶을 때
   const shown = (isMin || lookupHideSignals ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
@@ -3612,6 +3611,9 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v282", "2026-08-02", "종목조회 헤더의 '원칙' 드롭다운 제거",
+   "헤더의 원칙 선택 드롭다운을 없앴습니다. 어떤 원칙의 신호를 볼지는 오른쪽 **원칙 목록을 클릭**해서 "
+   + "정하고, 지금 선택된 항목은 목록에서 파랗게 표시됩니다(다시 누르면 전체로 돌아갑니다)."],
   ["v281", "2026-08-02", "구조도에 매도자 명시 · 공시 띠 대량 누락 복구",
    "딜 구조도에서 **대상을 지금 지배하는 회사(=매도자)를 항상 대상 위에** 그리도록 했습니다. "
    + "엔켐이 자회사(Enchem America) 지분을 매각하는 건인데 정작 엔켐이 구조도에 없던 문제입니다 "
@@ -8884,6 +8886,9 @@ function toggleRotMembers(tr, sector, mk) {
 /* ---------- 종목 조회: 신호 라벨·게이팅·내러티브·프로파일 ---------- */
 // 차트 마커용 원칙 축약 (2~4자)
 let SELECTED_RULES = new Set();  // 최종 채택 원칙(매수5·매도5) — DATA 로드 후 채움
+/* v282: 헤더의 '원칙' 드롭다운을 없앴다(사용자 요청).
+   어떤 원칙만 볼지는 **원칙 목록 클릭**이 정하고, 그 상태를 여기에 담는다("" = 전체). */
+let lookupRuleSel = "";
 const RULE_ABBR = {
   disparity_low: "이격", bb_lower_rsi: "BB·R", bb_lower_touch: "BB",
   rsi_oversold_exit: "R30", macd_cross_up_below0: "M↑",
@@ -9150,9 +9155,12 @@ function buildSigChips(st) {
       "검증 기준 미달 — 근거가 약하니 참고만", "unsel");
   const host = $("#lookup-chips");
   host.innerHTML = legend ? `<div class="rule-legend-wrap">${legend}</div>` : "";
+  const mark = () => host.querySelectorAll(".rl-item").forEach((c) =>
+    c.classList.toggle("on", !!lookupRuleSel && c.dataset.rid === lookupRuleSel));
+  mark();
   host.querySelectorAll(".rl-item").forEach((c) => c.addEventListener("click", () => {
-    const rs = $("#lookup-rule");
-    rs.value = rs.value === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
+    lookupRuleSel = lookupRuleSel === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
+    mark();
     drawLookupChart();
   }));
 }
@@ -9205,8 +9213,6 @@ function renderLookupHead(st) {
   const col = chg == null ? "" : (up ? "#f5445a" : "#4391ff");  // 한국식: 상승=빨강 / 하락=파랑, 주가·변동% 함께 색칠
   const shortBadge = st.short_history ? `<span class="lk-short-badge">이력 부족 · 원칙 검증 제외</span>` : "";
   // v213: 위 sticky 바를 없애고 이 헤더를 고정 영역으로 씀 → 원칙 드롭다운도 여기로 합친다.
-  //   ⚠innerHTML을 새로 쓰므로 select 옵션은 이 함수 뒤(loadLookup)에서 다시 채워진다(순서 의존).
-  const prevSel = document.getElementById("lookup-rule")?.value || "";
   host.innerHTML = `
     <img class="lk-logo" src="${logoUrl(st.market, st.ticker)}" alt="" onerror="this.style.display='none'">
     <div class="lk-title">
@@ -9215,20 +9221,7 @@ function renderLookupHead(st) {
       <div class="lk-price"><span${col ? ` style="color:${col}"` : ""}>${fmtPrice(cur, st.market)}${chg != null ? ` ${up ? "▲" : "▼"} ${pct(chg, 2)}` : ""}</span>
         <span class="sub-note">${src}</span></div>
     </div>
-    <span class="lk-head-gap"></span>
-    <label id="lookup-rule-wrap" class="lk-head-rule">원칙 <select id="lookup-rule"></select></label>`;
-  fillRuleSelect(st, prevSel);   // ⚠헤더는 두 번 렌더된다(즉시+EXTRAS 후) → 옵션도 매번 다시 채운다
-}
-
-/* 원칙 드롭다운 채우기 — 전체 + 이 종목에 신호가 있는 원칙만. 헤더 재렌더 시 선택값 유지. */
-function fillRuleSelect(st, keep) {
-  const rs = document.getElementById("lookup-rule");
-  if (!rs || !st?.stats) return;
-  const present = st.stats.filter((s) => (st.markers || []).some((m) => m.rule_id === s.rule_id));
-  rs.innerHTML = `<option value="">전체 신호 (화살표만)</option>` +
-    present.map((s) => `<option value="${s.rule_id}">${s.side === "buy" ? "🟢" : "🔴"} ${s.name}</option>`).join("");
-  if (keep) rs.value = keep;
-  rs.onchange = drawLookupChart;
+    <span class="lk-head-gap"></span>`;
 }
 
 // 기업개요 카드

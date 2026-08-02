@@ -2281,3 +2281,6 @@ header h1 { margin-right: auto; }
 @media (max-width: 1100px) {
   .lk-toprow, .lk-suprow { grid-template-columns: 1fr; }
 }
+
+/* 선택된 원칙 표시(v282) — 드롭다운을 없앤 대신 목록에서 무엇을 보고 있는지 드러낸다 */
+.rl-item.on { background: rgba(67, 145, 255, .16); outline: 1px solid var(--accent); border-radius: 6px; }
