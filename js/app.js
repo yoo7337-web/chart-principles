@@ -7301,11 +7301,12 @@ let wsFinMode = localStorage.getItem("cp_ws_fin") || "q";
 /* 네 그래프가 같은 기간을 쓰므로 X축(기간)은 **맨 아래 한 번만** 그린다(v316). */
 function wsFinAxis(rows) {
   const W = 300, H = 14;
+  /* ⚠앵커를 첫=start·끝=end로 두면 그 라벨만 데이터 점에서 어긋나 보인다(실측 11px)
+     → 전부 middle로 통일하고, 대신 좌우 여백을 넉넉히 잡아 잘리지 않게 한다. */
   const lab = rows.map(([p2], i) => {
     const x = 10 + (i / Math.max(1, rows.length - 1)) * (W - 20);
     const show = rows.length <= 6 || i === 0 || i === rows.length - 1 || i % 2 === 0;
-    return show ? `<text x="${x.toFixed(1)}" y="10" text-anchor="${i === 0 ? "start"
-      : i === rows.length - 1 ? "end" : "middle"}" class="ws-fin-ax">${p2}</text>` : "";
+    return show ? `<text x="${x.toFixed(1)}" y="10" text-anchor="middle" class="ws-fin-ax">${p2}</text>` : "";
   }).join("");
   return `<div class="ws-fin-row"><span class="ws-fin-lab"></span>
     <svg viewBox="0 0 ${W} ${H}" class="ws-fin-axis" preserveAspectRatio="none">${lab}</svg></div>`;
@@ -7342,7 +7343,7 @@ function wsFinDraw(key, mk, co, m) {
       let lo = Math.min(...vs), hi = Math.max(...vs);
       if (lo > 0) lo = Math.min(lo * 0.92, lo);
       if (hi === lo) { hi += 1; lo -= 1; }
-      const W = 300, H = 50;
+      const W = 300, H = 50, fs2 = 7;      // fs2 = 증감률 라벨 높이 기준
       const X = (i) => 10 + (i / (rows.length - 1)) * (W - 20);
       const Y = (v) => 14 + (hi - v) / (hi - lo) * (H - 22);
       const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
@@ -7367,7 +7368,9 @@ function wsFinDraw(key, mk, co, m) {
             txt = (r2 >= 0 ? "+" : "") + r2.toFixed(0) + "%";
             cls = r2 >= 0 ? "pos" : "neg";
           }
-          if (txt) g = `<text x="${mx2.toFixed(1)}" y="${(my2 + 13).toFixed(1)}" text-anchor="middle"
+          // ⚠그래프 높이를 벗어나면 잘린다('적전'이 반만 보였다) → 위아래로 클램프
+          const gy = Math.min(H - 3, Math.max(fs2 + 2, my2 + 13));
+          if (txt) g = `<text x="${mx2.toFixed(1)}" y="${gy.toFixed(1)}" text-anchor="middle"
             class="ws-fin-gr ${cls}">${txt}</text>`;
         }
         return g + `<text x="${X(x.i).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}"
