@@ -10820,27 +10820,42 @@ function renderMultTrend(host, st, series, basePts, tabs) {
   const SPEC = [["eps", "PER"], ["bps", "PBR"], ["sps", "PSR"], ["fps", "P/FCF"]];
   const cards = SPEC.map(([fld, label]) => {
     let bi = -1;
+    /* 🐞기준 실적이 적자인 날을 **버리면** 선이 그 구간을 건너뛰어 이어지고, 마지막 원소가
+       '가장 최근'이 아니라 '마지막으로 흑자였던 날'이 된다 → 적자 회사에 큰 양수 PER이
+       현재값으로 찍혔다(실측 하이브 292.2배, 실제는 적자). 전 구간을 유지하고 적자일은 m=null로
+       구멍을 내 **선이 끊기게** 한다. */
     const pts = [];
     series.forEach((b) => {
       while (bi + 1 < basePts.length && basePts[bi + 1].d <= b.t) bi++;
       const base = bi >= 0 ? basePts[bi][fld] : null;
-      if (base != null && base > 0) pts.push({ t: b.t, m: b.c / base });
+      pts.push({ t: b.t, m: (base != null && base > 0) ? b.c / base : null });
     });
-    if (pts.length < 40) {
+    const valid = pts.filter((x) => x.m != null);
+    if (valid.length < 40) {
       return `<div class="vt-card"><div class="vt-h">${label}</div>
         <p class="mini-note">데이터 부족(${label} 기준값이 음수이거나 이력이 짧습니다)</p></div>`;
     }
     const W = 300, H = 130, P = { l: 4, r: 44, t: 14, b: 16 };
-    const vs = pts.map((x) => x.m);
+    const vs = valid.map((x) => x.m);
     const srt = [...vs].sort((a, b) => a - b);
+    const negNow = pts[pts.length - 1].m == null;      // 지금은 기준 실적이 적자 → 배수 산출 불가
+    const cover = valid.length / pts.length;
     const qq = (r) => srt[Math.min(srt.length - 1, Math.floor(srt.length * r))];
     const lo = Math.min(qq(0.02), vs[vs.length - 1]), hi = Math.max(qq(0.98), vs[vs.length - 1]);
-    const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, pts.length - 1));
+    const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, pts.length - 1));   // 시간축=전체 구간
     const Y = (v) => P.t + (H - P.t - P.b) * (1 - (Math.min(hi, Math.max(lo, v)) - lo) / Math.max(1e-9, hi - lo));
-    const line = pts.map((x, i) => `${X(i).toFixed(1)},${Y(x.m).toFixed(1)}`).join(" ");
+    // 적자 구간은 좌표를 비워 선을 끊는다(polyline은 연속이라 세그먼트로 나눠 그린다)
+    const segs = [];
+    let cur = [];
+    pts.forEach((x, i) => {
+      if (x.m == null) { if (cur.length > 1) segs.push(cur); cur = []; return; }
+      cur.push(`${X(i).toFixed(1)},${Y(x.m).toFixed(1)}`);
+    });
+    if (cur.length > 1) segs.push(cur);
+    const line = segs.map((s) => `<polyline points="${s.join(" ")}" fill="none" stroke="#4391ff" stroke-width="1.6"/>`).join("");
     const med = qq(0.5), now = vs[vs.length - 1];
     const vmin = srt[0], vmax = srt[srt.length - 1];      // v319: 실제 최저·최고(클리핑 전 값)
-    const iMin = vs.indexOf(vmin), iMax = vs.indexOf(vmax);
+    const iMin = pts.findIndex((x) => x.m === vmin), iMax = pts.findIndex((x) => x.m === vmax);
     const rank = srt.filter((v) => v <= now).length / srt.length * 100;
     const yrs = ((new Date(pts[pts.length - 1].t) - new Date(pts[0].t)) / 3.156e10).toFixed(1);
     const f2 = (v) => v.toFixed(Math.abs(v) < 10 ? 2 : 1);
@@ -10852,18 +10867,22 @@ function renderMultTrend(host, st, series, basePts, tabs) {
         <text x="${x.toFixed(1)}" y="${(v >= med ? y - 5 : y + 10).toFixed(1)}" text-anchor="middle"
           class="vt-mm" fill="${color}">${lab} ${f2(v)}</text>`;
     };
+    const NEG_KO = { PER: "순이익", PSR: "매출", "P/FCF": "FCF", PBR: "자기자본" };
     return `<div class="vt-card">
       <div class="vt-h">${label}
-        <b class="${now <= med ? "kdn" : "kup"}">${f2(now)}배</b>
-        <i class="sub-note">중앙 ${f2(med)} · 최저 ${f2(vmin)} · 최고 ${f2(vmax)} · 상위 ${Math.round(rank)}%</i></div>
+        ${negNow ? `<b class="kdn">산출 불가</b>` : `<b class="${now <= med ? "kdn" : "kup"}">${f2(now)}배</b>`}
+        <i class="sub-note">${negNow ? `${NEG_KO[label] || "기준 실적"} 적자 · ` : ""}중앙 ${f2(med)} · 최저 ${f2(vmin)} · 최고 ${f2(vmax)}${
+          negNow ? "" : ` · 상위 ${Math.round(rank)}%`}</i></div>
       <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
         <line x1="${P.l}" y1="${Y(med)}" x2="${W - P.r}" y2="${Y(med)}" stroke="#8b8b93" stroke-dasharray="4 4"/>
-        <polyline points="${line}" fill="none" stroke="#4391ff" stroke-width="1.6"/>
+        ${line}
         ${dotFor(vmax, iMax, "#f5445a", "최고")}${dotFor(vmin, iMin, "#22c07a", "최저")}
-        <text x="${W - P.r + 5}" y="${Y(now) + 3}" class="cr-end" fill="#4391ff">${f2(now)}</text>
+        ${negNow ? `<text x="${W - P.r + 5}" y="${(H / 2).toFixed(0)}" class="cr-end" fill="#f5445a">적자</text>`
+          : `<text x="${W - P.r + 5}" y="${Y(now) + 3}" class="cr-end" fill="#4391ff">${f2(now)}</text>`}
         <text x="${W - P.r + 5}" y="${Y(med) + 3}" class="cr-ax">중앙 ${f2(med)}</text>
         <text x="${P.l}" y="${H - 4}" class="cr-ax">${pts[0].t.slice(0, 7)}</text>
-        <text x="${W - P.r}" y="${H - 4}" text-anchor="end" class="cr-ax">${yrs}년</text>
+        <text x="${W - P.r}" y="${H - 4}" text-anchor="end" class="cr-ax">${yrs}년${
+          cover < 0.98 ? ` · 산출 ${Math.round(cover * 100)}%` : ""}</text>
       </svg></div>`;
   }).join("");
   host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 <span class="sub-note">(배수 추이)</span>
@@ -10871,7 +10890,10 @@ function renderMultTrend(host, st, series, basePts, tabs) {
     <div class="vt-grid">${cards}</div>
     <p class="mini-note">각 배수가 <b>시간에 따라 어떻게 변해 왔는지</b>입니다(점선=이 종목 이력의 중앙값).
       선이 우하향이면 같은 실적에도 시장이 값을 덜 쳐주는 <b>디레이팅</b>, 우상향이면 <b>재평가</b> 국면입니다.
-      기준 실적은 공시 시점부터 반영하며(분기 +45일·연간 +90일), 위아래 2%는 눈금 밖으로 잘라 추세를 살렸습니다.</p>`;
+      기준 실적은 공시 시점부터 반영하며(분기 +45일·연간 +90일), 위아래 2%는 눈금 밖으로 잘라 추세를 살렸습니다.
+      <br>⚠기준 실적(순이익·FCF 등)이 <b>적자인 기간은 배수가 성립하지 않아 선이 끊깁니다</b> —
+      그 구간의 '싸다/비싸다'는 이 그래프로 판단할 수 없습니다. 배수는 <b>최근 4분기 합(TTM)</b> 기준이라
+      위 투자지표 카드(네이버 집계·연간 실적 기준)와 값이 다를 수 있습니다.</p>`;
   bandTabs(host, st);
 }
 
