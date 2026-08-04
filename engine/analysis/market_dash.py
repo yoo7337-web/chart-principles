@@ -272,7 +272,10 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
     # ⚠페이지 수는 '유니버스 종목 수 ÷ 50'으로 잡으면 모자란다 — 이 페이지엔 **ETF·리츠가 섞여 있어**
     #   한 페이지의 실제 일반주가 50개보다 적다(실측 43~50). 코스피 700종목을 덮으려면 넉넉히 잡아야 한다.
     got = {0: 0, 1: 0}
-    for sosok, pages in ((0, 26), (1, 14)):  # sosok=0 코스피 / 1 코스닥 (ETF 혼입분 감안한 여유)
+    # ⚠2026-08-05 재확대: 유니버스가 전 상장(코스피 844 + **코스닥 1,722**)인데 코스닥이 14페이지
+    #   (약 630종목)에 멈춰 있어 **1,193종목(46%)이 거래대금 대용값을 시총으로 쓰고 있었다**.
+    #   주식찾기 시총 열에 "2억원"·"0억원"이 찍힌 원인. 코스닥을 44페이지로 늘린다.
+    for sosok, pages in ((0, 24), (1, 44)):  # sosok=0 코스피 / 1 코스닥 (ETF 혼입분 감안한 여유)
         for page in range(1, pages + 1):
             try:
                 url = f"https://finance.naver.com/sise/sise_market_sum.naver?sosok={sosok}&page={page}"
