@@ -9876,7 +9876,27 @@ function renderLookupMetrics(st) {
   host.innerHTML = `<div class="fund-head">투자 지표 <span class="sub-note">(주 1회 갱신 · ${kr ? "네이버" : "Yahoo"} 집계${kr ? " · PSR·EV·이자보상은 미국 종목만" : ""})</span></div>
     ${capRow}
     <div class="lk-mgrid four">${valBox}${earnBox}${growDivBox}${stabBox}</div>
-    <p class="sub-note" style="margin-top:8px">부채비율=총부채/자기자본(한국식) · 200%↑ 빨간색 표시 · 컨센서스·실적 상세는 아래 카드 참고</p>`;
+    <p class="sub-note" style="margin-top:8px">부채비율=총부채/자기자본(한국식) · 200%↑ 빨간색 표시 · 컨센서스·실적 상세는 아래 카드 참고</p>
+    <details class="mbasis"><summary>PER·PBR 산정 근거 — 아래 <b>배수 추이</b>와 값이 다른 이유</summary>
+      <div class="mbasis-b">
+        <table class="hld-table">
+          <thead><tr><th>구분</th><th>이 카드(투자 지표)</th><th>아래 밸류에이션(배수 추이)</th></tr></thead>
+          <tbody>
+            <tr><td>출처</td><td>${kr ? "네이버" : "Yahoo"} <b>집계값을 그대로 표시</b>(우리가 계산하지 않음)</td>
+                <td>수집한 <b>재무제표 원자료</b>(KR=DART · US=yfinance)로 <b>우리가 직접 계산</b></td></tr>
+            <tr><td>이익 기준</td><td>연간 확정 실적 기준(공급처 정의)</td>
+                <td><b>최근 4개 분기 합(TTM)</b> — 분기 발표마다 갱신</td></tr>
+            <tr><td>주식수</td><td>공개되지 않음</td><td><b>시가총액 ÷ 주가</b>로 역산</td></tr>
+            <tr><td>반영 시점</td><td>주 1회 갱신(집계 시점 기준)</td>
+                <td>실적은 <b>공시 시점부터</b> 반영(분기 +45일·연간 +90일)</td></tr>
+            <tr><td>적자일 때</td><td>음수 배수를 그대로 표시</td><td><b>산출 불가</b>로 표기(선이 끊김)</td></tr>
+          </tbody></table>
+        <p class="mini-note">⚠어느 쪽이 맞다기보다 <b>기준이 다릅니다</b>. 실적이 급변한 직후일수록 차이가 커집니다
+          (TTM은 최근 분기를 즉시 반영, 연간 기준은 다음 결산까지 옛 실적을 씁니다).
+          <b>적자 기업의 음수 PER은 어느 기준이든 의미가 없습니다</b> — 순이익이 0에 가까울수록 배수가 무한대로 발산합니다.
+          <br>※ 집계값은 내부 정합이 어긋나 있을 수 있습니다(실측: 한 종목에서 PER×EPS와 PBR×BPS가
+          서로 다른 주가를 가리킴). <b>계산 과정을 확인할 수 있는 아래 배수 추이를 기준으로 보시길 권합니다.</b></p>
+      </div></details>`;
 }
 
 // 연간 재무 차트: 매출·영업이익 막대 + 영업이익률 라인 (SVG)
@@ -10890,10 +10910,13 @@ function renderMultTrend(host, st, series, basePts, tabs) {
     <div class="vt-grid">${cards}</div>
     <p class="mini-note">각 배수가 <b>시간에 따라 어떻게 변해 왔는지</b>입니다(점선=이 종목 이력의 중앙값).
       선이 우하향이면 같은 실적에도 시장이 값을 덜 쳐주는 <b>디레이팅</b>, 우상향이면 <b>재평가</b> 국면입니다.
-      기준 실적은 공시 시점부터 반영하며(분기 +45일·연간 +90일), 위아래 2%는 눈금 밖으로 잘라 추세를 살렸습니다.
-      <br>⚠기준 실적(순이익·FCF 등)이 <b>적자인 기간은 배수가 성립하지 않아 선이 끊깁니다</b> —
-      그 구간의 '싸다/비싸다'는 이 그래프로 판단할 수 없습니다. 배수는 <b>최근 4분기 합(TTM)</b> 기준이라
-      위 투자지표 카드(네이버 집계·연간 실적 기준)와 값이 다를 수 있습니다.</p>`;
+      위아래 2%는 눈금 밖으로 잘라 추세를 살렸습니다.
+      <br><b>산정식</b> — PER=주가÷(TTM 순이익÷주식수) · PBR=주가÷(최근 분기 자기자본÷주식수) ·
+      PSR=주가÷(TTM 매출÷주식수) · P/FCF=주가÷(TTM FCF÷주식수), <b>TTM=최근 4개 분기 합</b>,
+      <b>주식수=시가총액÷주가</b>로 역산, 실적은 <b>공시 시점부터</b> 반영(분기 +45일·연간 +90일 — 발표 전 정보를 쓰지 않기 위함).
+      <br>⚠기준 실적이 <b>적자인 기간은 배수가 성립하지 않아 선이 끊깁니다</b> — 그 구간의 '싸다/비싸다'는
+      이 그래프로 판단할 수 없습니다. 위 <b>투자 지표 카드는 외부 집계값(연간 실적 기준)</b>이라
+      값이 다릅니다(그 카드의 'PER·PBR 산정 근거' 참고).</p>`;
   bandTabs(host, st);
 }
 

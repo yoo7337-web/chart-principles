@@ -2428,3 +2428,14 @@ header h1 { margin-right: auto; }
 .scr-th { cursor: pointer; user-select: none; white-space: nowrap; }
 .scr-th:hover { color: var(--accent); }
 .scr-arrow { font-style: normal; font-size: .78em; letter-spacing: -1px; }
+
+/* PER·PBR 산정 근거(v337) */
+.mbasis { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+.mbasis > summary { cursor: pointer; font-size: .78rem; color: var(--accent); list-style: none; }
+.mbasis > summary::-webkit-details-marker { display: none; }
+.mbasis > summary::before { content: "ⓘ "; }
+.mbasis > summary:hover { text-decoration: underline; }
+.mbasis-b { margin-top: 7px; }
+.mbasis-b table { font-size: .74rem; }
+.mbasis-b td, .mbasis-b th { padding: 4px 6px; vertical-align: top; }
+.mbasis-b .mini-note { margin-top: 7px; }
