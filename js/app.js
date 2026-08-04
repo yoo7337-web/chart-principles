@@ -4229,6 +4229,11 @@ function scrComputeVals(t) {
     dyield: num(f.div_yield), payout,
     div_pay: scrPayStreak(dpsS), div_grow: scrDivGrowStreak(dpsS),
     c5: num(t.c5), upstreak: num(t.up),  // 모멘텀(heatmap 제공): 5거래일 수익률·연속 상승일
+    // 수급(외국인·기관, KR 전용 — supply_scan.json). 값이 없으면 지표 필터에서 자동 제외된다.
+    ...(() => { const s = supOf(t); return {
+      fdr20: num(s.fdr20), fmcap20: num(s.fmcap20), fshare20: num(s.fshare20),
+      fdays20: num(s.fdays20), fnet20: num(s.fnet20), fr: num(s.fr),
+      imcap20: num(s.imcap20), fdr_adj: s.fdr_adj || null }; })(),
     // 기간 등락률(heatmap 제공, 거래일 21/63/126/252). 상장 기간이 짧으면 null → 표에 '-'
     r1m: num(t.r1m), r3m: num(t.r3m), r6m: num(t.r6m), r1y: num(t.r1y),
   };
@@ -4242,6 +4247,22 @@ function scrBuildVals() {
 /* --- 세부 지표 레지스트리 (버킷=구간 필터, 다중선택=OR) --- */
 function _b(l, lo, hi) { return { l, lo, hi }; }
 const SCR_METRICS = [
+  // 수급(외국인) — ⚠매수 신호로 검증되지 않았다(SUP_EVIDENCE 참고). 정보·참고용 필터다.
+  { id: "fdr20", cat: "수급", label: "외국인 지분율 20일 변화", unit: "%p",
+    note: "외국인 보유율(%)의 20거래일 변화. ⚠증자·주식수 변동·등록 정정으로도 움직인다(의심 종목엔 ⚠ 표시)",
+    buckets: [_b("감소", null, 0), _b("0~0.3", 0, 0.3), _b("0.3~1", 0.3, 1), _b("1~2", 1, 2), _b("2↑", 2, null)] },
+  { id: "fmcap20", cat: "수급", label: "외국인 20일 순매수/시총", unit: "%",
+    note: "20일 누적 순매수 금액 ÷ 시가총액. 규모로 정규화한 유입 강도",
+    buckets: [_b("순매도", null, 0), _b("0~0.2", 0, 0.2), _b("0.2~0.5", 0.2, 0.5), _b("0.5~1", 0.5, 1), _b("1↑", 1, null)] },
+  { id: "fshare20", cat: "수급", label: "외국인 20일 순매수/거래대금", unit: "%",
+    note: "그 기간 거래대금 중 외국인 순매수가 차지한 비율 — 매매를 누가 주도했나",
+    buckets: [_b("순매도", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "fdays20", cat: "수급", label: "외국인 순매수일 비율(20일)", unit: "%",
+    note: "20일 중 외국인이 순매수한 날의 비율 — 하루 몰빵인지 꾸준한 매집인지",
+    buckets: [_b("~40", null, 40), _b("40~55", 40, 55), _b("55~70", 55, 70), _b("70~85", 70, 85), _b("85↑", 85, null)] },
+  { id: "imcap20", cat: "수급", label: "기관 20일 순매수/시총", unit: "%",
+    note: "기관 20일 누적 순매수 ÷ 시가총액",
+    buckets: [_b("순매도", null, 0), _b("0~0.2", 0, 0.2), _b("0.2~0.5", 0.2, 0.5), _b("0.5↑", 0.5, null)] },
   // 기업가치 (배)
   { id: "per", cat: "기업가치", label: "PER", unit: "배", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~15", 10, 15), _b("15~20", 15, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
   { id: "pbr", cat: "기업가치", label: "PBR", unit: "배", buckets: [_b("0~0.5", 0, 0.5), _b("0.5~1", 0.5, 1), _b("1~1.5", 1, 1.5), _b("1.5~2", 1.5, 2), _b("2~3", 2, 3), _b("3↑", 3, null)] },
@@ -4271,7 +4292,7 @@ const SCR_METRICS = [
   { id: "div_grow", cat: "배당", label: "배당 연속증가", unit: "년", note: "국내만(최근 수년 데이터 한정)", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null)] },
 ];
 const SCR_METRIC_BY_ID = Object.fromEntries(SCR_METRICS.map((m) => [m.id, m]));
-const SCR_CATS = ["기업가치", "성장성", "수익성", "재무건전성", "배당"];
+const SCR_CATS = ["수급", "기업가치", "성장성", "수익성", "재무건전성", "배당"];
 // 구현 불가 항목(원인) — UI에 안내
 const SCR_UNAVAIL = [
   ["PFCR", "잉여현금흐름(FCF) 미수집 — 현금흐름표 수집 필요"],
@@ -4324,6 +4345,10 @@ function scrThemePass(vals) {
 
 function scrUnit() { return scrState.country === "us" ? "$B" : "조원"; }  // 시총 입력 단위
 function scrMcapVal(t) {  // 현재 단위(조원 or $B)로 변환한 시총값
+  // 🐞⚠`mcap_est`는 시총 스크랩 실패 시 넣은 **20일 평균 거래대금 대용값**이다(시총이 아니다).
+  //   이걸 그대로 쓰면 표에 "2억원"·"0억원" 같은 값이 찍히고 시총 필터·티어가 통째로 어긋난다
+  //   (실측 2026-08-05: 2,566종목 중 1,193종목). → 값 없음(null)으로 취급한다.
+  if (t.mcap_est) return null;
   if (scrState.country === "us") return t.mcap / 1e9;                    // $B
   return (t.m === "us" ? t.mcap * SCR_FX : t.mcap) / 1e12;              // 조원(미국주 환산)
 }
@@ -4343,9 +4368,43 @@ function scrSectorsFor(country) {
   return Object.entries(cnt).sort((a, b) => b[1] - a[1]);  // [name, n] 내림차순
 }
 
+/* 수급 지표의 검증 결과 — **화면에 근거를 붙여서** 제공한다.
+   기술적 테마 8종과 같은 원칙: 통과 못 한 것도 주되, 무엇이 왜 약한지 숫자로 밝힌다. */
+const SUP_EVIDENCE = `<details class="scr-eviden"><summary>⚠ 이 지표들은 <b>매수 신호로 검증되지 않았습니다</b> — 검증 결과 보기</summary>
+  <p class="mini-note" style="margin:6px 0">국내 1,188종목 · 26만 관측(2025-07~2026-07)으로 t+20 초과수익을 쟀습니다.
+    수익률 분포의 꼬리가 두꺼워 <b>평균이 아니라 중앙값·부호검정</b>으로 판정했습니다.
+    임계값은 <b>날짜별 횡단면 순위</b>로 잡았습니다 — 전 기간 공통 임계값을 쓰면 '종목'이 아니라
+    <b>시점</b>(시장 전체에 외국인 자금이 몰린 고점 부근)을 고르게 됩니다.</p>
+  <div class="tablewrap"><table class="hld-table">
+    <thead><tr><th>정의(상위 5%)</th><th class="scr-r">표본</th><th class="scr-r">직전20일 주가</th>
+      <th class="scr-r">승률</th><th class="scr-r">중앙 edge</th><th class="scr-r">전반/후반</th></tr></thead>
+    <tbody>
+      <tr><td>순매수 ÷ 시총</td><td class="scr-r">3,660</td><td class="scr-r">+7.6%</td>
+        <td class="scr-r kdn">34.5%</td><td class="scr-r kdn">-7.02%p</td><td class="scr-r">-1.9 / -9.2</td></tr>
+      <tr><td>지분율 20일 변화</td><td class="scr-r">3,738</td><td class="scr-r">+8.7%</td>
+        <td class="scr-r">45.1%</td><td class="scr-r kdn">-2.33%p</td><td class="scr-r">+2.1 / -5.3</td></tr>
+      <tr><td>지분율 1년 신고</td><td class="scr-r">5,980</td><td class="scr-r">+4.5%</td>
+        <td class="scr-r">49.6%</td><td class="scr-r">0.00%p</td><td class="scr-r">+0.1 / -0.2</td></tr>
+      <tr><td>순매수 ÷ 거래대금</td><td class="scr-r">3,469</td><td class="scr-r">+2.9%</td>
+        <td class="scr-r">48.4%</td><td class="scr-r">-0.35%p</td><td class="scr-r">+0.3 / -1.6</td></tr>
+      <tr><td>'조용한 매집'(수급↑ &amp; 주가 하위30%)</td><td class="scr-r">1,091</td><td class="scr-r kdn">-20.3%</td>
+        <td class="scr-r kdn">37.6%</td><td class="scr-r kdn">-6.08%p</td><td class="scr-r">+0.3 / -9.2</td></tr>
+    </tbody></table></div>
+  <p class="mini-note">읽는 법 세 가지 —
+    <b>①순매수 급증 상위는 이미 오른 종목입니다.</b> 선행 신호가 아니라 추격입니다.
+    <b>②모멘텀을 고정하면 설명력이 사라집니다.</b> 같은 주가 모멘텀 구간 안에서 수급 상위20%와 하위20%의
+    차이는 ±1%p 수준이고, <b>약한 종목에선 (−)·강한 종목에선 (+)로 부호가 뒤집힙니다</b> —
+    외국인 매수는 '이미 가는 종목을 확인해 주는' 신호이지 바닥 반전 신호가 아닙니다.
+    <b>③'조용한 매집'은 기각됐습니다.</b> 외국인이 담아도 주가가 빠지고 있으면 이후 20일도 계속 빠졌습니다.
+    <br>한계: 수급 이력이 <b>1년</b>뿐이라 기존 원칙의 생존조건 중 '한·미 교차'는 적용 불가이고 기간 분할도
+    6개월×2가 한계입니다. <b>'검증 통과'가 아니라 이 구간의 관측</b>으로 봐 주세요.</p>
+</details>`;
+
 function initScreener() {
   if (!MARKET || !MARKET.heatmap) return;  // 데이터 로딩 전 — 다음 진입 시 재시도
   screenerRendered = true;
+  // 수급 지표는 별도 파일이라 늦게 온다 → 도착하면 값 캐시를 다시 만들고 한 번 더 그린다
+  loadSupplyScan().then((j) => { if (j) { scrBuildVals(); if (screenerRendered) renderScreener(); } });
   $("#scr-context").innerHTML = `<b>주식찾기</b> — 종목 발굴 3단계: <b>① 어디서</b>(산업·밸류체인) → <b>② 어떤 회사를</b>(투자 스타일) → <b>③ 언제</b>(차트 신호). 각 단계는 건너뛰어도 되고, 고른 조건은 <b>모두 동시 적용(AND)</b>됩니다. 오른쪽 세부 지표(PER·성장률 등)로 더 좁힐 수 있습니다.`;
   // 발굴 3단계 카드 — 클릭=해당 패널 펼침(하나만), 활성 카드 재클릭=접힘
   document.querySelectorAll("#scr-steps .scr-step").forEach((b) =>
@@ -5073,6 +5132,21 @@ function renderScrThemes() {
 
 /* ── 기술적 테마(차트 패턴) — tech_patterns.json 사전 검증 결과 + 현재 신호 종목 ── */
 let TECHPAT = null, techLoading = null, scrTechActive = null;
+/* 외국인·기관 수급 지표(supply_scan.json) — KR 전용·로컬 소유.
+   ⚠클라우드엔 flow parquet이 없어 이 파일을 못 만든다 → market.json에 넣지 않고 따로 둔다. */
+let SUPPLYSCAN = null, supLoading = null;
+function loadSupplyScan() {
+  if (SUPPLYSCAN) return Promise.resolve(SUPPLYSCAN);
+  if (supLoading) return supLoading;
+  supLoading = fetch("data/supply_scan.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { SUPPLYSCAN = j; return j; }).catch(() => null);
+  return supLoading;
+}
+function supOf(t) {   // 히트맵 타일 → 수급 지표(미국·미수집은 빈 객체)
+  if (!SUPPLYSCAN || t.m !== "kr") return {};
+  return SUPPLYSCAN.map?.[t.t] || {};
+}
+
 function loadTechPat() {
   if (TECHPAT) return Promise.resolve(TECHPAT);
   if (techLoading) return techLoading;
@@ -5247,7 +5321,8 @@ function renderScrMetrics() {
       const note = m.note ? `<span class="scr-mnote">${m.note}</span>` : "";
       return `<div class="scr-metric-row"><span class="scr-mlabel">${m.label}<span class="sub-note"> (${m.unit})</span>${note}</span><span class="scr-bks">${chips}</span></div>`;
     }).join("");
-    return `<details class="scr-cat"${cat === "기업가치" ? " open" : ""}><summary>${cat} <span class="sub-note scr-cat-n" data-cat="${cat}"></span></summary>${rows}</details>`;
+    return `<details class="scr-cat"${cat === "수급" ? " open" : ""}><summary>${cat} <span class="sub-note scr-cat-n" data-cat="${cat}"></span></summary>${rows}${
+      cat === "수급" ? SUP_EVIDENCE : ""}</details>`;
   }).join("");
   host.querySelectorAll(".scr-bk").forEach((b) => b.onclick = () => {
     const mid = b.dataset.mid, i = +b.dataset.i;
@@ -5280,8 +5355,9 @@ function renderScreener() {
     if (scrState.groups && !scrState.groups.has(t.grp || "etc")) return false;
     if (scrState.sectors && !scrState.sectors.has(t.sector)) return false;
     const v = scrMcapVal(t);
-    if (scrState.min != null && v < scrState.min) return false;
-    if (scrState.max != null && v > scrState.max) return false;
+    // 시총을 모르는 종목(추정값)은 시총 조건을 건 순간 후보에서 빠진다 — 가짜 값으로 통과시키지 않는다
+    if (scrState.min != null && (v == null || v < scrState.min)) return false;
+    if (scrState.max != null && (v == null || v > scrState.max)) return false;
     if (useDetail || useTheme) {
       const vals = scrVals.get(t.m + "_" + t.t) || {};
       if (useTheme && !scrThemePass(vals)) return false;
@@ -5319,11 +5395,11 @@ function renderScreener() {
   } else {
     rows.sort((a, b) => {
       switch (s) {
-        case "mcap_asc": return scrMcapVal(a) - scrMcapVal(b);
+        case "mcap_asc": return (scrMcapVal(a) ?? Infinity) - (scrMcapVal(b) ?? Infinity);
         case "chg": return b.chg - a.chg;
         case "chg_asc": return a.chg - b.chg;
         case "name": return (a.name || "").localeCompare(b.name || "");
-        default: return scrMcapVal(b) - scrMcapVal(a);
+        default: return (scrMcapVal(b) ?? -1) - (scrMcapVal(a) ?? -1);
       }
     });
   }
@@ -5356,15 +5432,19 @@ function renderScreener() {
     const vals = scrVals.get(t.m + "_" + t.t) || {};
     const extra = cols.map((id) => {
       const v = vals[id];
-      const c = SCR_RET_COLS.includes(id) && v != null ? (v >= 0 ? "#f5445a" : "#4391ff") : null;
-      return `<td class="scr-r"${c ? ` style="color:${c}"` : ""}>${scrFmtMetric(id, v)}</td>`;
+      const col2 = SCR_RET_COLS.includes(id) || SCR_SIGNED.includes(id) || id === "fnet20";
+      const c = col2 && v != null ? (v >= 0 ? "#f5445a" : "#4391ff") : null;
+      const warn = id === "fdr20" && vals.fdr_adj
+        ? `<span class="scr-warn" title="이 20일 안에 보유율이 하루 ${vals.fdr_adj}%p 점프했습니다 — 매매가 아니라 증자·주식수 변동·외국인 등록 정정일 수 있어 '변화폭'을 매수세로 읽으면 안 됩니다">⚠</span>`
+        : "";
+      return `<td class="scr-r"${c ? ` style="color:${c}"` : ""}>${scrFmtMetric(id, v)}${warn}</td>`;
     }).join("");
     return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
       <td class="scr-star">${starBtn(`${t.m}_${t.t}`, t.name)}</td>
       <td class="scr-name"><img class="mv-logo" src="${logoUrl(t.m, t.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${t.name}</b> <span class="sub-note">${t.t}</span></td>
       <td>${t.m === "kr" ? "🇰🇷" : "🇺🇸"}</td>
       <td>${t.sector}</td>
-      <td class="scr-r">${fmtMcap(t.mcap, t.m)}</td>
+      <td class="scr-r">${t.mcap_est ? `<span class="sub-note" title="시가총액 수집 실패 — 거래대금 대용값이라 표시하지 않습니다">-</span>` : fmtMcap(t.mcap, t.m)}</td>
       <td class="scr-r" style="color:${col}">${pct(t.chg, 2)}</td>${extra}
     </tr>`;
   }).join("");
@@ -5386,9 +5466,13 @@ const SCR_EXTRA_META = { c5: { label: "1주수익률", unit: "%pt" }, upstreak: 
   r1m: { label: "1개월" }, r3m: { label: "3개월" }, r6m: { label: "6개월" }, r1y: { label: "1년" } };
 const SCR_RET_COLS = ["r1m", "r3m", "r6m", "r1y"];   // 등락률 계열 — 색을 입히고 비율(0.12)로 저장돼 있다
 function scrColLabel(id) { return SCR_METRIC_BY_ID[id]?.label || SCR_EXTRA_META[id]?.label || id; }
+const SCR_SIGNED = ["fdr20", "fmcap20", "fshare20", "imcap20"];   // 부호를 붙여 보여줄 수급 지표
 function scrFmtMetric(id, v) {
   if (v == null) return "-";
   if (id === "c5" || SCR_RET_COLS.includes(id)) return (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+  if (id === "fnet20") return (v >= 0 ? "+" : "") + Math.round(v).toLocaleString() + "억";
+  if (SCR_SIGNED.includes(id)) return (v >= 0 ? "+" : "") + v.toFixed(id === "fdr20" ? 2 : 2)
+    + (id === "fdr20" ? "%p" : "%");
   if (id === "upstreak") return v + "일";
   const u = SCR_METRIC_BY_ID[id]?.unit;
   if (u === "배") return v.toFixed(1) + "배";

@@ -2439,3 +2439,10 @@ header h1 { margin-right: auto; }
 .mbasis-b table { font-size: .74rem; }
 .mbasis-b td, .mbasis-b th { padding: 4px 6px; vertical-align: top; }
 .mbasis-b .mini-note { margin-top: 7px; }
+
+/* 수급 지표 주의 표시(v339) */
+.scr-warn { color: #f0a020; margin-left: 2px; cursor: help; font-size: .9em; }
+.scr-eviden { border: 1px dashed rgba(240,160,32,.5); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.scr-eviden > summary { cursor: pointer; font-size: .78rem; color: #f0a020; list-style: none; }
+.scr-eviden > summary::-webkit-details-marker { display: none; }
+.scr-eviden table { font-size: .74rem; margin-top: 7px; }
