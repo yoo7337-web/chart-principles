@@ -3616,6 +3616,12 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v318", "2026-08-04", "추이 신호 라벨 표시 · 주가선 색 분리",
+   "추이 카드에서 **신호에 커서를 올리지 않아도 어떤 원칙인지** 보이도록 마커 옆에 축약 라벨을 "
+   + "붙였습니다(▲이격 · ▼120↓). 신호가 몰린 구간은 위아래로 계단처럼 배치해 겹치지 않습니다.\n\n"
+   + "주가선이 상승이면 빨강이라 **매도 신호(빨강)와 구분이 안 되던 문제**도 고쳤습니다 — 주가선은 중립 회색으로 "
+   + "두고 색은 신호에만 씁니다(매수 초록 / 매도 빨강).\n\n"
+   + "관심종목 재무 카드 이름을 **'재무 Snapshot'**으로 바꾸고 제목과 토글의 세로 정렬을 맞췄습니다."],
   ["v317", "2026-08-04", "보고서 버튼 정렬·색 구분 · 재무 X축 정렬",
    "**'기업 이해 보고서'와 '사업 심층' 버튼**을 종목조회·관심종목 모두 **좌우로 나란히** 두고 크기를 "
    + "맞췄습니다. 성격이 다른 문서라 색도 구분했습니다 — 보고서는 보라, 공시 원문 발췌인 사업 심층은 청록.\n\n"
@@ -7515,23 +7521,33 @@ function wsSpark(series, sigPts) {
   const X = (i) => (i / (s.length - 1)) * W;
   const Y = (v) => H - PB - (v - lo) / (hi - lo || 1) * (H - PT - PB);
   const pts = cs.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  const up = cs[cs.length - 1] >= cs[0];
+  /* ⚠주가선을 상승 빨강/하락 파랑으로 그리면 **매도 신호(빨강)와 구분이 안 된다**(사용자 지적)
+     → 주가선은 중립 회색으로 고정하고, 색은 신호에만 쓴다. */
   /* 신호 마커 — ⚠preserveAspectRatio="none"이면 도형이 가로로 늘어난다(삼각형이 찌그러짐)
-     → 마커는 X만 스케일하고 **모양은 고정**되도록 별도 오버레이 SVG에 절대좌표(%)로 얹는다. */
+     → 마커는 X만 스케일하고 **모양은 고정**되도록 HTML 오버레이에 절대좌표(%)로 얹는다. */
   const marks = (sigPts || []).map((g) => {
     const i = s.findIndex((x) => x.t === g.t);
     if (i < 0) return null;
-    return { ...g, xp: (X(i) / W) * 100, yp: (Y(cs[i]) / H) * 100 };
-  }).filter(Boolean);
+    return { ...g, i, xp: (X(i) / W) * 100, yp: (Y(cs[i]) / H) * 100 };
+  }).filter(Boolean).sort((a, b) => a.i - b.i);
+  // 가까운 마커끼리 겹치지 않게 세로로 계단 배치(같은 날 여러 신호가 흔하다)
+  let lastI = -99, tier = 0;
+  marks.forEach((g) => {
+    if (g.i - lastI <= 6) tier += 1; else tier = 0;
+    lastI = g.i;
+    g.dy = (g.side === "buy" ? 1 : -1) * (12 + tier * 13);   // 매수는 아래, 매도는 위로 띄운다
+  });
   const overlay = marks.map((g) => {
     const buy = g.side === "buy";
+    const abbr = RULE_ABBR[g.rid] || (g.name || "").replace(/\(.*\)/, "").slice(0, 6);
     return `<span class="ws-sig ${buy ? "buy" : "sell"}${g.recent ? " recent" : ""}"
-      style="left:${g.xp.toFixed(2)}%;top:${g.yp.toFixed(2)}%"
-      title="${dsEsc(g.name)} · ${String(g.t).slice(5)}${g.recent ? " (최근)" : ""}">${buy ? "▲" : "▼"}</span>`;
+      style="left:${g.xp.toFixed(2)}%;top:calc(${g.yp.toFixed(2)}% + ${g.dy}px)"
+      title="${dsEsc(g.name)} · ${String(g.t).slice(5)}${g.recent ? " (최근)" : ""}">
+      <i>${buy ? "▲" : "▼"}</i><b>${dsEsc(abbr)}</b></span>`;
   }).join("");
   return `<div class="ws-spark-wrap">
     <svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
-      <polyline points="${pts}" fill="none" stroke="${up ? "var(--kup)" : "var(--kdn)"}" stroke-width="1.6"/>
+      <polyline points="${pts}" fill="none" stroke="#8e97a6" stroke-width="1.5"/>
     </svg>${overlay}</div>`;
 }
 
@@ -7559,7 +7575,7 @@ function wsShow(key) {
     <div class="ws-grid" id="ws-grid">
       ${wsCard("📖", "심층 보고서", null, `<p class="mini-note">확인 중…</p>`, "ws-report")}
       ${wsCard("📈", "추이 · 신호 (6개월)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-trend")}
-      ${wsCard("📊", "재무 (분기)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-fin")}
+      ${wsCard("📊", "재무 Snapshot", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-fin")}
       ${wsCard("⚖️", "밸류에이션", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-val")}
       ${wsCard("👥", "수급 · 컨센서스", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-supply")}
       ${wsCard("🏭", "산업 맥락", "rotation", `<p class="mini-note">불러오는 중…</p>`, "ws-ind")}
@@ -7651,8 +7667,9 @@ function wsShow(key) {
       seenSig.add(k);
       sigPts.push(o);
     };
-    if (sig) pushSig({ t: sig.date, side: sig.side, name: sig.rule, recent: true });
-    mks.forEach((m2) => pushSig({ t: String(m2.t), side: m2.side, name: m2.name || m2.rule_id }));
+    if (sig) pushSig({ t: sig.date, side: sig.side, name: sig.rule, rid: sig.rule_id, recent: true });
+    mks.forEach((m2) => pushSig({ t: String(m2.t), side: m2.side, rid: m2.rule_id,
+                                  name: m2.name || m2.rule_id }));
     fill("ws-trend", `${wsSpark(st.series, sigPts)}
       <div class="ws-caps">${cap("1주", pr.ret_w1)}${cap("1개월", pr.ret_m1)}${cap("3개월", pr.ret_m3)}${cap("1년", pr.ret_y1)}</div>
       <div class="ws-kv"><div class="sub-note">▲=매수 신호 · ▼=매도 신호 (표시에 커서를 올리면 원칙명) ·

@@ -2389,3 +2389,16 @@ header h1 { margin-right: auto; }
 .rep-btn.rep-a:hover { background: #9d7bff; color: #fff; }
 .rep-btn.rep-b { border-color: #22c0a8; color: #4fd6c0; }
 .rep-btn.rep-b:hover { background: #22c0a8; color: #0d1117; }
+
+/* 추이 신호 — 커서를 올리지 않아도 어떤 신호인지 보이게(v318) */
+.ws-sig { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
+  padding: 1px 4px; border-radius: 4px; background: rgba(23,23,28,.82); }
+.ws-sig i { font-style: normal; font-size: 9px; line-height: 1; }
+.ws-sig b { font-size: 8.5px; font-weight: 700; letter-spacing: -.2px; }
+.ws-sig.recent i { font-size: 12px; }
+.ws-sig.recent b { font-size: 9.5px; }
+.ws-sig.buy { color: #22c07a; border: 1px solid rgba(34,192,122,.45); }
+.ws-sig.sell { color: #f5445a; border: 1px solid rgba(245,68,90,.45); }
+/* 재무 카드 제목·토글 중앙 정렬 */
+.ws-card-h { align-items: center; }
+.ws-card-h .ws-fin-tg { display: inline-flex; align-items: center; }
