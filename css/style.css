@@ -2326,3 +2326,24 @@ header h1 { margin-right: auto; }
   cursor: default; text-shadow: 0 0 3px var(--bg); }
 .ws-sig.buy { color: #22c07a; } .ws-sig.sell { color: #f5445a; }
 .ws-sig.recent { font-size: 13px; font-weight: 700; }
+
+/* 수급·프로파일 높이 축소(v316) — 본문 폭에서 두 카드가 과하게 길었다 */
+.lk-suprow { align-items: start; }
+#lookup-supply-card #lookup-supply { min-height: 200px; }
+.lk-suprow #lookup-profile .fund-head { padding: 8px 14px 2px; }
+/* 실제 마크업은 .pf2-*(성과·게이지)와 .prof-row(값 목록)다 — 여백만 줄여 정보는 그대로 둔다 */
+.lk-suprow #lookup-profile .pf2-wrap { margin: 4px 0 6px; }
+.lk-suprow #lookup-profile .pf2-gwrap { margin: 2px 0 6px; gap: 3px; }
+.lk-suprow #lookup-profile .pf2-row { padding: 1px 0; }
+.lk-suprow #lookup-profile .prof-row { padding: 2px 0; }
+.lk-suprow #lookup-profile .prof-grid.wide { gap: 2px 20px; }
+.lk-suprow #lookup-profile .sub-note { line-height: 1.3; }
+
+/* 동종업계 — 업계 합산 배수(v318) */
+.peer-ind { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px;
+  margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; font-size: .84rem; }
+.peer-ind > b:first-child { color: var(--muted); font-size: .78rem; }
+.peer-ind i { font-style: normal; font-size: .74rem; }
+.peer-ind > i.sub-note { flex: 1 1 100%; line-height: 1.35; }
+
+.vt-mm { font-size: 7.6px; font-weight: 700; }

@@ -1170,9 +1170,13 @@ async function initHeaderSearch() {
   const go = () => {
     const q = el.value.trim().toLowerCase();
     if (!q) return;
-    const hit = (LOOKUP_INDEX || []).find((x) =>
-      q === x.ticker.toLowerCase() || q === x.name.toLowerCase() ||
-      q === (x.name + " (" + x.ticker + ")").toLowerCase() ||
+    /* ⚠하나의 find에 정확일치와 부분일치를 OR로 묶으면 **배열에서 먼저 나오는 부분일치가 이긴다**
+       (실측: "현대차" → 현대차증권). 정확일치를 먼저 전부 훑고, 없을 때만 부분일치로 넘어간다. */
+    const idx = LOOKUP_INDEX || [];
+    const exact = idx.find((x) => q === x.ticker.toLowerCase() || q === x.name.toLowerCase()
+      || q === (x.name + " (" + x.ticker + ")").toLowerCase());
+    const starts = exact || idx.find((x) => x.name.toLowerCase().startsWith(q));
+    const hit = starts || idx.find((x) =>
       x.name.toLowerCase().includes(q) || x.ticker.toLowerCase().includes(q));
     if (!hit) return;
     gotoTabFull("lookup");
@@ -3612,6 +3616,14 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v315", "2026-08-04", "업계 합산 PER·PBR · 배수 추이 최고/최저 · 카드 높이 축소",
+   "**동종업계에 업계 합산 PER·PBR**을 넣었습니다. 회사별 배수를 단순 평균하면 적자 기업의 PER(−411배 같은 값)이 "
+   + "섞여 숫자가 망가지므로, **Σ시가총액 ÷ Σ순이익** 방식으로 계산합니다. 조회 종목이 업계보다 높은지 낮은지도 "
+   + "함께 표시하고, 표본이 3개사 미만이면 한 단계 위 산업 전체로 넓힙니다.\n\n"
+   + "**배수 추이**에 이력 최저·최고를 점과 값으로 표시했습니다. 수급·종목 프로파일 카드 높이도 줄였습니다"
+   + "(수급 494→417px, 프로파일 518→433px).\n\n"
+   + "🐞상단 검색에서 '현대차'를 치면 **현대차증권**이 열리던 문제를 고쳤습니다 — 정확히 일치하는 종목을 "
+   + "먼저 찾도록 순서를 바꿨습니다."],
   ["v314", "2026-08-04", "관심종목 재무·추이 카드 개편",
    "**재무 카드**: 매출·영업이익·순이익에 **FCF**를 더해 네 줄로 만들고, 분기/연간 버튼을 줄였습니다. "
    + "아래에 있던 '전년 대비' 표는 없애고 **증감률을 그래프 안 점과 점 사이**에 넣었습니다 "
@@ -9159,8 +9171,10 @@ function drawSupply(st) {
      남는 공간만큼 차트를 키운다(최소 220px). 프로파일이 아직 없으면 기본 높이. */
   const peer = $("#lookup-profile");
   const peerH = peer && getComputedStyle(peer).display !== "none" ? peer.offsetHeight : 0;
+  /* v316: 프로파일 높이를 그대로 따라가니 차트가 560px까지 커졌다(사용자: "이렇게 클 필요 없다")
+     → 상한을 300px로 낮춘다. 남는 높이는 카드가 흡수한다. */
   const chrome = 92;                     // 카드 제목 + 범례 + 패딩 몫
-  const H = Math.max(220, Math.min(560, peerH ? peerH - chrome : 220));
+  const H = Math.max(200, Math.min(300, peerH ? peerH - chrome : 220));
   el.style.height = H + "px";
   lookupSupply = LightweightCharts.createChart(el, baseChartOpts(el, H));
   const line = (key, color, scale) => {
@@ -10158,7 +10172,8 @@ function ourPeers(ticker, n = 5) {
   if (cand.length < 2) return null;
   cand.sort((a, b) => Math.abs(Math.log((a.mcap || 1) / (self.mcap || 1)))
                     - Math.abs(Math.log((b.mcap || 1) / (self.mcap || 1))));
-  return { stage: link, list: cand.slice(0, n).map((x) => ({ ticker: x.t, name: x.name, mk: "kr",
+  return { stage: link, all: cand.map((x) => x.t),
+    list: cand.slice(0, n).map((x) => ({ ticker: x.t, name: x.name, mk: "kr",
     price: (MARKET?.quotes?.[`kr_${x.t}`] || [])[0] ?? null,
     chg: (MARKET?.quotes?.[`kr_${x.t}`] || [])[1] ?? x.chg, mcap: x.mcap })) };
 }
@@ -10183,6 +10198,32 @@ async function fillPeerReturns(host, tickers) {
       td.className = "scr-r " + cls + " " + (v >= 0 ? "kup" : "kdn");
     });
   }
+}
+
+/* 산업 PER/PBR(v318) — **시가총액과 이익의 합**으로 계산한다.
+   ⚠회사별 배수를 단순 평균하면 안 된다: 적자 기업의 PER은 −411배처럼 나와 평균을 통째로 망친다.
+     합산 방식은 적자를 '이익 합계를 갉아먹는' 것으로 자연스럽게 반영한다(집계 PER의 정의).
+   순이익 = 시총 ÷ PER, 자기자본 = 시총 ÷ PBR 로 역산 — 별도 수집 없이 기존 metrics로 충분하다. */
+function industryMultiples(tickers) {
+  const tiles = MARKET?.heatmap || [];
+  let mcapPer = 0, np = 0, mcapPbr = 0, eq = 0, nPer = 0, nPbr = 0, loss = 0;
+  tickers.forEach((tk) => {
+    const tile = tiles.find((x) => x.m === "kr" && x.t === tk);
+    const m = EXTRAS.company?.map?.[`kr_${tk}`]?.metrics || {};
+    const cap = tile?.mcap;
+    if (!cap || tile?.mcap_est) return;                 // 시총이 추정치면 집계에서 뺀다
+    if (Number.isFinite(m.per) && m.per !== 0) {
+      mcapPer += cap; np += cap / m.per; nPer++;
+      if (m.per < 0) loss++;
+    }
+    if (Number.isFinite(m.pbr) && m.pbr > 0) { mcapPbr += cap; eq += cap / m.pbr; nPbr++; }
+  });
+  return {
+    per: nPer >= 3 && np > 0 ? mcapPer / np : null,
+    pbr: nPbr >= 3 && eq > 0 ? mcapPbr / eq : null,
+    nPer, nPbr, loss, mcap: mcapPer,
+    lossAll: nPer >= 3 && np <= 0,                      // 산업 전체가 적자
+  };
 }
 
 function renderLookupPeers(st) {
@@ -10221,6 +10262,32 @@ function renderLookupPeers(st) {
       <td class="scr-r">${nf1(m.per)}</td>
       <td class="scr-r">${nf1(m.pbr)}</td></tr>`;
     }).join("");
+    /* 산업 집계는 표에 보이는 6개가 아니라 **그 단계 전체 + 조회 종목**으로 낸다.
+       ⚠단계가 좁으면 표본이 3개도 안 된다(SK하이닉스의 '종합·파운드리'는 2개사) →
+         그때는 **한 단계 위(밸류체인 산업 전체)**로 넓혀 다시 집계한다. */
+    const stageCodes = (ours ? ours.all : peers.map((x) => x.ticker)).concat([st.ticker]);
+    let im = industryMultiples(stageCodes);
+    let imScope = ours ? `${ours.stage.stage} ` : "";
+    if (im.per == null && ours) {
+      const wide = new Set([st.ticker]);
+      (CHAINS[ours.stage.ind]?.stages || []).forEach((s2) =>
+        scrStageCodes(s2).forEach((c2) => wide.add(c2)));
+      const im2 = industryMultiples([...wide]);
+      if (im2.per != null || im2.pbr != null) { im = im2; imScope = `${ours.stage.indName} 전체 `; }
+    }
+    const nf2 = (v) => (v == null ? "-" : v.toFixed(1) + "배");
+    const selfM = met(st.ticker);
+    const cmp = (mine, ind) => (mine == null || ind == null || !isFinite(mine) ? ""
+      : mine < 0 ? ` <i class="sub-note">(적자)</i>`
+      : ` <i class="${mine < ind ? "pos" : "neg"}">${mine < ind ? "업계보다 낮음" : "업계보다 높음"}</i>`);
+    const indHtml = (im.per != null || im.pbr != null || im.lossAll) ? `<div class="peer-ind">
+        <b>업계 합산</b>
+        <span>PER <b>${im.lossAll ? "적자" : nf2(im.per)}</b>${cmp(selfM.per, im.per)}</span>
+        <span>PBR <b>${nf2(im.pbr)}</b>${cmp(selfM.pbr, im.pbr)}</span>
+        <i class="sub-note">${imScope}${im.nPer}개사 시총 ${fmtMcap(im.mcap, "kr")} 기준 ·
+          <b>Σ시가총액 ÷ Σ순이익</b>(단순 평균이 아니라 합산 — 적자사가 섞여도 왜곡되지 않습니다)${
+          im.loss ? ` · 적자 ${im.loss}개사 포함` : ""}</i>
+      </div>` : "";
     host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교
         <span class="sub-note">(${ours ? `${ours.stage.indName} · ${ours.stage.stage}` : "네이버 동일업종"}
         · 시총 근접순 · PER·PBR은 최근 보고서 기준)</span></h3>
@@ -10228,6 +10295,7 @@ function renderLookupPeers(st) {
         <thead><tr><th>종목</th><th class="scr-r">주가</th><th class="scr-r">시가총액</th>
           <th class="scr-r">1주</th><th class="scr-r">1개월</th><th class="scr-r">3개월</th><th class="scr-r">6개월</th>
           <th class="scr-r">PER</th><th class="scr-r">PBR</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${indHtml}
       <div id="peer-chart"></div>`;
     fillPeerReturns(host, all.map((x) => x.ticker));
     drawPeerChart(st, peers.map((x) => ({ mk: "kr", ticker: x.ticker, name: x.name })));
@@ -10565,17 +10633,29 @@ function renderMultTrend(host, st, series, basePts, tabs) {
     const Y = (v) => P.t + (H - P.t - P.b) * (1 - (Math.min(hi, Math.max(lo, v)) - lo) / Math.max(1e-9, hi - lo));
     const line = pts.map((x, i) => `${X(i).toFixed(1)},${Y(x.m).toFixed(1)}`).join(" ");
     const med = qq(0.5), now = vs[vs.length - 1];
+    const vmin = srt[0], vmax = srt[srt.length - 1];      // v319: 실제 최저·최고(클리핑 전 값)
+    const iMin = vs.indexOf(vmin), iMax = vs.indexOf(vmax);
     const rank = srt.filter((v) => v <= now).length / srt.length * 100;
     const yrs = ((new Date(pts[pts.length - 1].t) - new Date(pts[0].t)) / 3.156e10).toFixed(1);
+    const f2 = (v) => v.toFixed(Math.abs(v) < 10 ? 2 : 1);
+    const dotFor = (v, i, color, lab) => {
+      if (i < 0) return "";
+      // 눈금 밖(2% 클리핑)에 있으면 가장자리에 붙는다 — 값 라벨로 실제 수치를 알린다
+      const y = Y(v), x = X(i);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${color}"/>
+        <text x="${x.toFixed(1)}" y="${(v >= med ? y - 5 : y + 10).toFixed(1)}" text-anchor="middle"
+          class="vt-mm" fill="${color}">${lab} ${f2(v)}</text>`;
+    };
     return `<div class="vt-card">
       <div class="vt-h">${label}
-        <b class="${now <= med ? "kdn" : "kup"}">${now.toFixed(now < 10 ? 2 : 1)}배</b>
-        <i class="sub-note">중앙 ${med.toFixed(med < 10 ? 2 : 1)} · 상위 ${Math.round(rank)}%</i></div>
+        <b class="${now <= med ? "kdn" : "kup"}">${f2(now)}배</b>
+        <i class="sub-note">중앙 ${f2(med)} · 최저 ${f2(vmin)} · 최고 ${f2(vmax)} · 상위 ${Math.round(rank)}%</i></div>
       <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
         <line x1="${P.l}" y1="${Y(med)}" x2="${W - P.r}" y2="${Y(med)}" stroke="#8b8b93" stroke-dasharray="4 4"/>
         <polyline points="${line}" fill="none" stroke="#4391ff" stroke-width="1.6"/>
-        <text x="${W - P.r + 5}" y="${Y(now) + 3}" class="cr-end" fill="#4391ff">${now.toFixed(now < 10 ? 2 : 1)}</text>
-        <text x="${W - P.r + 5}" y="${Y(med) + 3}" class="cr-ax">중앙</text>
+        ${dotFor(vmax, iMax, "#f5445a", "최고")}${dotFor(vmin, iMin, "#22c07a", "최저")}
+        <text x="${W - P.r + 5}" y="${Y(now) + 3}" class="cr-end" fill="#4391ff">${f2(now)}</text>
+        <text x="${W - P.r + 5}" y="${Y(med) + 3}" class="cr-ax">중앙 ${f2(med)}</text>
         <text x="${P.l}" y="${H - 4}" class="cr-ax">${pts[0].t.slice(0, 7)}</text>
         <text x="${W - P.r}" y="${H - 4}" text-anchor="end" class="cr-ax">${yrs}년</text>
       </svg></div>`;
