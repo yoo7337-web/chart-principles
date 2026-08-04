@@ -2379,7 +2379,9 @@ header h1 { margin-right: auto; }
 /* 관심종목 보고서 카드 — 두 버튼을 좌우로, 색으로 구분(v317) */
 .ws-btnrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .ws-bd-slot { display: inline-flex; align-items: center; gap: 6px; }
-.ws-bd-slot .ws-bizdeep { display: inline-flex; align-items: center; gap: 6px; }
+.ws-bd-slot .ws-bizdeep { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.ws-btnrow { align-items: center; }
+.ws-btnrow > *, .ws-bd-slot { align-self: center; }
 .ws-bd-slot .sub-note { font-size: .7rem; }
 .rep-btn.sm { font-size: .78rem; padding: 5px 11px; font-weight: 700; }
 /* 📖 기업 이해 보고서 = 보라 · 📚 사업 심층(공시 원문) = 청록 — 성격이 다른 문서라 색을 나눈다 */
