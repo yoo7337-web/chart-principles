@@ -110,7 +110,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 }
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
-const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "시장 진단", rotation: "산업 진단", news: "뉴스·딜",
+const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업 진단", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
