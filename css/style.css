@@ -2402,3 +2402,14 @@ header h1 { margin-right: auto; }
 /* 재무 카드 제목·토글 중앙 정렬 */
 .ws-card-h { align-items: center; }
 .ws-card-h .ws-fin-tg { display: inline-flex; align-items: center; }
+
+/* 딜 목록 표(v319) */
+.ds-table tr[data-idx] { cursor: pointer; }
+.ds-table tr[data-idx]:hover { background: rgba(255,255,255,.04); }
+.ds-table .ds-go b { color: var(--accent); }
+.ds-table td { vertical-align: middle; }
+.ds-card.ds-hit { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 수급 선 끝 주체 이름표(v319) */
+.sup-tag { position: absolute; transform: translateY(-50%); font-size: .7rem; font-weight: 700;
+  background: rgba(23,23,28,.78); padding: 0 4px; border-radius: 3px; pointer-events: none; z-index: 2; }

@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=330">
-<script src="firebase-config.js?v=330"></script>
-<script src="js/auth.js?v=330"></script>
+<link rel="stylesheet" href="css/style.css?v=333">
+<script src="firebase-config.js?v=333"></script>
+<script src="js/auth.js?v=333"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=330"></script>
+<script src="js/sync.js?v=333"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -393,6 +393,24 @@
     <!-- 아래부터 2단: 좌=차트·실적 / 우=레일(원칙·투자지표·호가·컨센·메모) -->
     <div class="lk-grid">
     <div class="lk-main">
+    <!-- v220: AI 변동 사유 — 이 종목의 주가·공시·뉴스·수급을 근거로 Gemini가 상승/하락 이유를 설명 -->
+    <div id="lookup-why" class="card-flat lk-why" style="display:none">
+      <div class="lk-why-head">🤖 이 종목에 물어보기 <span class="sub-note">(주가·공시·뉴스·수급에 더해 재무·밸류에이션·배당·업계 비교까지 — 근거 자료 범위 내에서만)</span>
+        <span style="flex:1"></span>
+        <span class="mk-toggle" id="why-range">
+          <button data-r="5" class="active">최근 5일</button>
+          <button data-r="21">최근 1개월</button>
+          <button data-r="view">보이는 구간</button>
+        </span>
+      </div>
+      <div class="lk-why-ask">
+        <input type="text" id="why-q" placeholder="질문 — 예: 최근 실적 어때? · 지금 밸류에이션 비싼가? · 왜 빠졌어? (비우면 이 구간 등락 사유)">
+        <button class="today-chart-btn" id="why-go">분석</button>
+        <button class="today-chart-btn" id="why-clear" title="대화 지우기">🗑</button>
+        <button class="today-chart-btn" id="why-key" title="Gemini API 키 등록/변경 (이 브라우저에만 저장)">🔑</button>
+      </div>
+      <div id="why-out" class="lk-why-out" style="display:none"></div>
+    </div>
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="1m" id="tf-1m" style="display:none">당일 1분</button><button data-tf="5m" id="tf-5m" style="display:none">5분</button><button data-tf="60m" id="tf-60m" style="display:none">60분</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
@@ -442,24 +460,6 @@
     <!-- 보조지표(RSI·MACD 등) 서브차트 — 가격 차트 바로 아래에 붙어야 x축이 이어져 보인다(v229) -->
     <div id="lookup-inds"></div>
     <p class="legend" id="lookup-legend" style="display:none"></p>
-    <!-- v220: AI 변동 사유 — 이 종목의 주가·공시·뉴스·수급을 근거로 Gemini가 상승/하락 이유를 설명 -->
-    <div id="lookup-why" class="card-flat lk-why" style="display:none">
-      <div class="lk-why-head">🤔 왜 움직였나 <span class="sub-note">(AI가 공시·뉴스·수급을 종합 — 근거 자료 범위 내에서만)</span>
-        <span style="flex:1"></span>
-        <span class="mk-toggle" id="why-range">
-          <button data-r="5" class="active">최근 5일</button>
-          <button data-r="21">최근 1개월</button>
-          <button data-r="view">보이는 구간</button>
-        </span>
-      </div>
-      <div class="lk-why-ask">
-        <input type="text" id="why-q" placeholder="질문 (비우면 이 구간 등락 사유) — 답변 뒤 이어서 추가 질문 가능">
-        <button class="today-chart-btn" id="why-go">분석</button>
-        <button class="today-chart-btn" id="why-clear" title="대화 지우기">🗑</button>
-        <button class="today-chart-btn" id="why-key" title="Gemini API 키 등록/변경 (이 브라우저에만 저장)">🔑</button>
-      </div>
-      <div id="why-out" class="lk-why-out" style="display:none"></div>
-    </div>
     <!-- v279: 수급 차트가 전폭을 쓰기엔 정보량이 적다 → 좌 절반, 우측은 증권가 컨센서스 -->
     <div class="lk-suprow">
       <!-- v286: 옆의 종목 프로파일과 같은 카드(.card-flat) + 같은 제목 크기(.lk-h3)로 맞춘다 -->
@@ -1092,6 +1092,10 @@
       </div>
       <span class="sub-note" id="ds-count"></span>
       <span style="flex:1"></span>
+      <span class="mk-toggle" id="ds-view">
+        <button data-v="card" class="active">카드</button>
+        <button data-v="list">목록</button>
+      </span>
       <span class="mk-toggle" id="ds-sort">
         <button data-s="score" class="active">중요도</button>
         <button data-s="amount">금액</button>
@@ -1226,7 +1230,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=330"></script>
+<script src="js/app.js?v=333"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

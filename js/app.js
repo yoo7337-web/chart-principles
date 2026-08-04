@@ -2597,6 +2597,7 @@ function diRender() {
 let DEALS_ST = null;
 let dsFilter = "all";
 let dsSort = "score";
+let dsView = "card";      // v319: card=상세 카드 / list=전체 개요 표
 let dealsStructRendered = false;
 
 const dsAmt = (v) => {
@@ -2612,6 +2613,9 @@ function renderDealsStruct() {
   dealsStructRendered = true;
   const host = $("#ds-list");
   if (!host) return;
+  document.querySelectorAll("#ds-view button").forEach((b) => b.onclick = () => {
+    dsView = b.dataset.v; dsSyncView(); dsRender();
+  });
   if (!DEALS_ST) {
     host.innerHTML = `<p class="mini-note">불러오는 중…</p>`;
     fetch("data/deals_struct.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((j) => {
@@ -2621,6 +2625,48 @@ function renderDealsStruct() {
     return;
   }
   dsRender();
+}
+
+/* 딜 목록(v319) — 카드는 한 건씩 자세히 보는 뷰라 **전체 그림**이 안 보인다.
+   개요 표로 한눈에 훑고, 회사명을 누르면 그 딜의 카드(구조도·설명·기사)로 이동한다. */
+function dsRenderTable(host, rows) {
+  const kindKo = { in: "인수", out: "매각", merge: "합병", split: "분할" };
+  host.innerHTML = `<div class="tablewrap"><table class="hld-table ds-table">
+    <thead><tr><th>공시일</th><th>구분</th><th>공시 회사</th><th>대상</th><th>상대방</th>
+      <th class="scr-r">거래금액</th><th class="scr-r">자산대비</th><th class="scr-r">취득 후 지분</th></tr></thead>
+    <tbody>${rows.map((x, i) => `<tr data-idx="${i}">
+      <td class="sub-note">${dsEsc(x.d || "")}</td>
+      <td><span class="ds-kind k-${x.side}">${dsEsc(x.label || kindKo[x.side] || "")}</span></td>
+      <td class="ds-go"><b>${dsName(x.corp)}</b></td>
+      <td>${dsName(x.target)}</td>
+      <td class="sub-note">${dsName(x.counter)}</td>
+      <td class="scr-r"><b>${dsAmt(x.amount) || "-"}</b></td>
+      <td class="scr-r sub-note">${x.amount_vs_asset != null ? x.amount_vs_asset + "%" : "-"}</td>
+      <td class="scr-r sub-note">${x.stake_after != null ? x.stake_after + "%" : "-"}</td>
+    </tr>`).join("")}</tbody></table></div>
+    <p class="mini-note">회사명을 누르면 그 딜의 <b>구조도·설명·관련 기사</b>로 이동합니다 ·
+      자산대비 = 거래금액 ÷ 공시 회사의 자산총계</p>`;
+  host.querySelectorAll("tr[data-idx]").forEach((tr) => tr.onclick = () => {
+    const x = rows[+tr.dataset.idx];
+    dsView = "card";
+    dsSyncView();
+    dsRender();
+    // 카드가 그려진 뒤 해당 딜로 스크롤 + 잠깐 강조
+    setTimeout(() => {
+      const cards = [...document.querySelectorAll("#ds-list .ds-card")];
+      const hit = cards.find((c) => c.querySelector(".ds-head b")?.textContent === x.corp
+        && c.querySelector(".ds-head .sub-note")?.textContent === x.d) || cards[rows.indexOf(x)];
+      if (!hit) return;
+      hit.scrollIntoView({ behavior: "smooth", block: "center" });
+      hit.classList.add("ds-hit");
+      setTimeout(() => hit.classList.remove("ds-hit"), 2200);
+    }, 60);
+  });
+}
+
+function dsSyncView() {
+  document.querySelectorAll("#ds-view button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.v === dsView));
 }
 
 function dsRender() {
@@ -2638,6 +2684,7 @@ function dsRender() {
       : (b.d || "").localeCompare(a.d || ""));
   $("#ds-count").textContent = `${rows.length}건`;
   $("#ds-asof").textContent = DEALS_ST.generated ? `수집 ${DEALS_ST.generated}` : "";
+  if (dsView === "list") { dsRenderTable(host, rows); return; }
   host.innerHTML = rows.map(dsCard).join("");
   host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
     gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
@@ -9255,22 +9302,51 @@ function drawSupply(st) {
   const H = Math.max(200, Math.min(300, peerH ? peerH - chrome : 220));
   el.style.height = H + "px";
   lookupSupply = LightweightCharts.createChart(el, baseChartOpts(el, H));
-  const line = (key, color, scale) => {
+  /* v319: 우측 끝 값 라벨에 **주체 이름**을 함께 — 색만으로는 어느 선이 누구인지 헷갈린다.
+     lightweight-charts의 series `title`이 가격축 라벨에 붙는다. */
+  const line = (key, color, scale, title) => {
     const s = lookupSupply.addLineSeries({ color, lineWidth: 2, priceLineVisible: false,
-      lastValueVisible: true, priceScaleId: scale });
+      lastValueVisible: true, priceScaleId: scale, title });
     s.setData(sup.filter((x) => x[key] != null).map((x) => ({ time: x.t, value: x[key] })));
     return s;
   };
-  line("fc", "#4391ff");   // 외국인 누적 (좌축)
-  line("ic", "#f59e0b");   // 기관 누적 (좌축)
+  const seriesRef = [];
+  seriesRef.push(line("fc", "#4391ff", undefined, "외국인"));   // 외국인 누적 (좌축)
+  seriesRef.push(line("ic", "#f59e0b", undefined, "기관"));     // 기관 누적 (좌축)
   const hasIndi = sup.some((x) => x.pc != null);
-  if (hasIndi) line("pc", "#c084fc");   // 개인 누적 (좌축) — 옛 parquet엔 없어 조건부
-  const fr = line("fr", "#22c07a", "right");  // 외국인 보유율 (우축)
+  if (hasIndi) seriesRef.push(line("pc", "#c084fc", undefined, "개인"));   // 개인 누적 (좌축)
+  const fr = line("fr", "#22c07a", "right", "외국인 보유율");  // 우축
   lookupSupply.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
   // 0선
   lookupSupply.addLineSeries({ color: "#9ca3af", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
     .setData(sup.map((x) => ({ time: x.t, value: 0 })));
   lookupSupply.timeScale().fitContent();
+  /* v319: 선 끝에 **주체 이름표**를 얹는다 — 축 라벨은 캔버스라 값만 나와 어느 선이 누구인지 헷갈렸다.
+     priceToCoordinate로 마지막 값의 y를 얻어 HTML로 올린다(축 폭만큼 왼쪽에 배치). */
+  const tagSpecs = [[sup.map((x) => x.fc), "#4391ff", "외국인"], [sup.map((x) => x.ic), "#f59e0b", "기관"]];
+  if (hasIndi) tagSpecs.push([sup.map((x) => x.pc), "#c084fc", "개인"]);
+  setTimeout(() => {
+    if (!lookupSupply || LOOKUP_ST !== st) return;
+    el.style.position = "relative";
+    el.querySelectorAll(".sup-tag").forEach((x) => x.remove());
+    let axW = 60;
+    try { axW = lookupSupply.priceScale("right").width() + 6; } catch (e) { /* 기본값 사용 */ }
+    const placed = [];
+    tagSpecs.forEach(([arr, color, name], i) => {
+      const last = [...arr].reverse().find((v) => v != null);
+      if (last == null) return;
+      let y = null;
+      try { y = seriesRef[i]?.priceToCoordinate(last); } catch (e) { y = null; }
+      if (y == null) return;
+      while (placed.some((p2) => Math.abs(p2 - y) < 13)) y += 13;   // 겹치면 아래로
+      placed.push(y);
+      const sp = document.createElement("span");
+      sp.className = "sup-tag";
+      sp.textContent = name;
+      sp.style.cssText = `top:${y}px;right:${axW}px;color:${color}`;
+      el.appendChild(sp);
+    });
+  }, 120);
   $("#lookup-supply-legend").innerHTML =
     `─ <span style="color:#4391ff">외국인</span> · <span style="color:#f59e0b">기관</span>${hasIndi ? ` · <span style="color:#c084fc">개인</span>` : ""} 누적 순매수 (좌축, 억원) ·
      <span style="color:#22c07a">외국인 보유율</span> (우축, %) · 출처: 네이버(순매매량×종가 추정)
@@ -11403,8 +11479,32 @@ function whyContext(st, qwin) {
   const isOld = s.length && l.t < s[s.length - 1].t.slice(0, 8) + "01" &&
     (new Date(s[s.length - 1].t) - new Date(l.t)) / 864e5 > 30;
   const co = EXTRAS.company?.map?.[key];
+  /* v320: 질문이 '왜 빠졌나'만이 아니라 '실적 어때', '비싼가'까지 오므로 **종목 전반 자료**를 함께 싣는다.
+     ⚠자료에 없는 걸 지어내지 않게 하려면 자료를 넓히는 게 먼저다(프롬프트만 고쳐선 안 된다). */
+  /* ⚠추정 행에 단위가 뒤섞인 이상치가 섞여 온다(실측: 하이닉스 2026 매출이 실적의 3.5배).
+     그대로 프롬프트에 실으면 AI가 그 숫자로 답한다 → 실적 대비 3배 초과 추정은 뺀다(finExtOk와 같은 기준). */
+  const finAct = (co?.fin || []).filter((r) => !r.est && Number.isFinite(r.rev));
+  const revBase = finAct.length ? Math.abs(finAct[finAct.length - 1].rev) : null;
+  const fin = (co?.fin || [])
+    .filter((r) => !r.est || revBase == null || !Number.isFinite(r.rev) || Math.abs(r.rev) <= revBase * 3)
+    .slice(-4).map((r) => `${r.y} 매출 ${aiNum(r.rev)}${
+    r.op != null ? ` 영업익 ${aiNum(r.op)}` : ""}${r.est ? "(추정)" : ""}`);
+  const fx = finExtOk(co?.fin_ext).slice(-3).map((r) => `${r.y} 순이익 ${aiNum(r.net)} ROE ${r.roe ?? "-"}%`
+    + `${r.debt != null ? ` 부채비율 ${r.debt}%` : ""}${r.dps ? ` 주당배당 ${r.dps}` : ""}${r.est ? "(추정)" : ""}`);
+  const pr = st.profile || {};
+  const perf = [["1주", pr.ret_w1], ["1개월", pr.ret_m1], ["3개월", pr.ret_m3], ["1년", pr.ret_y1]]
+    .filter(([, v]) => v != null).map(([k2, v]) => `${k2} ${(v * 100).toFixed(1)}%`);
+  const ind = st.market === "kr" && typeof industryMultiples === "function" && typeof ourPeers === "function"
+    ? (() => { const o = ourPeers(st.ticker);
+        if (!o) return null;
+        const im = industryMultiples(o.all.concat([st.ticker]));
+        return im.per ? `${o.stage.stage} 업계 합산 PER ${im.per.toFixed(1)}배` +
+          (im.pbr ? ` · PBR ${im.pbr.toFixed(1)}배` : "") + ` (${im.nPer}개사)` : null; })()
+    : null;
   return { f, l, chg, hi, lo, volDays, disc, news: isOld ? [] : news, isOld, drops, jumps, supTxt, sigs,
            quarters: whyQuarters(st, f.t, l.t), cons: co?.cons, metrics: co?.metrics,
+           fin, fx, perf, ind, overview: (co?.overview || "").slice(0, 220),
+           sector: pr.sector, rank: pr.sector_rank, rankN: pr.sector_n,
            name: st.name, tk: st.ticker, mk: st.market };
 }
 
@@ -11550,6 +11650,12 @@ ${c.quarters.during.map((x) => `    · **구간 중 발표** — ${x}`).join("\n
 ${c.quarters.after.map((x) => `    · 구간 이후 발표(사후 확인용) — ${x}`).join("\n")}` : ""}
 ${c.cons ? `- 컨센서스(최신 ${c.cons.at || "-"} 기준, 구간 당시 값 아님): 목표주가 ${c.cons.target?.toLocaleString()} · 투자의견 ${c.cons.opinion ?? "-"}/5` : ""}
 ${c.metrics ? `- 밸류에이션(현재): PER ${c.metrics.per ?? "-"} · PBR ${c.metrics.pbr ?? "-"} · ROE ${c.metrics.roe ?? "-"}%` : ""}
+${c.ind ? `- ${c.ind} (합산 기준 — 회사별 배수 평균이 아님)` : ""}
+${c.fin?.length ? `- 연간 실적 추이: ${c.fin.join(" / ")}` : ""}
+${c.fx?.length ? `- 수익성·재무: ${c.fx.join(" / ")}` : ""}
+${c.perf?.length ? `- 기간 수익률(현재 기준): ${c.perf.join(" · ")}` : ""}
+${c.sector ? `- 섹터: ${c.sector}${c.rank ? ` (시총 ${c.rank}/${c.rankN}위)` : ""}` : ""}
+${c.overview ? `- 사업 개요: ${c.overview}` : ""}
 ${discRefs.length ? `- 공시(구간 내 ${discRefs.length}건):\n${discRefs.map((x) => `    · ${x}`).join("\n")}`
   : `- 공시(구간 내 ${c.disc.length}건): ${c.disc.join(" | ") || "없음"}`}
 ${arcNews.length ? `- **구간 당시 뉴스 헤드라인**(${arcNews.length}건, 급락·급등일 전후 우선):
@@ -11565,6 +11671,9 @@ ${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시
 - **동종업계가 함께 빠졌으면 업종·시장 요인**, 이 종목만 빠졌으면 개별 요인으로 명확히 구분해 서술하라.
 - **구간 이후 분기 실적**이 자료에 있으면, 당시 하락이 이후 실적 둔화를 선반영한 것인지 사후 평가하라.
 - 급락일과 공시일이 일치하면 인과를 우선 검토하되, 공시 제목만으로 단정하지 말 것.
+- **질문이 등락 사유가 아니면 그 질문에 답하라.** 실적·재무·밸류에이션·배당·업계 비교 자료가 위에 있으니
+  "실적 어때?"·"비싼가?"·"업계 대비 어떤가?" 같은 질문에는 해당 자료로 답하고, 주가 등락 서술은 곁들이는 정도로만.
+- 자료에 없는 항목을 물으면 **없다고 말하라**(추측 금지). 예: 특정 사업부 매출, 경쟁사 점유율.
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
