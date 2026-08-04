@@ -926,20 +926,10 @@ def kr_feed(code: str) -> dict:
         out["news"] = out["news"][:12]
     except Exception:
         pass
-    try:
-        arr = _getj(f"https://m.stock.naver.com/api/stock/{code}/disclosure?pageSize=40")
-        for it in arr:
-            try:
-                ts = datetime.fromisoformat(it["datetime"]).replace(tzinfo=KST)
-            except Exception:
-                continue
-            if ts < cut_disc:
-                continue
-            out["disc"].append({"d": ts.strftime("%Y-%m-%d"), "title": it["title"][:80],
-                                "link": f"https://finance.naver.com/item/news_notice.naver?code={code}"})
-        out["disc"] = out["disc"][:15]
-    except Exception:
-        pass
+    # 🐞공시는 **DART에서만** 받는다(build_feed의 DART 패스). 네이버 /disclosure는 폐기 —
+    #   같은 종목·같은 날에도 '공정위 공시 7건' ↔ '주식선물 가격제한폭 40건'으로 내용이 뒤바뀌고
+    #   정기보고서·주요사항보고서가 통째로 빠진다(2026-08-04 두산테스나 실측). 부분 자료가
+    #   남아 있으면 DART 패스가 실패했을 때 **쓰레기가 그대로 화면에 남는다** → 아예 비워 둔다.
     return out
 
 
@@ -1050,7 +1040,10 @@ def build_feed(quick: bool = False) -> dict:
         for code in codes:
             k = f"kr_{code}"
             cc = cmap.get(code)
-            if not cc or fail_streak >= 5:
+            # ⚠fail_streak는 '한도 초과·키 문제' 같은 전역 장애일 때만 중단하기 위한 것인데,
+            #   한 번 5에 닿으면 **남은 전 종목이 영구히 건너뛰어졌다**(그 종목들은 공시가 빈다).
+            #   → 임계를 넉넉히 두고, 아래에서 종목당 재시도로 일시 오류를 흡수한다.
+            if not cc or fail_streak >= 25:
                 continue
             try:
                 # 🐞⚠page_count=15는 '1년 중 최신 15건'만 가져온다 — 활발한 대형주는
@@ -1058,8 +1051,15 @@ def build_feed(quick: bool = False) -> dict:
                 #   → page_count=100 + 페이지네이션으로 1년 전량을 받고 DISC_MAX개까지 보관한다.
                 rows, page = [], 1
                 while page <= 4:                       # 최대 400건(대형주도 충분)
-                    d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
-                              f"&bgn_de={cut}&end_de={today_s}&page_no={page}&page_count=100")
+                    d = {}
+                    for attempt in range(3):           # DART는 간헐적 SSL EOF를 던진다
+                        d = _getj(f"https://opendart.fss.or.kr/api/list.json?crtfc_key={key}&corp_code={cc}"
+                                  f"&bgn_de={cut}&end_de={today_s}&page_no={page}&page_count=100")
+                        if d.get("status") in ("000", "013"):
+                            break
+                        time.sleep(0.6 * (attempt + 1))
+                    if d.get("status") == "020":       # 일일 한도 — 이 실행에선 더 못 받는다
+                        raise RuntimeError("DART_LIMIT")
                     if d.get("status") != "000" or not d.get("list"):
                         break
                     rows += d["list"]
@@ -1076,13 +1076,16 @@ def build_feed(quick: bool = False) -> dict:
                     if disc:
                         fmap.setdefault(k, {"news": [], "disc": []})["disc"] = disc
                         fetched += 1
+            except RuntimeError:
+                print(f"  DART 일일 한도 — {done}/{len(codes)}에서 중단(다음 실행에서 이어감)")
+                break
             except Exception:
                 fail_streak += 1
             done += 1
             if done % 150 == 0:
-                print(f"  [DART disc] {done} (교체 {fetched})")
+                print(f"  [DART disc] {done} (수집 {fetched})")
             time.sleep(0.25)
-        print(f"  DART 공시 딥링크: {fetched}종목 교체 (실패 시 네이버 목록 링크 유지)")
+        print(f"  DART 공시: {fetched}종목 수집 (1년 전량·모든 유형)")
     ciks = _cik_map()
     for i, tk in enumerate(tickers, 1):
         d = us_feed(tk, ciks.get(tk.replace("-", "")))
