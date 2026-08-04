@@ -1467,7 +1467,8 @@ function drawLookupChart() {
   const minBars = tf === "1m" ? st._min : (TF_INTRA.has(tf) ? st._hist?.[tf] : null);
   const isMin = TF_INTRA.has(tf) && minBars?.length;
   const s = isMin ? minBars : resampleBars(st.series, tf);
-  const selRule = lookupRuleSel;           // "" = 전체(원칙 목록 클릭으로 선택)
+  const selSet = lookupRuleSet;            // 비어 있으면 전체
+  const selRule = selSet.size === 1 ? [...selSet][0] : "";   // 보조지표 연동은 1개일 때만
   $("#lookup-info").innerHTML =
     `<b>${st.market === "kr" ? st.name + " (" + st.ticker + ")" : st.ticker}</b> · `
     + (isMin
@@ -1476,7 +1477,7 @@ function drawLookupChart() {
           : `${TF_KO[tf]} · ${s.length.toLocaleString()}봉 · 원칙 신호는 일봉 기준이라 표시되지 않습니다`)
       : `기준일 ${st.asof} · ${TF_KO[tf]} · 최근 10년 (좌우로 드래그·스크롤)`
         + (st._live ? ` · <b>최신 봉=30분 지연 잠정치</b><span class="sub-note">(고저 미확정 · 확정봉은 다음 배치 07:40)</span>` : "")
-        + (selRule ? ` · 선택 원칙 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
+        + (selSet.size ? ` · 선택 원칙 ${selSet.size}종 신호만` : ` · 신호 라벨 = 원칙 축약(범례 하단)`));
 
   if (lookupChart) { lookupChart.remove(); lookupChart = null; }
   (lookupInds || []).forEach((c) => { try { c.remove(); } catch (e) {} });
@@ -1529,11 +1530,11 @@ function drawLookupChart() {
 
   // 마커: 축약 라벨로 어떤 원칙인지 항상 식별 + 국면 적용(진한색)/미적용(회색) 구분 + 필터
   /* v278: 라디오 필터를 없앴다. 기본을 "core"로 두면 **참고(미채택) 원칙을 눌러도 마커가 안 뜬다**
-     → 전체를 그리고, 어떤 원칙을 볼지는 원칙 목록 클릭(lookupRuleSel)이 결정한다. */
+     → 전체를 그리고, 어떤 원칙을 볼지는 원칙 목록 클릭(lookupRuleSet)이 결정한다. */
   const filt = "all";
   // '전체 해제'(sig-none)면 마커를 전부 숨긴다 — 캔들만 깨끗하게 보고 싶을 때
   const shown = (isMin || lookupHideSignals ? [] : st.markers).filter((m) => {   // 분봉엔 일봉 기준 신호 미표시
-    if (selRule && m.rule_id !== selRule) return false;
+    if (selSet.size && !selSet.has(m.rule_id)) return false;
     if (filt === "core" && !SELECTED_RULES.has(m.rule_id)) return false;  // ⭐ 최종 채택 원칙만(기본)
     const on = ruleActive(m.rule_id, st.market);
     if (filt === "on" && !on) return false;
@@ -1557,7 +1558,7 @@ function drawLookupChart() {
       time: bt, position: m.side === "buy" ? "belowBar" : "aboveBar",
       color: on ? (m.side === "buy" ? "#22c07a" : "#f5445a") : "#9ca3af",
       shape: m.side === "buy" ? "arrowUp" : "arrowDown",
-      text: selRule ? m.name.replace(/\(.*\)/, "").slice(0, 8) : (RULE_ABBR[m.rule_id] || ""),
+      text: selSet.size === 1 ? m.name.replace(/\(.*\)/, "").slice(0, 8) : (RULE_ABBR[m.rule_id] || ""),
     };
   }).filter(Boolean));
 
@@ -3611,6 +3612,15 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v313", "2026-08-04", "원칙 다중 선택 · 동종업계 기간수익률 · 배수 추이",
+   "**원칙을 여러 개 동시에** 고를 수 있게 했습니다. 목록에서 누르면 쌓이고 다시 누르면 빠지며, "
+   + "위에 **전체 선택 / 전체 해제** 버튼을 뒀습니다. 지금 몇 종을 보고 있는지도 함께 표시됩니다.\n\n"
+   + "**동종업계 비교**에 시가총액과 **1주·1개월·3개월·6개월 수익률**을 넣었습니다 — 당일 등락률만으로는 "
+   + "누가 요즘 잘나가는지 알 수 없었습니다.\n\n"
+   + "**밸류에이션에 '배수 추이' 탭**을 추가했습니다. PER·PBR·PSR·P/FCF가 시간에 따라 어떻게 변해 왔는지 "
+   + "네 개를 한 화면에 보여주고, 각자의 이력 중앙값과 현재 위치(상위 몇 %)를 함께 표시합니다. "
+   + "선이 우하향이면 디레이팅, 우상향이면 재평가 국면입니다.\n\n"
+   + "수급 차트를 넓히고(1.35:1) 상단 검색창의 돋보기 아이콘을 뺐습니다."],
   ["v287", "2026-08-03", "이격도 과대낙폭 원칙 강화 — '떨어지는 칼날' 제외",
    "**제보에서 시작한 재검증입니다.** SK하이닉스에 7월 세 번(7/8·7/16·7/24) 매수 신호가 떴는데 계속 "
    + "하락했다는 지적을 받고 전 종목 116,111건을 다시 검증했습니다. 확인 결과 **아직 장기추세(MA120) 위에서 "
@@ -8919,9 +8929,9 @@ function toggleRotMembers(tr, sector, mk) {
 /* ---------- 종목 조회: 신호 라벨·게이팅·내러티브·프로파일 ---------- */
 // 차트 마커용 원칙 축약 (2~4자)
 let SELECTED_RULES = new Set();  // 최종 채택 원칙(매수5·매도5) — DATA 로드 후 채움
-/* v282: 헤더의 '원칙' 드롭다운을 없앴다(사용자 요청).
-   어떤 원칙만 볼지는 **원칙 목록 클릭**이 정하고, 그 상태를 여기에 담는다("" = 전체). */
-let lookupRuleSel = "";
+/* v313: 원칙을 **여러 개 동시에** 고를 수 있다(사용자 요청). 비어 있으면 전체 표시.
+   목록 클릭 = 토글, 상단 버튼으로 전체선택/전체해제. */
+let lookupRuleSet = new Set();
 const RULE_ABBR = {
   disparity_low: "이격", bb_lower_rsi: "BB·R", bb_lower_touch: "BB",
   rsi_oversold_exit: "R30", macd_cross_up_below0: "M↑",
@@ -9197,15 +9207,32 @@ function buildSigChips(st) {
     + block(items.filter((x) => !x.sel), "참고 원칙 (미채택)",
       "검증 기준 미달 — 근거가 약하니 참고만", "unsel");
   const host = $("#lookup-chips");
-  host.innerHTML = legend ? `<div class="rule-legend-wrap">${legend}</div>` : "";
-  const mark = () => host.querySelectorAll(".rl-item").forEach((c) =>
-    c.classList.toggle("on", !!lookupRuleSel && c.dataset.rid === lookupRuleSel));
+  const allRids = items.map((x) => x.rid);
+  const bar = `<div class="rl-bar">
+      <span class="rl-bar-n" id="rl-count"></span>
+      <button class="rl-bar-btn" id="rl-all">전체 선택</button>
+      <button class="rl-bar-btn" id="rl-none">전체 해제</button>
+    </div>`;
+  host.innerHTML = legend ? bar + `<div class="rule-legend-wrap">${legend}</div>` : "";
+  const mark = () => {
+    host.querySelectorAll(".rl-item").forEach((c) =>
+      c.classList.toggle("on", lookupRuleSet.has(c.dataset.rid)));
+    const n = document.getElementById("rl-count");
+    if (n) n.textContent = lookupRuleSet.size
+      ? `${lookupRuleSet.size}종 선택 — 그 신호만 표시`
+      : `선택 없음 — 전체 신호 표시`;
+  };
   mark();
   host.querySelectorAll(".rl-item").forEach((c) => c.addEventListener("click", () => {
-    lookupRuleSel = lookupRuleSel === c.dataset.rid ? "" : c.dataset.rid;  // 재클릭=해제
+    const rid = c.dataset.rid;
+    if (lookupRuleSet.has(rid)) lookupRuleSet.delete(rid); else lookupRuleSet.add(rid);
     mark();
     drawLookupChart();
   }));
+  const all = document.getElementById("rl-all");
+  if (all) all.onclick = () => { allRids.forEach((r) => lookupRuleSet.add(r)); mark(); drawLookupChart(); };
+  const none = document.getElementById("rl-none");
+  if (none) none.onclick = () => { lookupRuleSet.clear(); mark(); drawLookupChart(); };
 }
 
 /* ---------- 종목 조회: TradingView 위젯 + 재무 카드 ---------- */
@@ -10074,6 +10101,28 @@ function ourPeers(ticker, n = 5) {
     chg: (MARKET?.quotes?.[`kr_${x.t}`] || [])[1] ?? x.chg, mcap: x.mcap })) };
 }
 
+/* 동종업계 기간 수익률(v314) — 표엔 당일 등락률만 있어 '요즘 누가 잘나가나'가 안 보였다.
+   stocks/{key}.json 시계열을 재사용해 1주·1개월·3개월·6개월을 채운다(추가 수집 없음, 비동기). */
+async function fillPeerReturns(host, tickers) {
+  const SPAN = [["pr-w1", 5], ["pr-m1", 21], ["pr-m3", 63], ["pr-m6", 126]];
+  for (const tk of tickers) {
+    const s = await wsRelSeries(`kr_${tk}`);
+    const tr = host.querySelector(`tr[data-tk="${tk}"]`);
+    if (!tr || !s || !s.length) continue;
+    const cl = (r) => (Array.isArray(r) ? r[4] : r.c);
+    const last = cl(s[s.length - 1]);
+    SPAN.forEach(([cls, n]) => {
+      const td = tr.querySelector("." + cls);
+      if (!td) return;
+      const past = s.length > n ? cl(s[s.length - 1 - n]) : null;
+      if (!past || !last) { td.textContent = "-"; return; }
+      const v = (last / past - 1) * 100;
+      td.textContent = (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+      td.className = "scr-r " + cls + " " + (v >= 0 ? "kup" : "kdn");
+    });
+  }
+}
+
 function renderLookupPeers(st) {
   const host = $("#lookup-peers");
   const key = `${st.market}_${st.ticker}`;
@@ -10096,22 +10145,29 @@ function renderLookupPeers(st) {
     const all = [{ ticker: st.ticker, name: st.name, self: true,
                    price: fq?.cur ?? null,
                    chg: fq?.chg != null ? +(fq.chg * 100).toFixed(2) : null }, ...peers];
+    const tileOf = (tk) => (MARKET?.heatmap || []).find((x) => x.m === "kr" && x.t === tk);
     const rows = all.map((p) => {
       const m = met(p.ticker);
-      return `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("kr", p.ticker)}>
+      const tl = tileOf(p.ticker);
+      return `<tr class="${p.self ? "peer-self" : ""}" ${p.self ? "" : goto("kr", p.ticker)} data-tk="${p.ticker}">
       <td class="hld-name"><img class="mv-logo" src="https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${p.ticker}.svg" onerror="this.style.visibility='hidden'">
         <span><b>${p.name}</b> <span class="sub-note">${p.ticker}</span></span></td>
       <td class="scr-r">${p.price != null ? Math.round(p.price).toLocaleString() + "원" : "-"}</td>
-      <td class="scr-r ${p.chg == null ? "" : p.chg >= 0 ? "kup" : "kdn"}">${p.chg != null ? (p.chg >= 0 ? "+" : "") + p.chg.toFixed(2) + "%" : "-"}</td>
+      <td class="scr-r">${tl?.mcap ? fmtMcap(tl.mcap, "kr") : "-"}</td>
+      <td class="scr-r pr-w1">·</td><td class="scr-r pr-m1">·</td>
+      <td class="scr-r pr-m3">·</td><td class="scr-r pr-m6">·</td>
       <td class="scr-r">${nf1(m.per)}</td>
       <td class="scr-r">${nf1(m.pbr)}</td></tr>`;
     }).join("");
     host.innerHTML = `<h3 class="lk-h3">🏢 동종업계 비교
-        <span class="sub-note">(네이버 동일업종 · PER·PBR은 최근 보고서 기준)</span></h3>
+        <span class="sub-note">(${ours ? `${ours.stage.indName} · ${ours.stage.stage}` : "네이버 동일업종"}
+        · 시총 근접순 · PER·PBR은 최근 보고서 기준)</span></h3>
       <div class="tablewrap"><table class="hld-table peer-table">
-        <thead><tr><th>종목</th><th class="scr-r">주가</th><th class="scr-r">등락률</th>
+        <thead><tr><th>종목</th><th class="scr-r">주가</th><th class="scr-r">시가총액</th>
+          <th class="scr-r">1주</th><th class="scr-r">1개월</th><th class="scr-r">3개월</th><th class="scr-r">6개월</th>
           <th class="scr-r">PER</th><th class="scr-r">PBR</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div id="peer-chart"></div>`;
+    fillPeerReturns(host, all.map((x) => x.ticker));
     drawPeerChart(st, peers.map((x) => ({ mk: "kr", ticker: x.ticker, name: x.name })));
   } else {
     const self = FUND?.map?.[key];
@@ -10308,7 +10364,8 @@ function renderValueBand(st) {
   if (!basePts.length) { host.style.display = "none"; return; }
 
   const METRICS = [["per", "PER", "eps", "EPS"], ["pbr", "PBR", "bps", "BPS"],
-                   ["psr", "PSR", "sps", "주당매출"], ["pfcf", "P/FCF", "fps", "주당FCF"]];
+                   ["psr", "PSR", "sps", "주당매출"], ["pfcf", "P/FCF", "fps", "주당FCF"],
+                   ["trend", "배수 추이", null, null]];   // v315: 네 배수의 시계열을 한 화면에
   const cur = METRICS.find((m) => m[0] === bandMode) || METRICS[0];
   const fld = cur[2];
   const tabs = `<span class="mk-toggle" id="band-mode">${METRICS.map(([id, label]) =>
@@ -10322,6 +10379,7 @@ function renderValueBand(st) {
     if (base != null && base > 0) pts.push({ t: b.t, c: b.c, base, mult: b.c / base });
   });
   host.style.display = "";
+  if (bandMode === "trend") { renderMultTrend(host, st, series, basePts, tabs); return; }
   if (pts.length < 40) {
     host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 밴드<span style="flex:1"></span>${tabs}</h3>
       <p class="mini-note">${cur[1]} 밴드를 그릴 데이터가 부족합니다 — ${cur[3]}가 음수이거나 이력이 짧습니다.</p>`;
@@ -10416,6 +10474,56 @@ function renderValueBand(st) {
       ${qn >= 4 ? `최근 구간은 <b>분기 TTM</b>(${qn}분기)이라 분기마다, 그 이전은 연간이라 해마다 계단이 생깁니다.`
         : `분기 데이터가 ${qn}개뿐이라 <b>연간 기준</b>으로만 계단이 생깁니다.`}
       ⚠주식수는 시가총액÷주가로 산출해 일정하다고 가정 — 증자·감자가 있었다면 과거 구간이 왜곡될 수 있습니다.</p>`;
+  bandTabs(host, st);
+}
+
+/* 배수 추이(v315) — 밴드는 "주가가 밴드 어디쯤"을 보지만, 배수 자체가 어떻게 변해 왔는지는 안 보인다.
+   네 배수(PER·PBR·PSR·P/FCF)를 각자 축으로 작게 그려 **재평가/디레이팅 흐름**을 한눈에 본다.
+   ⚠하나의 축에 겹쳐 그리면 안 된다 — PER 20배와 PBR 0.3배는 스케일이 달라 한쪽이 납작해진다. */
+function renderMultTrend(host, st, series, basePts, tabs) {
+  const SPEC = [["eps", "PER"], ["bps", "PBR"], ["sps", "PSR"], ["fps", "P/FCF"]];
+  const cards = SPEC.map(([fld, label]) => {
+    let bi = -1;
+    const pts = [];
+    series.forEach((b) => {
+      while (bi + 1 < basePts.length && basePts[bi + 1].d <= b.t) bi++;
+      const base = bi >= 0 ? basePts[bi][fld] : null;
+      if (base != null && base > 0) pts.push({ t: b.t, m: b.c / base });
+    });
+    if (pts.length < 40) {
+      return `<div class="vt-card"><div class="vt-h">${label}</div>
+        <p class="mini-note">데이터 부족(${label} 기준값이 음수이거나 이력이 짧습니다)</p></div>`;
+    }
+    const W = 300, H = 130, P = { l: 4, r: 44, t: 14, b: 16 };
+    const vs = pts.map((x) => x.m);
+    const srt = [...vs].sort((a, b) => a - b);
+    const qq = (r) => srt[Math.min(srt.length - 1, Math.floor(srt.length * r))];
+    const lo = Math.min(qq(0.02), vs[vs.length - 1]), hi = Math.max(qq(0.98), vs[vs.length - 1]);
+    const X = (i) => P.l + (W - P.l - P.r) * (i / Math.max(1, pts.length - 1));
+    const Y = (v) => P.t + (H - P.t - P.b) * (1 - (Math.min(hi, Math.max(lo, v)) - lo) / Math.max(1e-9, hi - lo));
+    const line = pts.map((x, i) => `${X(i).toFixed(1)},${Y(x.m).toFixed(1)}`).join(" ");
+    const med = qq(0.5), now = vs[vs.length - 1];
+    const rank = srt.filter((v) => v <= now).length / srt.length * 100;
+    const yrs = ((new Date(pts[pts.length - 1].t) - new Date(pts[0].t)) / 3.156e10).toFixed(1);
+    return `<div class="vt-card">
+      <div class="vt-h">${label}
+        <b class="${now <= med ? "kdn" : "kup"}">${now.toFixed(now < 10 ? 2 : 1)}배</b>
+        <i class="sub-note">중앙 ${med.toFixed(med < 10 ? 2 : 1)} · 상위 ${Math.round(rank)}%</i></div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+        <line x1="${P.l}" y1="${Y(med)}" x2="${W - P.r}" y2="${Y(med)}" stroke="#8b8b93" stroke-dasharray="4 4"/>
+        <polyline points="${line}" fill="none" stroke="#4391ff" stroke-width="1.6"/>
+        <text x="${W - P.r + 5}" y="${Y(now) + 3}" class="cr-end" fill="#4391ff">${now.toFixed(now < 10 ? 2 : 1)}</text>
+        <text x="${W - P.r + 5}" y="${Y(med) + 3}" class="cr-ax">중앙</text>
+        <text x="${P.l}" y="${H - 4}" class="cr-ax">${pts[0].t.slice(0, 7)}</text>
+        <text x="${W - P.r}" y="${H - 4}" text-anchor="end" class="cr-ax">${yrs}년</text>
+      </svg></div>`;
+  }).join("");
+  host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 <span class="sub-note">(배수 추이)</span>
+      <span style="flex:1"></span>${tabs}</h3>
+    <div class="vt-grid">${cards}</div>
+    <p class="mini-note">각 배수가 <b>시간에 따라 어떻게 변해 왔는지</b>입니다(점선=이 종목 이력의 중앙값).
+      선이 우하향이면 같은 실적에도 시장이 값을 덜 쳐주는 <b>디레이팅</b>, 우상향이면 <b>재평가</b> 국면입니다.
+      기준 실적은 공시 시점부터 반영하며(분기 +45일·연간 +90일), 위아래 2%는 눈금 밖으로 잘라 추세를 살렸습니다.</p>`;
   bandTabs(host, st);
 }
 

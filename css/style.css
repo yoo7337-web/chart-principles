@@ -2274,7 +2274,8 @@ header h1 { margin-right: auto; }
 @media (max-width: 700px) { .hdr-search input { width: 100%; } }
 
 /* 종목조회 배치(v279) — 개요+투자지표 / 수급+컨센서스 각각 2열 */
-.lk-suprow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+/* v313: 수급 차트가 정보량이 많아 더 넓게 — 프로파일은 값 중심이라 좁아도 읽힌다 */
+.lk-suprow { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 12px; align-items: start; }
 .lk-supcol { min-width: 0; }
 .lk-suprow > .card-flat { margin-top: 16px; }
@@ -2297,3 +2298,18 @@ header h1 { margin-right: auto; }
 .lk-suprow { align-items: stretch; }
 .lk-suprow > .card-flat { margin-top: 16px; display: flex; flex-direction: column; }
 #lookup-supply-card #lookup-supply { flex: 1 1 auto; min-height: 220px; }
+
+/* 원칙 다중 선택 바(v313) */
+.rl-bar { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+.rl-bar-n { flex: 1; font-size: .74rem; color: var(--muted); }
+.rl-bar-btn { padding: 3px 10px; font-size: .74rem; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--card); color: var(--ink); cursor: pointer; }
+.rl-bar-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 밸류에이션 배수 추이(v315) */
+.vt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vt-card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.vt-h { display: flex; align-items: baseline; gap: 7px; font-size: .84rem; font-weight: 700; margin-bottom: 2px; }
+.vt-h b { font-size: .95rem; }
+.vt-h i { font-style: normal; margin-left: auto; }
+@media (max-width: 900px) { .vt-grid { grid-template-columns: 1fr; } }
