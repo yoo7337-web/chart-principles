@@ -4179,7 +4179,8 @@ function renderMemo() {
 /* ---------- 주식찾기 (스크리너) — 국가/산업/시가총액 ---------- */
 // 데이터 소스: MARKET.heatmap = [{m,t,name,sector,mcap,chg}] (국내+미국 유니버스)
 const SCR_FX = 1350;  // '전체' 국가 비교 시 미국 시총 원화 환산(1$≈1,350원) — 대략치
-const scrState = { country: "kr", groups: null, sectors: null, min: null, max: null, sort: "mcap" };  // 국가 필수(전체 제거) — 기본 한국. sectors=null → 업종 전체
+const scrState = { country: "kr", groups: null, sectors: null, min: null, max: null, sort: "mcap",
+  sortCol: null, sortDir: -1 };   // sortCol=헤더 클릭 정렬 키(있으면 드롭다운보다 우선) · dir −1=내림차순  // 국가 필수(전체 제거) — 기본 한국. sectors=null → 업종 전체
 const scrMetricSel = {};        // metricId → Set(bucketIdx) — 세부 지표 필터 선택
 let scrVals = new Map();         // "m_t" → 지표값 캐시(company.json 로드 후 구축)
 let scrValsReady = false;
@@ -4228,6 +4229,8 @@ function scrComputeVals(t) {
     dyield: num(f.div_yield), payout,
     div_pay: scrPayStreak(dpsS), div_grow: scrDivGrowStreak(dpsS),
     c5: num(t.c5), upstreak: num(t.up),  // 모멘텀(heatmap 제공): 5거래일 수익률·연속 상승일
+    // 기간 등락률(heatmap 제공, 거래일 21/63/126/252). 상장 기간이 짧으면 null → 표에 '-'
+    r1m: num(t.r1m), r3m: num(t.r3m), r6m: num(t.r6m), r1y: num(t.r1y),
   };
 }
 function scrBuildVals() {
@@ -4370,7 +4373,11 @@ function initScreener() {
   // 산업 초기화(전체)
   $("#scr-sec-reset").onclick = () => { scrState.groups = scrState.sectors = null; scrOpenGroup = null; buildScrSectors(); renderScreener(); };
   // 정렬
-  $("#scr-sort").onchange = () => { scrState.sort = $("#scr-sort").value; renderScreener(); };
+  $("#scr-sort").onchange = () => {
+    scrState.sort = $("#scr-sort").value;
+    scrState.sortCol = null;      // 드롭다운을 쓰면 헤더 정렬 해제(둘이 동시에 걸리면 사용자가 혼란)
+    renderScreener();
+  };
   // 세부 지표·테마 초기화
   const rb = $("#scr-reset");
   if (rb) rb.onclick = () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]);
@@ -5288,15 +5295,38 @@ function renderScreener() {
     return true;
   });
   const s = scrState.sort;
-  rows.sort((a, b) => {
-    switch (s) {
-      case "mcap_asc": return scrMcapVal(a) - scrMcapVal(b);
-      case "chg": return b.chg - a.chg;
-      case "chg_asc": return a.chg - b.chg;
-      case "name": return (a.name || "").localeCompare(b.name || "");
-      default: return scrMcapVal(b) - scrMcapVal(a);
-    }
-  });
+  if (scrState.sortCol) {
+    /* 헤더 클릭 정렬. ⚠값이 없는 종목(null)은 방향과 무관하게 **항상 뒤로** 보낸다 —
+       오름차순에서 '-'가 최상단을 차지하면 표가 쓸모없어진다. */
+    const k = scrState.sortCol, d = scrState.sortDir;
+    const val = (t) => {
+      if (k === "name") return t.name || "";
+      if (k === "m") return t.m === "kr" ? "0" : "1";
+      if (k === "sector") return t.sector || "";
+      if (k === "mcap") return scrMcapVal(t);
+      if (k === "chg") return t.chg;
+      const v = (scrVals.get(t.m + "_" + t.t) || {})[k];
+      return v == null ? null : v;
+    };
+    rows.sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (typeof x === "string" || typeof y === "string") return d * String(x).localeCompare(String(y));
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return d < 0 ? y - x : x - y;
+    });
+  } else {
+    rows.sort((a, b) => {
+      switch (s) {
+        case "mcap_asc": return scrMcapVal(a) - scrMcapVal(b);
+        case "chg": return b.chg - a.chg;
+        case "chg_asc": return a.chg - b.chg;
+        case "name": return (a.name || "").localeCompare(b.name || "");
+        default: return scrMcapVal(b) - scrMcapVal(a);
+      }
+    });
+  }
   updateScrCatCounts();
   scrChips(rows.length, scrPool().length);   // 조건 칩바 + 카드 요약 + 결과 수(v209)
   const themeNote = useTheme ? ` · <b>${SCR_THEMES.find((x) => x.id === scrThemeActive).name}</b>` : "";
@@ -5307,16 +5337,28 @@ function renderScreener() {
     return;
   }
   // 항상 표시하는 고정 재무 열(사용자 요청) + 테마·적용 지표(중복 제외)
-  const FIXED_COLS = ["per", "pbr", "rev_yoy", "opm", "debt", "payout"];
+  // 기간 등락률(1M~1Y)은 '당일 등락' 바로 뒤에 붙어야 흐름이 읽힌다 → 별도 배열로 앞에 둔다.
+  const FIXED_COLS = [...SCR_RET_COLS, "per", "pbr", "rev_yoy", "opm", "debt", "payout"];
   const themeCols = useTheme ? SCR_THEMES.find((x) => x.id === scrThemeActive).conds.map((c) => c.m) : [];
   const dynCols = [...new Set([...themeCols, ...active])].filter((id) => !FIXED_COLS.includes(id)).slice(0, 3);
   const cols = [...FIXED_COLS, ...dynCols];
-  const colHead = cols.map((id) => `<th class="scr-r">${scrColLabel(id)}</th>`).join("");
-  const head = `<thead><tr><th class="scr-star">★</th><th>종목</th><th>국가</th><th>산업</th><th class="scr-r">시가총액</th><th class="scr-r">등락</th>${colHead}</tr></thead>`;
+  /* 헤더 클릭 정렬(v334) — 드롭다운은 4가지뿐이라 PER·매출증감 등으로는 못 줄 세웠다.
+     같은 열을 다시 누르면 오름/내림이 바뀐다. 정렬 키는 scrState.sortCol(+dir)에 둔다. */
+  const arrow = (k) => scrState.sortCol === k ? (scrState.sortDir < 0 ? " ▼" : " ▲") : "";
+  const th = (k, label, cls) => `<th class="${cls || ""} scr-th" data-sort="${k}"${
+    scrState.sortCol === k ? ' aria-sort="' + (scrState.sortDir < 0 ? "descending" : "ascending") + '"' : ""
+    }>${label}<i class="scr-arrow">${arrow(k)}</i></th>`;
+  const colHead = cols.map((id) => th(id, scrColLabel(id), "scr-r")).join("");
+  const head = `<thead><tr><th class="scr-star">★</th>${th("name", "종목")}${th("m", "국가")}${
+    th("sector", "산업")}${th("mcap", "시가총액", "scr-r")}${th("chg", "등락", "scr-r")}${colHead}</tr></thead>`;
   const body = rows.map((t) => {
     const col = t.chg >= 0 ? "#f5445a" : "#4391ff";
     const vals = scrVals.get(t.m + "_" + t.t) || {};
-    const extra = cols.map((id) => `<td class="scr-r">${scrFmtMetric(id, vals[id])}</td>`).join("");
+    const extra = cols.map((id) => {
+      const v = vals[id];
+      const c = SCR_RET_COLS.includes(id) && v != null ? (v >= 0 ? "#f5445a" : "#4391ff") : null;
+      return `<td class="scr-r"${c ? ` style="color:${c}"` : ""}>${scrFmtMetric(id, v)}</td>`;
+    }).join("");
     return `<tr class="scr-row" data-key="${t.m}_${t.t}" title="클릭 = 종목 조회">
       <td class="scr-star">${starBtn(`${t.m}_${t.t}`, t.name)}</td>
       <td class="scr-name"><img class="mv-logo" src="${logoUrl(t.m, t.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${t.name}</b> <span class="sub-note">${t.t}</span></td>
@@ -5332,12 +5374,21 @@ function renderScreener() {
     if (!lookupRendered) initLookup();
     loadLookup(tr.dataset.key);
   });
+  tb.querySelectorAll(".scr-th").forEach((h) => h.onclick = () => {
+    const k = h.dataset.sort;
+    if (scrState.sortCol === k) scrState.sortDir = -scrState.sortDir;
+    // 처음 누를 땐 '큰 값부터'가 자연스럽다. 단 이름·국가·산업은 가나다순(오름차순)이 자연스럽다.
+    else { scrState.sortCol = k; scrState.sortDir = ["name", "m", "sector"].includes(k) ? 1 : -1; }
+    renderScreener();
+  });
 }
-const SCR_EXTRA_META = { c5: { label: "1주수익률", unit: "%pt" }, upstreak: { label: "연속상승", unit: "일" } };
+const SCR_EXTRA_META = { c5: { label: "1주수익률", unit: "%pt" }, upstreak: { label: "연속상승", unit: "일" },
+  r1m: { label: "1개월" }, r3m: { label: "3개월" }, r6m: { label: "6개월" }, r1y: { label: "1년" } };
+const SCR_RET_COLS = ["r1m", "r3m", "r6m", "r1y"];   // 등락률 계열 — 색을 입히고 비율(0.12)로 저장돼 있다
 function scrColLabel(id) { return SCR_METRIC_BY_ID[id]?.label || SCR_EXTRA_META[id]?.label || id; }
 function scrFmtMetric(id, v) {
   if (v == null) return "-";
-  if (id === "c5") return (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+  if (id === "c5" || SCR_RET_COLS.includes(id)) return (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
   if (id === "upstreak") return v + "일";
   const u = SCR_METRIC_BY_ID[id]?.unit;
   if (u === "배") return v.toFixed(1) + "배";

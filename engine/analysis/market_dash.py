@@ -354,7 +354,8 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
             mcap = float((df["close"] * df["volume"]).tail(20).mean())
             mcap_est = True
         # 모멘텀: c5=5거래일(≈1주) 수익률, up=최근 연속 상승일 수 (주식찾기 테마용)
-        c5, up = None, 0
+        # + 기간 등락률 r1m/r3m/r6m/r1y (주식찾기 표 열 — 거래일 21/63/126/252 기준)
+        c5, up, rets = None, 0, {}
         try:
             cl = df["close"].dropna().tolist()
             if len(cl) >= 6 and cl[-6]:
@@ -364,12 +365,17 @@ def build_heatmap(data: dict, kr_names: dict, smap: dict, chg_map: dict) -> list
                     up += 1
                 else:
                     break
+            # ⚠상장 기간이 짧으면 그 구간은 **없음(None)**이어야 한다.
+            #   가장 오래된 값으로 대체하면 신규 상장주의 1년 수익률이 실제보다 크게 나온다.
+            for k, n in (("r1m", 21), ("r3m", 63), ("r6m", 126), ("r1y", 252)):
+                if len(cl) > n and cl[-1 - n]:
+                    rets[k] = round(cl[-1] / cl[-1 - n] - 1, 4)
         except Exception:
             pass
         tiles.append({
             "m": mk, "t": tk, "name": kr_names.get(tk, tk) if mk == "kr" else tk,
             "sector": sector, "mcap": mcap, "chg": round(chg_map.get((mk, tk), 0.0), 4),
-            "c5": c5, "up": up,
+            "c5": c5, "up": up, **rets,
             **({"mcap_est": 1} if mcap_est else {}),   # 시총 스크랩 실패 → 거래대금 대용(표시 금지)
             # 한·미 공통 12산업군 — 주식찾기·산업진단·종목조회가 같은 값을 쓰도록 수집 단계에서 1회 계산
             "grp": _group_of(mk, sector, tk),
