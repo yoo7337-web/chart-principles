@@ -3616,6 +3616,13 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v316", "2026-08-04", "매수/매도 호가 비중 · 버튼 정렬 · 추이 그래프 확대",
+   "**토스증권 호가 데이터로 매수/매도 비중**을 표시합니다. 10호가 잔량 합으로 어느 쪽 대기 물량이 두꺼운지 "
+   + "보여주고, 먼 호가의 큰 물량에 가려지지 않도록 **1~3호가만 본 비중**도 함께 냅니다. "
+   + "수집 종목도 30 → 40개로 늘렸습니다(거래대금 상위).\n\n"
+   + "'기업 이해 보고서'와 '사업 심층 보기' 버튼을 **같은 크기로 좌우 배치**했고, 관심종목 재무 카드의 "
+   + "분기/연간 토글을 카드 제목 오른쪽으로 옮겨 작게 만들었습니다. 추이 카드의 그래프는 아래 빈 공간을 "
+   + "채우도록 늘렸습니다."],
   ["v315", "2026-08-04", "업계 합산 PER·PBR · 배수 추이 최고/최저 · 카드 높이 축소",
    "**동종업계에 업계 합산 PER·PBR**을 넣었습니다. 회사별 배수를 단순 평균하면 적자 기업의 PER(−411배 같은 값)이 "
    + "섞여 숫자가 망가지므로, **Σ시가총액 ÷ Σ순이익** 방식으로 계산합니다. 조회 종목이 업계보다 높은지 낮은지도 "
@@ -4615,7 +4622,32 @@ function renderLookupMicro(st) {
       return `<div class="tr-row"><span class="sub-note">${t[0]}</span><span class="${cls}">${fmtP(t[1])}</span><span class="ob-v">${t[2].toLocaleString()}</span></div>`;
     }).join("") + `</div>`;
   }
+  /* 매수/매도 호가 비중(v322) — 10호가 잔량의 합으로 '지금 어느 쪽 대기 물량이 두꺼운가'를 본다.
+     ⚠해석 주의: 매수 잔량이 많다고 곧 오르는 게 아니다. 오히려 매도벽/매수벽은 체결되지 않은 **대기** 주문이라
+       실제 체결은 반대로 나기도 한다. 그래서 '수급'이 아니라 '호가 두께'로 이름을 붙였다. */
+  let ratioHtml = "";
+  if (mi.asks?.length && mi.bids?.length) {
+    const sa = mi.asks.reduce((a, b) => a + (b[1] || 0), 0);
+    const sb = mi.bids.reduce((a, b) => a + (b[1] || 0), 0);
+    const tot = sa + sb;
+    if (tot > 0) {
+      const bp = sb / tot * 100;
+      const near = (arr, n) => arr.slice(0, n).reduce((a, b) => a + (b[1] || 0), 0);
+      const na = near(mi.asks, 3), nb = near(mi.bids, 3);
+      const np2 = na + nb > 0 ? nb / (na + nb) * 100 : null;
+      const lab = bp >= 60 ? "매수 우위" : bp <= 40 ? "매도 우위" : "균형";
+      ratioHtml = `<div class="ob-ratio">
+        <div class="ob-ratio-h">호가 두께 <b class="${bp >= 60 ? "kup" : bp <= 40 ? "kdn" : ""}">${lab}</b>
+          <i class="sub-note">10호가 잔량 합 기준</i></div>
+        <div class="ob-ratio-bar"><span class="bid" style="width:${bp.toFixed(1)}%"></span></div>
+        <div class="ob-ratio-n"><span class="kup">매수 ${bp.toFixed(1)}% (${Math.round(sb).toLocaleString()}주)</span>
+          <span class="kdn">매도 ${(100 - bp).toFixed(1)}% (${Math.round(sa).toLocaleString()}주)</span></div>
+        ${np2 != null ? `<div class="sub-note">1~3호가만 보면 매수 <b>${np2.toFixed(1)}%</b> —
+          먼 호가의 큰 물량에 가려지지 않는 <b>체결에 가까운</b> 비중입니다.</div>` : ""}</div>`;
+    }
+  }
   host.innerHTML = `<h2>호가·체결 스냅샷 <span class="sub-note">(토스증권 · ${TOSSM.generated} 수집${mi.at ? ` · 호가 ${mi.at} 기준` : ""} — 실시간 아님, 거래대금 상위 종목만)</span></h2>
+    ${ratioHtml}
     <div class="micro-wrap card-flat">${obHtml}${trHtml}</div>`;
 }
 
@@ -4633,17 +4665,23 @@ const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10
 function renderLookupReportBtn(st) {
   const host = $("#lookup-report");
   if (!host) return;
-  host.style.display = "none";
-  host.innerHTML = "";
+  /* v323: 보고서 버튼과 사업 심층 버튼을 **한 줄에 같은 크기로** 둔다(사용자 요청).
+     보고서가 없는 종목도 사업 심층은 있을 수 있으므로 줄은 항상 만들어 두고, 각 슬롯을 따로 채운다. */
+  host.style.display = "";
+  host.innerHTML = `<div class="lk-btnrow">
+      <div class="lk-btnslot" id="rep-slot"></div>
+      <div class="lk-btnslot" id="ov-deep"></div>
+    </div>`;
   loadReportsIdx().then((idx) => {
     const key = `${st.market}_${st.ticker}`;
     const meta = idx.reports?.[key];
     if (!meta || LOOKUP_ST !== st) return;   // 종목 전환 경쟁 방지
     const stale = meta.next_due && kstDay() > meta.next_due;
-    host.style.display = "";
-    host.innerHTML = `<button class="rep-btn" id="rep-open">📖 기업 이해 보고서</button>
-      <span class="sub-note">기준일 ${meta.date} · ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"} · 분기 갱신</span>
-      ${stale ? `<span class="lk-stale">⚠ 갱신 필요(분기 경과)</span>` : ""}`;
+    const slot = document.getElementById("rep-slot");
+    if (!slot) return;
+    slot.innerHTML = `<button class="rep-btn" id="rep-open">📖 기업 이해 보고서</button>
+      <span class="sub-note">기준일 ${meta.date} · ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"} · 분기 갱신
+      ${stale ? `<span class="lk-stale">⚠ 갱신 필요(분기 경과)</span>` : ""}</span>`;
     $("#rep-open").onclick = () => openReport(key);
   });
 }
@@ -7382,9 +7420,20 @@ function wsFinDraw(key, mk, co, m) {
   const host = document.querySelector(".ws-fin .ws-card-b");
   if (!host) return;
   // v316: 하단 '전년 대비' 표는 뺐다 — 증감률을 그래프 안(점 사이)으로 옮겼다
-  host.innerHTML = toggle + (bars || `<p class="mini-note">${wsFinMode === "y" ? "연간" : "분기"} 재무 없음</p>`)
+  host.innerHTML = (bars || `<p class="mini-note">${wsFinMode === "y" ? "연간" : "분기"} 재무 없음</p>`)
     + `<div class="sub-note">${caps}</div>`;
-  host.querySelectorAll("#ws-fin-mode button").forEach((b) => b.onclick = () => {
+  /* v317: 분기/연간 토글은 본문 맨 위가 아니라 **카드 제목 오른쪽**에 붙인다(사용자 요청).
+     wsCard가 만든 헤더에 나중에 끼워 넣는 구조라, 재렌더 때 이전 토글을 먼저 지운다. */
+  const head = document.querySelector(".ws-fin .ws-card-h");
+  if (head) {
+    head.querySelector(".ws-fin-tg")?.remove();
+    const goBtn = head.querySelector(".ws-go");
+    const holder = document.createElement("span");
+    holder.innerHTML = toggle;
+    const el2 = holder.firstElementChild;
+    if (el2) (goBtn ? head.insertBefore(el2, goBtn) : head.appendChild(el2));
+  }
+  document.querySelectorAll("#ws-fin-mode button").forEach((b) => b.onclick = () => {
     wsFinMode = b.dataset.m;
     localStorage.setItem("cp_ws_fin", wsFinMode);
     wsFinDraw(key, mk, co, m);
@@ -9427,7 +9476,7 @@ function renderLookupOverview(st) {
   }
   host.innerHTML = `<h3 class="lk-h3">🏢 기업 개요 ${ind ? `<span class="badge dim">${ind}</span>` : ""}
       ${co.website || pr?.url ? `<a class="ext-link" href="${co.website || pr.url}" target="_blank" rel="noopener">홈페이지 ↗</a>` : ""}
-      <span style="flex:1"></span><span id="ov-deep"></span></h3>
+      <span style="flex:1"></span></h3>
     ${co.overview ? `<div class="ov-sec"><b>무엇을 하는 회사인가</b><p class="lk-ov-text">${intro}</p></div>` : ""}
     ${pfHtml}
     ${biz ? `<div class="ov-sec"><b>🧩 사업 구조·전략</b><ul class="ov-biz">${biz.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}
@@ -9500,8 +9549,9 @@ function bdRender(escaped) {
 const bdEsc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /* v225: 카드에는 한 줄 버튼만 — 클릭하면 보고서 뷰어와 같은 팝업으로 전체 섹션 열람 */
 function bizDeepHtml(d) {
-  return `<button class="today-chart-btn bd-open">📚 사업 심층 보기
-    <span class="sub-note">${d.src.replace(/ \(/, "(")} · ${d.sections.length}개 섹션</span></button>`;
+  // v323: 보고서 버튼과 같은 모양(.rep-btn)으로 — 나란히 놓이므로 크기가 같아야 한다
+  return `<button class="rep-btn bd-open">📚 사업 심층 보기</button>
+    <span class="sub-note">${d.src.replace(/ \(/, "(")} · ${d.sections.length}개 섹션</span>`;
 }
 function openBizDeep(d, name) {
   let ov = document.getElementById("report-overlay");

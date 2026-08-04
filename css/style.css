@@ -2315,7 +2315,10 @@ header h1 { margin-right: auto; }
 @media (max-width: 900px) { .vt-grid { grid-template-columns: 1fr; } }
 
 /* 관심종목 카드(v316) */
-.ws-fin-tg { transform: scale(.88); transform-origin: left center; }   /* 분기/연간 버튼 축소 */
+/* 분기/연간 토글 — 카드 제목 오른쪽에 작게(v317) */
+.ws-card-h .ws-fin-tg { transform: none; margin-left: 8px; }
+.ws-card-h .ws-fin-tg button { padding: 1px 8px; font-size: .68rem; }
+.ws-card-h .ws-fin-tg i { font-size: .64rem; margin-left: 4px; }
 .ws-fin-gr { font-size: 6.8px; }
 .ws-fin-gr.pos { fill: var(--kup); } .ws-fin-gr.neg { fill: var(--kdn); }
 .ws-fin-axis { height: 14px; }
@@ -2347,3 +2350,27 @@ header h1 { margin-right: auto; }
 .peer-ind > i.sub-note { flex: 1 1 100%; line-height: 1.35; }
 
 .vt-mm { font-size: 7.6px; font-weight: 700; }
+
+/* 매수/매도 호가 비중(v322) */
+.ob-ratio { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px; }
+.ob-ratio-h { display: flex; align-items: baseline; gap: 7px; font-size: .82rem; font-weight: 700; }
+.ob-ratio-h i { margin-left: auto; font-style: normal; }
+.ob-ratio-bar { height: 9px; border-radius: 5px; background: rgba(245,68,90,.35); overflow: hidden; margin: 6px 0 4px; }
+.ob-ratio-bar .bid { display: block; height: 100%; background: rgba(67,145,255,.75); }
+.ob-ratio-n { display: flex; justify-content: space-between; font-size: .78rem; font-weight: 600; }
+
+/* 보고서·사업심층 버튼을 같은 크기로 좌우 배치(v323) */
+.lk-btnrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.lk-btnslot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 0; }
+.lk-btnslot:empty { display: none; }
+.lk-btnslot .rep-btn { flex: 0 0 auto; min-width: 168px; text-align: center; }
+.lk-btnslot .sub-note { font-size: .74rem; line-height: 1.3; }
+@media (max-width: 900px) { .lk-btnrow { grid-template-columns: 1fr; } }
+
+/* 추이 카드 — 아래 빈 공간을 그래프가 채우게(v323)
+   ⚠카드가 그리드 stretch로 늘어나는데 내용은 짧아 빈 칸이 남았다 → 카드·본문을 flex로 만들고
+     스파크라인에 flex:1을 줘 남는 높이를 흡수한다(preserveAspectRatio="none"이라 세로만 늘어난다). */
+.ws-card.ws-trend { display: flex; flex-direction: column; }
+.ws-card.ws-trend .ws-card-b { display: flex; flex-direction: column; flex: 1 1 auto; }
+.ws-trend .ws-spark-wrap { flex: 1 1 auto; min-height: 96px; display: flex; }
+.ws-trend .ws-spark { flex: 1 1 auto; height: auto; width: 100%; }
