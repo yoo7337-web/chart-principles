@@ -2313,3 +2313,16 @@ header h1 { margin-right: auto; }
 .vt-h b { font-size: .95rem; }
 .vt-h i { font-style: normal; margin-left: auto; }
 @media (max-width: 900px) { .vt-grid { grid-template-columns: 1fr; } }
+
+/* 관심종목 카드(v316) */
+.ws-fin-tg { transform: scale(.88); transform-origin: left center; }   /* 분기/연간 버튼 축소 */
+.ws-fin-gr { font-size: 6.8px; }
+.ws-fin-gr.pos { fill: var(--kup); } .ws-fin-gr.neg { fill: var(--kdn); }
+.ws-fin-axis { height: 14px; }
+.ws-fin-ax { font-size: 7.4px; fill: var(--muted); }
+/* 추이 카드 — 신호 마커를 차트 위에 얹는다(도형 찌그러짐 방지용 오버레이) */
+.ws-spark-wrap { position: relative; }
+.ws-sig { position: absolute; transform: translate(-50%, -50%); font-size: 10px; line-height: 1;
+  cursor: default; text-shadow: 0 0 3px var(--bg); }
+.ws-sig.buy { color: #22c07a; } .ws-sig.sell { color: #f5445a; }
+.ws-sig.recent { font-size: 13px; font-weight: 700; }

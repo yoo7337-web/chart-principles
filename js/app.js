@@ -3612,6 +3612,12 @@ function ownRender() {
 }
 
 const DEV_HISTORY = [
+  ["v314", "2026-08-04", "관심종목 재무·추이 카드 개편",
+   "**재무 카드**: 매출·영업이익·순이익에 **FCF**를 더해 네 줄로 만들고, 분기/연간 버튼을 줄였습니다. "
+   + "아래에 있던 '전년 대비' 표는 없애고 **증감률을 그래프 안 점과 점 사이**에 넣었습니다 "
+   + "(기저가 음수면 흑자전환·적자전환으로 표기). 네 그래프가 같은 기간을 쓰므로 **X축은 맨 아래 한 번만** 그립니다.\n\n"
+   + "**추이·신호 카드**: 신호를 글로 나열하던 것을 **차트 위 마커**로 바꿨습니다. ▲=매수 · ▼=매도로 "
+   + "구분되고 커서를 올리면 어떤 원칙인지와 날짜가 뜹니다. 최근 신호는 더 크게 표시합니다."],
   ["v313", "2026-08-04", "원칙 다중 선택 · 동종업계 기간수익률 · 배수 추이",
    "**원칙을 여러 개 동시에** 고를 수 있게 했습니다. 목록에서 누르면 쌓이고 다시 누르면 빠지며, "
    + "위에 **전체 선택 / 전체 해제** 버튼을 뒀습니다. 지금 몇 종을 보고 있는지도 함께 표시됩니다.\n\n"
@@ -7242,6 +7248,19 @@ async function wsCons(key, mk, price) {
    사용자 요청: 오른쪽 큰 숫자와 아래 기간 라벨은 빼고, 그래프 안에서 값이 읽히게. */
 let wsFinMode = localStorage.getItem("cp_ws_fin") || "q";
 
+/* 네 그래프가 같은 기간을 쓰므로 X축(기간)은 **맨 아래 한 번만** 그린다(v316). */
+function wsFinAxis(rows) {
+  const W = 300, H = 14;
+  const lab = rows.map(([p2], i) => {
+    const x = 10 + (i / Math.max(1, rows.length - 1)) * (W - 20);
+    const show = rows.length <= 6 || i === 0 || i === rows.length - 1 || i % 2 === 0;
+    return show ? `<text x="${x.toFixed(1)}" y="10" text-anchor="${i === 0 ? "start"
+      : i === rows.length - 1 ? "end" : "middle"}" class="ws-fin-ax">${p2}</text>` : "";
+  }).join("");
+  return `<div class="ws-fin-row"><span class="ws-fin-lab"></span>
+    <svg viewBox="0 0 ${W} ${H}" class="ws-fin-axis" preserveAspectRatio="none">${lab}</svg></div>`;
+}
+
 function wsFinDraw(key, mk, co, m) {
   const fin = WS_FIN[key];
   let blk = fin;
@@ -7280,12 +7299,28 @@ function wsFinDraw(key, mk, co, m) {
       const area = `${X(pts[0].i).toFixed(1)},${H - 3} ${line} ${X(pts[pts.length - 1].i).toFixed(1)},${H - 3}`;
       const zero = (lo < 0 && hi > 0)
         ? `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8b8b93" stroke-dasharray="3 3" stroke-width="0.8"/>` : "";
-      // 점마다 값 — 위아래 번갈아 배치해 서로 겹치지 않게
+      // 점마다 값(위) + **두 점 사이에 증감률**(아래) — 표를 없앤 대신 그래프에서 바로 읽히게
       const labs = pts.map((x, j) => {
         const up = Y(x.v) > 24;                     // 위가 좁으면 아래로
         const ty = up ? Y(x.v) - 5 : Y(x.v) + 11;
         const anchor = j === 0 ? "start" : j === pts.length - 1 ? "end" : "middle";
-        return `<text x="${X(x.i).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}"
+        let g = "";
+        if (j > 0) {
+          const pv = pts[j - 1].v;
+          // ⚠기저가 음수거나 0 근처면 %는 허수다 → 흑전/적전으로(재무 표에서 쓰던 규칙과 동일)
+          const mx2 = (X(pts[j - 1].i) + X(x.i)) / 2, my2 = (Y(pv) + Y(x.v)) / 2;
+          let txt = null, cls = "";
+          if (pv < 0 && x.v >= 0) { txt = "흑전"; cls = "pos"; }
+          else if (pv >= 0 && x.v < 0) { txt = "적전"; cls = "neg"; }
+          else if (Math.abs(pv) > Math.abs(x.v) * 0.02) {
+            const r2 = (x.v / pv - 1) * 100;
+            txt = (r2 >= 0 ? "+" : "") + r2.toFixed(0) + "%";
+            cls = r2 >= 0 ? "pos" : "neg";
+          }
+          if (txt) g = `<text x="${mx2.toFixed(1)}" y="${(my2 + 13).toFixed(1)}" text-anchor="middle"
+            class="ws-fin-gr ${cls}">${txt}</text>`;
+        }
+        return g + `<text x="${X(x.i).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}"
           class="ws-fin-val ${x.v < 0 ? "kdn" : ""}">${short(x.v)}</text>`;
       }).join("");
       return `<div class="ws-fin-row"><span class="ws-fin-lab">${lab2}</span>
@@ -7298,7 +7333,14 @@ function wsFinDraw(key, mk, co, m) {
           ${labs}
         </svg></div>`;
     };
-    bars = spark("매출", "rev", "#4391ff") + spark("영업이익", "op", "#22c07a") + spark("순이익", "np", "#9d7bff");
+    // FCF = 영업활동현금흐름 − CAPEX(유형+무형). US는 fcf를 직접 주기도 한다.
+    rows.forEach(([, r]) => {
+      if (r.fcf == null && r.cfo != null)
+        r.fcf = r.cfo - Math.abs((r.capex_ppe || 0) + (r.capex_intan || 0));
+    });
+    bars = spark("매출", "rev", "#4391ff") + spark("영업이익", "op", "#22c07a")
+         + spark("순이익", "np", "#9d7bff") + spark("FCF", "fcf", "#f0b34c")
+         + wsFinAxis(rows);        // 네 그래프가 같은 X축을 쓰므로 맨 아래 한 번만
   }
   // 최근 기간 3행(전년 대비)
   let tb = "";
@@ -7327,8 +7369,9 @@ function wsFinDraw(key, mk, co, m) {
                 m?.quickRatio != null && `당좌비율 ${m.quickRatio}%`].filter(Boolean).join(" · ");
   const host = document.querySelector(".ws-fin .ws-card-b");
   if (!host) return;
+  // v316: 하단 '전년 대비' 표는 뺐다 — 증감률을 그래프 안(점 사이)으로 옮겼다
   host.innerHTML = toggle + (bars || `<p class="mini-note">${wsFinMode === "y" ? "연간" : "분기"} 재무 없음</p>`)
-    + tb + `<div class="sub-note">${caps}</div>`;
+    + `<div class="sub-note">${caps}</div>`;
   host.querySelectorAll("#ws-fin-mode button").forEach((b) => b.onclick = () => {
     wsFinMode = b.dataset.m;
     localStorage.setItem("cp_ws_fin", wsFinMode);
@@ -7395,23 +7438,32 @@ const wsCard = (icon, title, act, body, cls = "") =>
     <span style="flex:1"></span>${act ? `<button class="ws-go" data-act="${act}">자세히 →</button>` : ""}</div>
     <div class="ws-card-b">${body}</div></div>`;
 
-function wsSpark(series, sig) {
+function wsSpark(series, sigPts) {
   const s = (series || []).slice(-126);
   if (s.length < 10) return `<p class="mini-note">차트 데이터 없음</p>`;
   const cs = s.map((x) => x.c), lo = Math.min(...cs), hi = Math.max(...cs);
-  const W = 300, H = 46;
+  const W = 300, H = 60, PT = 9, PB = 9;      // 마커가 위아래로 삐져나오지 않게 여백
   const X = (i) => (i / (s.length - 1)) * W;
-  const Y = (v) => H - 3 - (v - lo) / (hi - lo || 1) * (H - 8);
+  const Y = (v) => H - PB - (v - lo) / (hi - lo || 1) * (H - PT - PB);
   const pts = cs.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
   const up = cs[cs.length - 1] >= cs[0];
-  let dot = "";
-  if (sig) {   // 최근 신호일을 차트 위에 점으로
-    const i = s.findIndex((x) => x.t === sig.date);
-    if (i >= 0) dot = `<circle cx="${X(i).toFixed(1)}" cy="${Y(cs[i]).toFixed(1)}" r="3.4"
-      fill="${sig.side === "buy" ? "#22c07a" : "#f5445a"}"/>`;
-  }
-  return `<svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
-    <polyline points="${pts}" fill="none" stroke="${up ? "var(--kup)" : "var(--kdn)"}" stroke-width="1.6"/>${dot}</svg>`;
+  /* 신호 마커 — ⚠preserveAspectRatio="none"이면 도형이 가로로 늘어난다(삼각형이 찌그러짐)
+     → 마커는 X만 스케일하고 **모양은 고정**되도록 별도 오버레이 SVG에 절대좌표(%)로 얹는다. */
+  const marks = (sigPts || []).map((g) => {
+    const i = s.findIndex((x) => x.t === g.t);
+    if (i < 0) return null;
+    return { ...g, xp: (X(i) / W) * 100, yp: (Y(cs[i]) / H) * 100 };
+  }).filter(Boolean);
+  const overlay = marks.map((g) => {
+    const buy = g.side === "buy";
+    return `<span class="ws-sig ${buy ? "buy" : "sell"}${g.recent ? " recent" : ""}"
+      style="left:${g.xp.toFixed(2)}%;top:${g.yp.toFixed(2)}%"
+      title="${dsEsc(g.name)} · ${String(g.t).slice(5)}${g.recent ? " (최근)" : ""}">${buy ? "▲" : "▼"}</span>`;
+  }).join("");
+  return `<div class="ws-spark-wrap">
+    <svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
+      <polyline points="${pts}" fill="none" stroke="${up ? "var(--kup)" : "var(--kdn)"}" stroke-width="1.6"/>
+    </svg>${overlay}</div>`;
 }
 
 function wsShow(key) {
@@ -7516,12 +7568,22 @@ function wsShow(key) {
       `<span class="ws-cap"><i>${lab}</i><b class="${v >= 0 ? "kup" : "kdn"}">${pct(v, 1)}</b></span>`;
     // 마커(원칙 신호 이력)에서도 최근 2건 — TODAY(3영업일)보다 긴 맥락
     const mks = (st.markers || []).slice(-2).reverse();
-    fill("ws-trend", `${wsSpark(st.series, sig)}
+    /* v316: 신호를 글로 나열하는 대신 **차트 위 마커**로 찍는다(▲매수 / ▼매도, hover=원칙명·날짜).
+       그래야 "언제 어느 자리에서 났는지"가 보인다 — 아래 텍스트 목록은 그래서 뺐다. */
+    const sigPts = [];
+    const seenSig = new Set();
+    const pushSig = (o) => {                       // ⚠최근 신호와 이력이 같은 건일 수 있다 → 중복 제거
+      const k = `${o.t}|${o.name}`;
+      if (seenSig.has(k)) return;
+      seenSig.add(k);
+      sigPts.push(o);
+    };
+    if (sig) pushSig({ t: sig.date, side: sig.side, name: sig.rule, recent: true });
+    mks.forEach((m2) => pushSig({ t: String(m2.t), side: m2.side, name: m2.name || m2.rule_id }));
+    fill("ws-trend", `${wsSpark(st.series, sigPts)}
       <div class="ws-caps">${cap("1주", pr.ret_w1)}${cap("1개월", pr.ret_m1)}${cap("3개월", pr.ret_m3)}${cap("1년", pr.ret_y1)}</div>
-      <div class="ws-kv">${sig ? `<div>최근 신호 <b>${sig.side === "buy" ? "🟢" : "🔴"} ${sig.rule}</b> <span class="sub-note">${sig.date.slice(5)}</span></div>`
-        : `<div class="sub-note">최근 3영업일 신호 없음</div>`}
-      ${mks.map((m2) => `<div class="sub-note">이력: ${m2.side === "buy" ? "🟢" : "🔴"} ${m2.name || m2.rule_id} (${String(m2.t).slice(5)})</div>`).join("")}
-      <div class="sub-note">현재 국면 ${rgKo} · 베타 ${pr.beta ?? "-"} · 변동성 ${pr.vol20 != null ? pr.vol20 + "%" : "-"}</div></div>`);
+      <div class="ws-kv"><div class="sub-note">▲=매수 신호 · ▼=매도 신호 (표시에 커서를 올리면 원칙명) ·
+        현재 국면 ${rgKo} · 베타 ${pr.beta ?? "-"} · 변동성 ${pr.vol20 != null ? pr.vol20 + "%" : "-"}</div></div>`);
     // ⑤ 수급
     const sup = st.supply_sum;
     const consSlot = `<div id="ws-cons"></div>`;
