@@ -2375,3 +2375,15 @@ header h1 { margin-right: auto; }
 .ws-card.ws-trend .ws-card-b { display: flex; flex-direction: column; flex: 1 1 auto; }
 .ws-trend .ws-spark-wrap { flex: 1 1 auto; min-height: 96px; display: flex; }
 .ws-trend .ws-spark { flex: 1 1 auto; height: auto; width: 100%; }
+
+/* 관심종목 보고서 카드 — 두 버튼을 좌우로, 색으로 구분(v317) */
+.ws-btnrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ws-bd-slot { display: inline-flex; align-items: center; gap: 6px; }
+.ws-bd-slot .ws-bizdeep { display: inline-flex; align-items: center; gap: 6px; }
+.ws-bd-slot .sub-note { font-size: .7rem; }
+.rep-btn.sm { font-size: .78rem; padding: 5px 11px; font-weight: 700; }
+/* 📖 기업 이해 보고서 = 보라 · 📚 사업 심층(공시 원문) = 청록 — 성격이 다른 문서라 색을 나눈다 */
+.rep-btn.rep-a { border-color: #9d7bff; color: #b79bff; }
+.rep-btn.rep-a:hover { background: #9d7bff; color: #fff; }
+.rep-btn.rep-b { border-color: #22c0a8; color: #4fd6c0; }
+.rep-btn.rep-b:hover { background: #22c0a8; color: #0d1117; }

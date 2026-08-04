@@ -4679,7 +4679,7 @@ function renderLookupReportBtn(st) {
     const stale = meta.next_due && kstDay() > meta.next_due;
     const slot = document.getElementById("rep-slot");
     if (!slot) return;
-    slot.innerHTML = `<button class="rep-btn" id="rep-open">📖 기업 이해 보고서</button>
+    slot.innerHTML = `<button class="rep-btn rep-a" id="rep-open">📖 기업 이해 보고서</button>
       <span class="sub-note">기준일 ${meta.date} · ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"} · 분기 갱신
       ${stale ? `<span class="lk-stale">⚠ 갱신 필요(분기 경과)</span>` : ""}</span>`;
     $("#rep-open").onclick = () => openReport(key);
@@ -7581,7 +7581,8 @@ function wsShow(key) {
           ${meta.tier === "deep" ? "심층(감사×투자 14장)" : "자동 골격"}
           ${stale ? `<span class="lk-stale">⚠ 분기 경과</span>` : ""}</div>
         <div id="ws-rep-sum" class="sub-note">요약 불러오는 중…</div>
-        <button class="rep-btn" id="ws-rep-open">📖 전체 보고서 열기</button>`);
+        <div class="ws-btnrow"><button class="rep-btn sm rep-a" id="ws-rep-open">📖 전체 보고서</button>
+          <span class="ws-bd-slot"></span></div>`);
       const b = $("#ws-rep-open"); if (b) b.onclick = () => openReport(key);
       // 0장 신호등 3개 + '한 줄 결론'을 카드에 바로 보여준다(열지 않아도 판정이 보이게)
       fetch(`data/reports/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then((rep) => {
@@ -7607,11 +7608,14 @@ function wsShow(key) {
       if (wsSel !== key || !d) return;
       const card = document.querySelector("#ws-main .ws-report .ws-card-b");
       if (!card || card.querySelector(".ws-bizdeep")) return;
+      // v317: 보고서 버튼과 **같은 줄 오른쪽**에 넣는다(위아래로 쌓이던 것을 좌우로)
+      const slot = card.querySelector(".ws-bd-slot");
       const div = document.createElement("div");
       div.className = "ws-bizdeep";
-      div.innerHTML = bizDeepHtml(d);
+      div.innerHTML = `<button class="rep-btn sm rep-b bd-open">📚 사업 심층</button>
+        <span class="sub-note">${dsEsc(d.src.replace(/ \(/, "("))} · ${d.sections.length}개 섹션</span>`;
       div.querySelector(".bd-open").onclick = () => openBizDeep(d, w.name || tk);
-      card.appendChild(div);
+      (slot || card).appendChild(div);
     });
   });
 
@@ -9553,7 +9557,7 @@ const bdEsc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g
 /* v225: 카드에는 한 줄 버튼만 — 클릭하면 보고서 뷰어와 같은 팝업으로 전체 섹션 열람 */
 function bizDeepHtml(d) {
   // v323: 보고서 버튼과 같은 모양(.rep-btn)으로 — 나란히 놓이므로 크기가 같아야 한다
-  return `<button class="rep-btn bd-open">📚 사업 심층 보기</button>
+  return `<button class="rep-btn rep-b bd-open">📚 사업 심층 보기</button>
     <span class="sub-note">${d.src.replace(/ \(/, "(")} · ${d.sections.length}개 섹션</span>`;
 }
 function openBizDeep(d, name) {
