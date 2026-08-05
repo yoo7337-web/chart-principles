@@ -11447,7 +11447,8 @@ function renderLookupReports(st) {
 /* ---------- 🤔 AI 변동 사유 (v220) — 주가·공시·뉴스·수급을 근거로 Gemini가 설명 ----------
    키: localStorage 'gemini_key' — youtube-mentor(같은 origin)와 공유. 브라우저 밖으로 안 나감.
    원칙: **제공한 자료 안에서만** 답하게 강제하고, 일반 지식 추정은 [추정]으로 표시시킨다(환각 억제). */
-let whyRange = "5";
+// v340: 기간 프리셋(5일/1개월/보이는 구간) 제거 — 질문에서 기간을 자동 인식하고, 없으면 최근 3개월.
+//   프리셋은 '차트 구간 등락 사유' 전용 시절의 유물이라 자유 질문에선 오히려 자료를 좁혀 답을 망쳤다.
 // ⚠모델 은퇴 주의: gemini-2.5-flash·2.0-flash는 신규 발급 키에 제공 중단(404 "no longer available
 //   to new users"). 2026-08-01 키 교체 때 사이트·봇·멘토가 동시에 멈춘 원인 — 바꿀 땐 실제 호출로 검증.
 const GEMINI_MODEL = "gemini-3.5-flash";
@@ -11467,10 +11468,6 @@ function renderLookupWhy(st) {
   $("#why-out").innerHTML = "";
   if (host.dataset.bound) return;
   host.dataset.bound = "1";
-  document.querySelectorAll("#why-range button").forEach((b) => b.onclick = () => {
-    whyRange = b.dataset.r;
-    document.querySelectorAll("#why-range button").forEach((x) => x.classList.toggle("active", x === b));
-  });
   $("#why-key").onclick = () => {
     const cur = geminiKey();
     const v = prompt("Gemini API 키 (aistudio.google.com/apikey 무료 발급 · 이 브라우저에만 저장)", cur || "");
@@ -11523,26 +11520,69 @@ function whyRenderThread(pending) {
     </div>`; }).join("") +
     (pending ? `<div class="why-turn"><div class="why-q">${esc(pending)}</div>
       <p class="mini-note">자료 취합·분석 중…</p></div>` : "") +
-    (WHY_LOG.length ? `<p class="sub-note why-hint">이어서 더 물어보세요 — 같은 구간을 기준으로 답합니다
-      (예: 그때 수급은 어땠어? · 지금은 어때?)</p>` : "");
+    (WHY_LOG.length ? `<p class="sub-note why-hint">이어서 더 물어보세요 — 질문에 기간을 적으면 그 기간을,
+      안 적으면 직전 질문의 기간을 이어서 봅니다 (예: 그때 수급은 어땠어? · 그럼 8월은?)</p>` : "");
   out.scrollTop = out.scrollHeight;
 }
 
 /* 질문 속 기간("25년 11월"/"2025년 11월"/"2025년") 자동 인식 → 그 기간의 일봉으로 창을 좁힌다(v223).
    기간을 좁혀야 급락일 상세가 자료에 실려 과거 질문에 답할 수 있다(YG 2025-11 실사고). */
 function whyParsePeriod(q, s) {
-  if (!q) return null;
-  let m = q.match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/);
-  let pfx = null;
-  if (m) {
-    const y = +m[1] < 100 ? +m[1] + 2000 : +m[1];
-    pfx = `${y}-${String(m[2]).padStart(2, "0")}`;
-  } else if ((m = q.match(/(\d{4})\s*년(?!\s*\d{1,2}\s*월)/))) {
-    pfx = m[1];
+  /* v340: 질문 속 기간을 **전부** 모아 전체를 덮는 창을 만든다.
+     🐞구버전은 첫 매치 하나만 잡아 "6월 상승이유와 7월 하락 이유"에서 **7월 자료가 통째로 빠졌고**,
+     모델이 "7월 자료 없음"이라고 답했다(현대백화점 실사고). 지원:
+     "26년 6월"·"2026년 6월" / 연도 없는 "7월"(앞서 언급된 연도 → 없으면 데이터의 최근 그 달) /
+     "6~7월" 범위 / "2025년" 단독 / "최근 N일·주·개월·년". */
+  if (!q || !s.length) return null;
+  const months = [];
+  let lastY = null;
+  let rest = q;
+  // ① "Y년 M월" 전부
+  rest = rest.replace(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/g, (all, ys, ms) => {
+    const y = +ys < 100 ? +ys + 2000 : +ys;
+    lastY = y;
+    months.push(`${y}-${String(+ms).padStart(2, "0")}`);
+    return " ";
+  });
+  // ② "M~N월" 범위(연도 없음)
+  rest = rest.replace(/(\d{1,2})\s*[~∼\-]\s*(\d{1,2})\s*월/g, (all, a, b) => {
+    for (let mo = +a; mo <= +b && mo <= 12; mo++) months.push({ mo });
+    return " ";
+  });
+  // ③ 연도 없는 "M월" 단독
+  rest.replace(/(\d{1,2})\s*월/g, (all, ms) => {
+    const mo = +ms;
+    if (mo >= 1 && mo <= 12) months.push({ mo });
+    return " ";
+  });
+  // 연도 없는 달 → 앞서 언급된 연도, 그것도 없으면 **데이터에서 가장 최근의 그 달**
+  const resolved = months.map((x) => {
+    if (typeof x === "string") return x;
+    const p2 = String(x.mo).padStart(2, "0");
+    if (lastY) return `${lastY}-${p2}`;
+    for (let i = s.length - 1; i >= 0; i--) if (s[i].t.slice(5, 7) === p2) return s[i].t.slice(0, 7);
+    return null;
+  }).filter(Boolean);
+  if (resolved.length) {
+    resolved.sort();
+    const from = resolved[0] + "-01", to = resolved[resolved.length - 1] + "-31";
+    const win = s.filter((x) => x.t >= from && x.t <= to);
+    return win.length >= 2 ? win : null;
   }
-  if (!pfx) return null;
-  const win = s.filter((x) => x.t.startsWith(pfx));
-  return win.length >= 2 ? win : null;
+  // ④ "YYYY년" 단독(월 없이)
+  let m = q.match(/(\d{4})\s*년(?!\s*\d{1,2}\s*월)/);
+  if (m) {
+    const win = s.filter((x) => x.t.startsWith(m[1]));
+    return win.length >= 2 ? win : null;
+  }
+  // ⑤ "최근 N일/주/개월/년"
+  m = q.match(/최근\s*(\d+)\s*(일|주|개월|달|년)/);
+  if (m) {
+    const n = +m[1], u = m[2];
+    const days = u === "일" ? n : u === "주" ? n * 7 : u === "년" ? n * 365 : n * 30;
+    return s.slice(-Math.max(2, Math.round(days * 5 / 7)));
+  }
+  return null;
 }
 
 /* 같은 기간 동종업계 등락(v227) — "업종 전체가 빠졌나, 이 종목만 빠졌나"를 자료로 판별.
@@ -11616,13 +11656,8 @@ function whyQuarters(st, fromT, toT) {
 
 function whyContext(st, qwin) {
   const s = st.series || [];
-  let from, to = s.length ? s[s.length - 1].t : null;
-  if (whyRange === "view" && lookupChart) {
-    const r = lookupChart.timeScale().getVisibleRange();
-    if (r) { from = typeof r.from === "string" ? r.from : null; to = typeof r.to === "string" ? r.to : to; }
-  }
-  const n = whyRange === "21" ? 21 : 5;
-  const win = qwin || (from ? s.filter((x) => x.t >= from && x.t <= to) : s.slice(-n));
+  // 질문에 기간이 없으면 **최근 3개월(63거래일)** — 5일은 자유 질문("실적 어때?")에 너무 좁았다
+  const win = qwin || s.slice(-63);
   if (win.length < 2) return null;
   const f = win[0], l = win[win.length - 1];
   const chg = (l.c / f.c - 1) * 100;
@@ -11810,11 +11845,15 @@ async function whyAsk() {
   const hist = WHY_LOG.slice(-3).map((m) => `질문: ${m.q}\n답변요지: ${m.a.slice(0, 300)}`).join("\n---\n");
   const prompt = `당신은 한국 주식 리서치 어시스턴트다. 아래 [자료]를 1차 근거로 답하라.
 ${hist ? `\n[직전 대화] 아래는 같은 종목·구간에 대한 앞선 문답이다. 후속 질문이면 맥락을 이어서,\n이미 말한 내용은 반복하지 말고 새로 물은 것에 집중해 답하라.\n${hist}\n` : ""}
-규칙: ①[자료]의 수치·날짜를 우선 인용할 것 ②자료에 없는 그 시기의 사건·원인을 보완할 때는 출처를 구분해 표시:
-**실제 구글 검색 결과에 근거한 문장만 [검색]**, 검색 도구를 쓰지 않고 네 지식으로 서술하면 반드시 [추정]
-(검색 도구가 제공되지 않은 요청에서는 [검색]을 절대 쓰지 말 것) ③확신이 없으면 단정 대신 [추정]
-④결론 3~6문장 → 그 아래 "근거:" 불릿(자료·검색의 날짜·항목 인용) ⑤과장·투자권유 금지, 한국어.
-${qwin ? `※질문의 기간(${c.f.t.slice(0, 7)})을 인식해 자료를 그 기간으로 좁혔다.` : ""}
+규칙:
+①이 종목의 **주가·실적·수급 수치는 [자료]의 것만** 사용하라(지어내기 절대 금지). 날짜·수치를 구체적으로 인용할 것.
+②자료에 없는 산업 동향·거시 배경·일반 상식은 너의 지식으로 **보완해서 서술의 완성도를 높여라**.
+  단 그런 문장 끝에는 [배경지식]을 붙이고, 확신이 없으면 [추정]으로 표시하라.
+  (실제 구글 검색 결과에 근거한 문장만 [검색] — 검색 도구가 없는 요청에서는 [검색]을 쓰지 말 것)
+③**답변 구조**: 질문이 여러 부분(예: 상승 이유와 하락 이유)이면 **굵은 소제목으로 나눠 각각** 답하라.
+  각 부분은 핵심 결론 1~2문장 → 뒷받침 근거 불릿(자료 번호 인용) 순서. 단일 질문이면 소제목 없이 결론 → 근거.
+④과장·투자권유 금지, 한국어. 표가 유리하면 마크다운 표를 써도 된다.
+${qwin ? `※질문에서 기간을 인식해 자료를 ${c.f.t} ~ ${c.l.t} 범위로 잡았다. 이 범위 밖을 물으면 그 부분은 자료가 없다고 밝혀라.` : `※기간 미지정 — 최근 3개월(${c.f.t} ~ ${c.l.t}) 자료다.`}
 
 [자료] ${c.name}(${c.tk}) ${c.f.t} ~ ${c.l.t}
 - 주가: ${c.f.c.toLocaleString()} → ${c.l.c.toLocaleString()} (${c.chg >= 0 ? "+" : ""}${c.chg.toFixed(1)}%) · 구간 최고 ${c.hi.h.toLocaleString()}(${c.hi.t}) · 최저 ${c.lo.l.toLocaleString()}(${c.lo.t})
@@ -11857,7 +11896,7 @@ ${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시
 
 [질문] ${q || `이 구간에서 주가가 ${c.chg >= 0 ? "오른" : "내린"} 사유를 자료 기반으로 설명해줘.`}`;
   try {
-    const r = await gemCall(prompt, { maxTokens: 2600, search: true,
+    const r = await gemCall(prompt, { maxTokens: 3600, search: true,
       onSwitch: () => whyRenderThread(`${q}  (모델 한도 — 다른 모델로 전환 중…)`) });
     const ans = r.text, srcs = r.srcs;
     WHY_LOG.push({ q, a: ans, srcs, refs,
