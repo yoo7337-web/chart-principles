@@ -2446,3 +2446,10 @@ header h1 { margin-right: auto; }
 .scr-eviden > summary { cursor: pointer; font-size: .78rem; color: #f0a020; list-style: none; }
 .scr-eviden > summary::-webkit-details-marker { display: none; }
 .scr-eviden table { font-size: .74rem; margin-top: 7px; }
+
+/* 관심종목 목록의 보유/관심 구분(v342) */
+.ws-sec { display: flex; align-items: baseline; gap: 6px; font-size: .78rem; font-weight: 700;
+  color: var(--muted); padding: 8px 4px 4px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.ws-sec:not(:first-child) { margin-top: 10px; }
+.ws-item.held { border-left: 3px solid #f0a020; }
+.ws-item.held.on { border-left-color: #f0a020; }

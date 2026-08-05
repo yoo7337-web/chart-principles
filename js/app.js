@@ -7355,19 +7355,30 @@ const WS_ST = {}, WS_FIN = {};   // stocks/·financials/ 캐시(lookup과 독립
 
 function wsRows() {
   const w = watchLoad();
+  /* v342: 보유종목(cp_portfolio_v2, 로컬 전용)도 관심종목 워크스페이스에 합류 — held 플래그로 구분.
+     ⚠유니버스 밖 보유(레버리지 ETF 등)는 종목 카드(시계열·재무)를 그릴 수 없어 제외한다(보유현황 탭엔 있음). */
+  const held = {};
+  try {
+    pfHoldings().forEach((h) => {
+      if (+h.qty > 0 && h.mk && h.ticker) held[`${h.mk}_${h.ticker}`] = h;
+    });
+  } catch (e) { /* 보유 데이터 없음 */ }
   const sigByKey = {};
   (TODAY?.signals || []).forEach((s) => {
     const k = `${s.market}_${s.ticker}`;
     if (!sigByKey[k] || s.date > sigByKey[k].date) sigByKey[k] = s;
   });
-  const rows = Object.keys(w).map((k) => {
-    const it = w[k];
+  const rows = [...new Set([...Object.keys(w), ...Object.keys(held)])].map((k) => {
+    const it = w[k] || { mk: k.slice(0, 2), t: k.slice(3) };
     const tile = (MARKET?.heatmap || []).find((t) => `${t.m}_${t.t}` === k);
+    if (!w[k] && !tile) return null;      // 보유이지만 유니버스 밖 — 카드 렌더 불가
     const q = MARKET?.quotes?.[k];
-    return { k, ...it, name: tile?.name || it.name, grp: tile?.grp || "etc", sector: tile?.sector,
+    return { k, ...it, name: tile?.name || it.name || held[k]?.name || k.slice(3),
+             grp: tile?.grp || "etc", sector: tile?.sector,
              mcap: tile?.mcap, price: q ? q[0] : null, chg: q ? q[1] : (tile?.chg ?? null),
-             sig: sigByKey[k], rep: !!REPORTS_IDX?.reports?.[k] };
-  });
+             sig: sigByKey[k], rep: !!REPORTS_IDX?.reports?.[k],
+             held: !!held[k], starred: !!w[k] };
+  }).filter(Boolean);
   const by = { added: (a, b) => (a.added || "").localeCompare(b.added || ""),
                chg: (a, b) => (b.chg ?? -9) - (a.chg ?? -9),
                mcap: (a, b) => (b.mcap || 0) - (a.mcap || 0),
@@ -7380,6 +7391,7 @@ function renderWatch() {
   const rows = wsRows();
   const ctx = $("#watch-context");
   if (ctx) ctx.innerHTML = `⭐는 종목조회 헤더·주식찾기 표·오늘의 신호 어디서든 누르면 담깁니다.
+    <b>💼 보유종목</b>(보유 포트폴리오 탭에 등록된 종목)은 자동으로 함께 표시되며 관심종목과 구분됩니다.
     각 카드의 <b>→</b>는 해당 탭의 상세 화면으로 이동합니다. 로그인하면 기기 간 자동 동기화됩니다.`;
   const list = $("#ws-list"), sum = $("#watch-summary"), cnt = $("#watch-count"), main = $("#ws-main");
   bindWatchIO();
@@ -7388,13 +7400,15 @@ function renderWatch() {
     if (cnt) cnt.textContent = "";
     if (list) list.innerHTML = "";
     if (main) main.innerHTML = `<p class="mini-note" style="padding:40px 0;text-align:center">
-      아직 담은 종목이 없습니다 — 종목조회나 주식찾기에서 <b>☆</b>를 눌러 담아보세요.</p>`;
+      아직 담은 종목이 없습니다 — 종목조회나 주식찾기에서 <b>☆</b>를 눌러 담거나,
+      보유 포트폴리오 탭에서 보유종목을 등록하면 여기에도 나타납니다.</p>`;
     return;
   }
   const up = rows.filter((r) => (r.chg ?? 0) > 0).length;
   const buys = rows.filter((r) => r.sig?.side === "buy").length;
   const sells = rows.filter((r) => r.sig?.side === "sell").length;
-  if (sum) sum.innerHTML = [["관심종목", `${rows.length}`, "담은 종목"],
+  const nHeld = rows.filter((r) => r.held).length;
+  if (sum) sum.innerHTML = [["담은 종목", `${rows.length}`, nHeld ? `보유 ${nHeld} · 관심 ${rows.length - nHeld}` : "관심종목"],
     ["오늘 상승", `${up} / ${rows.length}`, rows.length ? `${Math.round(up / rows.length * 100)}%` : ""],
     ["🟢 매수 신호", `${buys}`, "최근 3영업일"], ["🔴 매도 신호", `${sells}`, "최근 3영업일"]]
     .map(([t, v, s2]) => `<div class="idx-card"><div class="sub-note">${t}</div>
@@ -7402,16 +7416,23 @@ function renderWatch() {
   if (cnt) cnt.textContent = `${rows.length}종목`;
   // 좌 목록 — 카드형(등락·최근 신호·보고서 보유 배지)
   if (!rows.some((r) => r.k === wsSel)) wsSel = rows[0].k;
-  list.innerHTML = rows.map((r) => {
+  const wsItem = (r) => {
     const col = (r.chg ?? 0) >= 0 ? "kup" : "kdn";
-    return `<button class="ws-item ${r.k === wsSel ? "on" : ""}" data-key="${r.k}">
+    return `<button class="ws-item ${r.k === wsSel ? "on" : ""}${r.held ? " held" : ""}" data-key="${r.k}">
       <img class="mv-logo" src="${logoUrl(r.mk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="ws-item-body"><b>${r.name}</b>
         <span class="ws-item-sub">${r.price != null ? fmtPrice(r.price, r.mk) : ""}
           <span class="${col}">${r.chg != null ? pct(r.chg, 2) : "-"}</span></span></span>
-      <span class="ws-item-badges">${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}</span>
+      <span class="ws-item-badges">${r.held && r.starred ? "⭐" : ""}${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}</span>
     </button>`;
-  }).join("");
+  };
+  // 💼 보유(위) / ⭐ 관심(아래) — 같은 종목이 보유이면서 관심이면 보유 섹션에 두고 ⭐ 배지로 표시
+  const heldRows = rows.filter((r) => r.held), watchRows = rows.filter((r) => !r.held);
+  list.innerHTML =
+    (heldRows.length ? `<div class="ws-sec">💼 보유종목 <span class="sub-note">${heldRows.length}</span></div>`
+      + heldRows.map(wsItem).join("") : "") +
+    (watchRows.length ? `<div class="ws-sec">⭐ 관심종목 <span class="sub-note">${watchRows.length}</span></div>`
+      + watchRows.map(wsItem).join("") : "");
   list.querySelectorAll(".ws-item").forEach((b) => b.onclick = () => {
     wsSel = b.dataset.key;
     localStorage.setItem("cp_ws_sel", wsSel);
@@ -7435,7 +7456,8 @@ function renderWatch() {
   loadReportsIdx().then(() => {   // 보고서 배지는 index 로드 후 갱신
     wsRows().forEach((r) => {
       const el = list.querySelector(`.ws-item[data-key="${r.k}"] .ws-item-badges`);
-      if (el) el.textContent = `${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}`;
+      // ⚠이 콜백은 렌더 뒤에 배지를 다시 쓴다 — 항목 템플릿과 같은 구성(⭐ 포함)을 유지할 것
+      if (el) el.textContent = `${r.held && r.starred ? "⭐" : ""}${r.sig ? (r.sig.side === "buy" ? "🟢" : "🔴") : ""}${r.rep ? "📖" : ""}`;
     });
     wsShow(wsSel);
   });
