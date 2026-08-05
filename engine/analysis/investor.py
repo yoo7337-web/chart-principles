@@ -114,7 +114,9 @@ def build_rank_from_supply(top: int = 10) -> dict:
         f20, i20 = ss.get("frgn_20"), ss.get("inst_20")
         if f20 is None and i20 is None:
             continue
-        last = (d.get("series") or [{}])[-1].get("c")
+        # ⚠series는 v214부터 압축 배열 [t,o,h,l,c,v]다(구 dict 형식도 허용) — .get("c")로 읽으면 크래시
+        sl = (d.get("series") or [None])[-1]
+        last = (sl[4] if isinstance(sl, list) else (sl or {}).get("c")) if sl else None
         rows.append({"code": d.get("ticker"), "name": d.get("name"), "last": last,
                      "f20": f20, "i20": i20})
     out = {}

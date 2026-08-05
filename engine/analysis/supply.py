@@ -84,25 +84,40 @@ def _fetch_trend(code: str, pages: int) -> list:
     return rows
 
 
-def fetch_flow(code: str, pages: int) -> pd.DataFrame | None:
+def _html_rows(code: str, pages: int) -> list:
+    """frgn.naver HTML — page당 20거래일씩 **과거로** 내려간다(개인 순매매량은 없음)."""
+    rows = []
+    for p in range(1, pages + 1):
+        try:
+            df = _fetch_page(code, p)
+        except Exception:
+            break
+        if df is None or df.empty:
+            break
+        for _, r in df.iterrows():
+            d = str(r["date"]).replace(".", "-").strip()
+            inst, frgn, ratio = _num(r["inst_net_vol"]), _num(r["frgn_net_vol"]), _num(r["frgn_ratio"])
+            if len(d) == 10 and (inst is not None or frgn is not None):
+                rows.append({"date": d, "inst_net_vol": inst, "frgn_net_vol": frgn, "frgn_ratio": ratio})
+        time.sleep(0.12)
+    return rows
+
+
+def fetch_flow(code: str, pages: int, deep: int = 0) -> pd.DataFrame | None:
+    """API(최근 50일·개인 포함) + 필요 시 HTML 과거 페이지(deep)를 합친다.
+
+    🐞⚠**API가 성공하면 HTML을 안 타던 구조가 이력을 50일에 묶어 놓았다.**
+      모바일 trend API는 page를 무시하고 늘 같은 50거래일을 주므로, 매일 돌려도 깊이가 늘지 않는다
+      (실측 2026-08-04: 전 종목 50~73행). 두 소스는 **대체재가 아니라 보완재**다 —
+      API는 '개인'을, HTML은 '과거'를 가진다. 둘 다 받아 병합한다.
+    """
     rows = _fetch_trend(code, pages)
-    if not rows:   # API 실패 시에만 구 HTML 경로(개인 없음)
-        for p in range(1, pages + 1):
-            try:
-                df = _fetch_page(code, p)
-            except Exception:
-                break
-            if df is None or df.empty:
-                break
-            for _, r in df.iterrows():
-                d = str(r["date"]).replace(".", "-").strip()
-                inst, frgn, ratio = _num(r["inst_net_vol"]), _num(r["frgn_net_vol"]), _num(r["frgn_ratio"])
-                if len(d) == 10 and (inst is not None or frgn is not None):
-                    rows.append({"date": d, "inst_net_vol": inst, "frgn_net_vol": frgn, "frgn_ratio": ratio})
-            time.sleep(0.2)
+    if deep > 0 or not rows:
+        rows += _html_rows(code, deep if deep > 0 else pages)
     if not rows:
         return None
-    out = pd.DataFrame(rows).drop_duplicates("date").set_index("date").sort_index()
+    # ⚠API rows를 앞에 두었으므로 keep="first"가 곧 'API 우선'(개인 순매매량 보존)
+    out = pd.DataFrame(rows).drop_duplicates("date", keep="first").set_index("date").sort_index()
     out.index = pd.to_datetime(out.index)
     return out
 
@@ -111,6 +126,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true", help="증분(1페이지≈30일 병합)")
     ap.add_argument("--quick", action="store_true", help="소수 종목만(검증)")
+    ap.add_argument("--deep", type=int, default=0,
+                    help="HTML 과거 페이지 수(1페이지≈20거래일). 13이면 약 1년 소급. "
+                         "이력이 얕은 종목만 채우려면 --deep-min과 함께")
+    ap.add_argument("--deep-min", type=int, default=0,
+                    help="기존 행수가 이 값 미만인 종목에만 --deep 적용(0=전 종목)")
     args = ap.parse_args()
 
     names_path = DATA_DIR / "kr_names.json"
@@ -127,7 +147,15 @@ def main():
     for i, code in enumerate(codes, 1):
         path = DATA_DIR / f"flow_{code}.parquet"
         try:
-            new = fetch_flow(code, pages)
+            deep = args.deep
+            if deep and args.deep_min:      # 이력이 얕은 종목만 소급(재실행 비용 0)
+                try:
+                    import pandas as _pd
+                    if path.exists() and len(_pd.read_parquet(path)) >= args.deep_min:
+                        deep = 0
+                except Exception:
+                    pass
+            new = fetch_flow(code, pages, deep)
             if new is None:
                 fail += 1
                 continue
