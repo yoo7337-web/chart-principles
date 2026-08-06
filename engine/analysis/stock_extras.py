@@ -1008,10 +1008,11 @@ def us_feed(tk: str, cik: str | None) -> dict:
     return out
 
 
-def build_feed(quick: bool = False) -> dict:
+def build_feed(quick: bool = False, prev: dict | None = None) -> dict:
     names = kr_codes()
     codes = list(names)[:20] if quick else list(names)
     tickers = US_TICKERS[:5] if quick else US_TICKERS
+    prev = prev or {}
     fmap = {}
     for code, d in _kr_parallel(codes, kr_feed, "KR feed").items():
         if d["news"] or d["disc"] or d.get("reports"):
@@ -1086,6 +1087,23 @@ def build_feed(quick: bool = False) -> dict:
                 print(f"  [DART disc] {done} (수집 {fetched})")
             time.sleep(0.25)
         print(f"  DART 공시: {fetched}종목 수집 (1년 전량·모든 유형)")
+    # 🐞💀**공시가 비면 직전 것을 보존한다** — v335에서 네이버 공시를 폐기하자 DART 패스가 실패한
+    #   종목은 disc가 빈 채 저장됐고, fmap이 매번 새로 만들어져 **이전에 채운 공시까지 지웠다**
+    #   (2026-08-06 실사고: 클라우드 재생성 후 라이브 466종목 0건·중앙값 38→5, JYP 28→0).
+    #   financials·supply·오늘의신호·ECOS·딜과 같은 교훈 6번째: **실패로 축적본을 덮지 말 것.**
+    kept = 0
+    for k, old_e in prev.items():
+        if not k.startswith("kr_"):
+            continue
+        if k not in fmap:
+            if old_e.get("disc") or old_e.get("news"):
+                fmap[k] = old_e            # 이번 수집이 통째로 실패한 종목 — 이전 항목 유지
+                kept += 1
+        elif not fmap[k].get("disc") and old_e.get("disc"):
+            fmap[k]["disc"] = old_e["disc"]   # DART 실패 — 이전 공시 유지(비우는 것보다 낫다)
+            kept += 1
+    if kept:
+        print(f"  이전 공시 보존: {kept}종목 (이번 수집 실패분)")
     ciks = _cik_map()
     for i, tk in enumerate(tickers, 1):
         d = us_feed(tk, ciks.get(tk.replace("-", "")))
@@ -1189,7 +1207,7 @@ def main():
         cur = _load(FEED)
         if args.force or args.quick or not _fresh(cur.get("generated"), 20):
             print("[2/2] feed.json (하루 1회)...")
-            fmap = build_feed(args.quick)
+            fmap = build_feed(args.quick, cur.get("map"))
             if args.quick:
                 cur.get("map", {}).update(fmap)
                 fmap = cur["map"]
