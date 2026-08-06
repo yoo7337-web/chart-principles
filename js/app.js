@@ -1288,6 +1288,10 @@ function loadLookup(key) {
       renderLookupFinancials(st);
       renderLookupReports(st);
       renderLookupFeed(st);
+      // 🐞공시 띠는 차트 생성 시점(rAF)에 한 번 그려지는데, 콜드 로드에선 feed가 그보다 늦게 와서
+      //   빈 판정 → display:none으로 숨은 채 **스크롤 전까지 안 깨어났다**(JYP 실사고).
+      //   feed 도착 후 반드시 다시 그린다.
+      drawDiscBand();
     });
 
     drawLookupChart();
