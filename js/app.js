@@ -1754,7 +1754,13 @@ function redrawDrawings() {
      같은 좌표에 **투명 굵은 선(12px)** 을 겹쳐 깔아 그것으로 집는다. */
   svg.querySelectorAll(".dw-hit").forEach((sh) => {
     // 선택은 '이동/선택' 모드에서만 — 그리기 중에는 도형 위에서 시작해도 그려져야 한다
-    sh.onclick = (ev) => { if (drawMode) return; ev.stopPropagation(); drawSelect(+sh.dataset.i); };
+    sh.onclick = (ev) => {
+      if (drawMode) return;
+      ev.stopPropagation();
+      // 드래그로 이동한 직후의 click은 선택 유지(토글하면 놓는 순간 선택이 풀린다)
+      if (window.__dwJustDragged) { window.__dwJustDragged = false; return; }
+      drawSelect(+sh.dataset.i);
+    };
     sh.oncontextmenu = (ev) => { ev.preventDefault(); ev.stopPropagation(); drawDelete(+sh.dataset.i); };
   });
   drawPaintSelection();
@@ -1846,7 +1852,7 @@ function drawUndo() {
 }
 
 const DRAW_HINT = {
-  "": "그림을 클릭하면 선택됩니다 (Delete=삭제 · 우클릭=바로 삭제) · 빈 곳 드래그는 차트 이동",
+  "": "그림 클릭=선택 · **드래그=이동** (Delete=삭제 · 우클릭=바로 삭제) · 빈 곳 드래그는 차트 이동",
   trend: "두 점을 드래그해 추세선을 그립니다",
   hline: "누른 지점의 가격에 수평선을 긋습니다(지지·저항)",
   vline: "누른 지점의 날짜에 수직선을 긋습니다",
@@ -1927,6 +1933,84 @@ function bindDrawTools() {
     const p = lookupCandles.coordinateToPrice(y);
     return { x, y, t, fo, p };
   };
+  /* ── 도형 드래그 이동(v343) ──
+     선택 모드에서 도형(.dw-hit)을 잡아 끌면 픽셀 이동량을 (논리인덱스 Δ, 가격 Δ)로 바꿔
+     저장된 앵커(t/fo·p)에 더한다. 3px 문턱으로 '클릭=선택'과 '드래그=이동'을 구분.
+     ⚠redrawDrawings가 매 이동마다 SVG를 다시 만들어 대상 요소가 사라진다 →
+       캡처는 **svg 자체**에 걸고(지속 요소), 원본 좌표의 사본으로 매번 재계산한다(누적 오차 방지). */
+  let dwDrag = null;
+  const dwLogical = (d) => {           // 앵커 → 논리인덱스 (t 우선, 미래는 last+fo)
+    const last = _barTimeByIdx.length - 1;
+    return d.fo != null ? last + d.fo : (_barIdxByTime.get(d.t) ?? null);
+  };
+  const dwAnchor = (lg) => {           // 논리인덱스 → {t, fo} (미래 여백은 fo로)
+    const last = _barTimeByIdx.length - 1;
+    if (lg > last + 0.5) return { t: null, fo: lg - last };
+    return { t: _barTimeByIdx[Math.min(last, Math.max(0, Math.round(lg)))], fo: null };
+  };
+  svg.addEventListener("pointerdown", (ev) => {
+    if (drawMode || !lookupCandles || ev.button !== 0) return;
+    const hitEl = ev.target.closest && ev.target.closest(".dw-hit");
+    if (!hitEl) return;
+    const i = +hitEl.dataset.i;
+    const arr = drawLoad()[drawKey()] || [];
+    if (!arr[i]) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const r = svg.getBoundingClientRect();
+    dwDrag = { i, x0: ev.clientX - r.left, y0: ev.clientY - r.top,
+               orig: JSON.parse(JSON.stringify(arr[i])), moved: false, pushed: false };
+    drawSel = i;
+    drawPaintSelection();
+    svg.style.pointerEvents = "auto";          // 이동 중엔 SVG가 전 이벤트를 받는다
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* 미지원 브라우저 */ }
+    // 차트 팬과 싸우지 않게 드래그 동안 스크롤·줌을 잠근다
+    lookupChart.applyOptions({ handleScroll: false, handleScale: false });
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!dwDrag) return;
+    const r = svg.getBoundingClientRect();
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    if (!dwDrag.moved && Math.abs(x - dwDrag.x0) < 3 && Math.abs(y - dwDrag.y0) < 3) return;
+    if (!dwDrag.pushed) { drawPush(); dwDrag.pushed = true; }   // 첫 이동 직전 상태를 undo 스택에
+    dwDrag.moved = true;
+    const ts = lookupChart.timeScale();
+    const lg0 = ts.coordinateToLogical(dwDrag.x0), lg1 = ts.coordinateToLogical(x);
+    const pr0 = lookupCandles.coordinateToPrice(dwDrag.y0), pr1 = lookupCandles.coordinateToPrice(y);
+    if (lg0 == null || lg1 == null || pr0 == null || pr1 == null) return;
+    const dLg = lg1 - lg0, dPr = pr1 - pr0;
+    const o = drawLoad(), k = drawKey();
+    const d = o[k] && o[k][dwDrag.i];
+    if (!d) { dwDrag = null; return; }
+    const g = dwDrag.orig;
+    // 시간축 이동(수평선은 고정) — 항상 **원본 기준**으로 계산해 누적 오차를 막는다
+    if (d.type !== "hline") {
+      const l1 = dwLogical({ t: g.t1, fo: g.fo1 });
+      if (l1 != null) { const a = dwAnchor(l1 + dLg); d.t1 = a.t; d.fo1 = a.fo; }
+      if (g.t2 != null || g.fo2 != null) {
+        const l2 = dwLogical({ t: g.t2, fo: g.fo2 });
+        if (l2 != null) { const a = dwAnchor(l2 + dLg); d.t2 = a.t; d.fo2 = a.fo; }
+      }
+    }
+    // 가격축 이동(수직선은 고정)
+    if (d.type !== "vline") {
+      if (g.p1 != null) d.p1 = g.p1 + dPr;
+      if (g.p2 != null) d.p2 = g.p2 + dPr;
+    }
+    drawSaveAll(o);
+    redrawDrawings();
+  });
+  const dwEnd = (ev) => {
+    if (!dwDrag) return;
+    try { svg.releasePointerCapture(ev.pointerId); } catch (e) { /* noop */ }
+    lookupChart.applyOptions({ handleScroll: true, handleScale: true });
+    if (!drawMode) svg.style.pointerEvents = "none";   // 선택 모드의 평상시 상태로 복귀
+    if (dwDrag.moved) window.__dwJustDragged = true;   // 직후의 click이 선택을 해제하지 않게
+    dwDrag = null;
+  };
+  svg.addEventListener("pointerup", dwEnd);
+  svg.addEventListener("pointercancel", dwEnd);
+
   svg.addEventListener("pointerdown", (ev) => {
     if (!drawMode || !lookupCandles) return;
     const c = toData(ev);
@@ -11049,9 +11133,22 @@ function ftRows(st) {
   const data = ftMode === "quarter" ? src.quarter : src.annual;
   if (!data || !Object.keys(data).length) return [];
   const ps = Object.keys(data).sort();
-  return ps.map((p, i) => {
-    const d = data[p], prev = i > 0 ? data[ps[i - 1]] : null;
-    const r = { p: ftMode === "annual" ? p : p, ...d };
+  /* v344: 분기 모드에선 **증권가 컨센서스 추정 분기**(company.json fin_q, est:true)를 확정 실적 뒤에
+     이어 붙인다(KR 전용 — 네이버 집계, US엔 없음). 확정치(DART)는 건드리지 않고 미래 분기만 추가.
+     추정 행은 r.est=true — 차트가 옅은 막대 + "(E)" 라벨로 구분해 그린다. */
+  const estRows = [];
+  if (ftMode === "quarter" && ps.length) {
+    const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
+    const lastP = ps[ps.length - 1];
+    (co?.fin_q || []).forEach((q) => {
+      if (q.est && q.q > lastP) estRows.push([q.q, { rev: q.rev ?? null, op: q.op ?? null, np: q.np ?? null }]);
+    });
+    estRows.sort((a, b) => a[0].localeCompare(b[0]));
+  }
+  const merged = ps.map((k) => [k, data[k], false]).concat(estRows.map(([k, d]) => [k, d, true]));
+  return merged.map(([p, d, isEst], i) => {
+    const prev = i > 0 ? merged[i - 1][1] : null;
+    const r = { p: isEst ? p + "(E)" : p, est: isEst, ...d };
     // 🐞⚠분자도 반드시 확인할 것 — `undefined / 5`는 **NaN**이고 NaN은 `!= null` 필터를 통과해
     //   차트 축 계산(max/min)을 통째로 오염시킨다(실사고: 대한항공 순이익 1개년 결측 → 성장률 차트 전체 실종).
     r.opm = d.rev && d.op != null ? (d.op / d.rev) * 100 : null;
@@ -11199,7 +11296,8 @@ function renderFinTrends(st) {
         if (!Number.isFinite(v)) return;   // NaN 방어(값 결측 연도)
         const x = cx + (j - (keys.length - 1) / 2) * (bw + 2) - bw / 2;
         const y = yS(Math.max(0, v)), h2 = Math.abs(yS(v) - y0);
-        svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"/>`;
+        svg += `<rect x="${x}" y="${v >= 0 ? yS(v) : y0}" width="${bw}" height="${Math.max(1, h2)}" fill="${colors[j]}" rx="1.5"${
+          r.est ? ` fill-opacity="0.4" stroke="${colors[j]}" stroke-dasharray="3 2" stroke-width="1"` : ""}/>`;
         // 값 라벨 — 양수는 막대 위, 음수는 아래가 기본. 겹치면 placeLabels가 더 밀어낸다
         if (withLabel) pushLbl(x + bw / 2, v >= 0 ? yS(v) - 4 : yS(v) + 11,
           ftNum(v * uMul), colors[j], 10.5, v >= 0 ? -1 : 1, 2);
@@ -11286,7 +11384,11 @@ function renderFinTrends(st) {
     cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
   };
   const specs = SPECS[ftView] || SPECS.perf;
-  $("#ft-table").innerHTML = `<div class="fin-wrap" style="margin-top:8px"><table class="fin-table"><thead><tr>
+  // 추정 분기 안내 — 확정 실적과 반드시 구분(옅은 막대 + (E)). 컨센이 없으면 각주도 없다.
+  const ftEstNote = rows.some((r) => r.est)
+    ? `<p class="mini-note">⚠<b>(E) = 증권가 컨센서스 추정</b>(네이버 집계) — 확정 실적이 아니며 발표 후 값이 달라질 수 있습니다.
+        매출·영업이익·순이익만 제공되고 재무상태·현금흐름 뷰에는 추정이 없습니다.</p>` : "";
+  $("#ft-table").innerHTML = ftEstNote + `<div class="fin-wrap" style="margin-top:8px"><table class="fin-table"><thead><tr>
       <th class="fin-lab">지표</th>${rows.map((r) => `<th>${r.p}</th>`).join("")}</tr></thead><tbody>` +
     specs.map(([k, lab]) => {
       const isPct = PCT.has(k);

@@ -2453,3 +2453,7 @@ header h1 { margin-right: auto; }
 .ws-sec:not(:first-child) { margin-top: 10px; }
 .ws-item.held { border-left: 3px solid #f0a020; }
 .ws-item.held.on { border-left-color: #f0a020; }
+
+/* 도형 드래그(v343) — 잡을 수 있음을 커서로 알린다 */
+#lookup-draw .dw-hit { cursor: grab; }
+#lookup-draw .dw-hit:active { cursor: grabbing; }
