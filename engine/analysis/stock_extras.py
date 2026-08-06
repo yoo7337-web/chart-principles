@@ -1008,6 +1008,24 @@ def us_feed(tk: str, cik: str | None) -> dict:
     return out
 
 
+def _merge_disc(prev_list: list | None, new_list: list | None, days: int = 365, cap: int = 120) -> list:
+    """공시 목록 합집합 — 키=원문 링크(rcpNo, 고유), 없으면 (날짜, 제목). 새 수집 우선(제목 정정 반영),
+    1년 창 밖은 자연 탈락, 날짜 내림차순 cap건. 새 수집이 부분 실패해도 이전 건이 살아남는다."""
+    cut = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+    seen, out = set(), []
+    for it in (new_list or []) + (prev_list or []):
+        d = it.get("d") or ""
+        if d < cut:
+            continue
+        key = it.get("link") or f"{d}|{it.get('title', '')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(it)
+    out.sort(key=lambda x: x.get("d") or "", reverse=True)
+    return out[:cap]
+
+
 def build_feed(quick: bool = False, prev: dict | None = None) -> dict:
     names = kr_codes()
     codes = list(names)[:20] if quick else list(names)
@@ -1087,10 +1105,11 @@ def build_feed(quick: bool = False, prev: dict | None = None) -> dict:
                 print(f"  [DART disc] {done} (수집 {fetched})")
             time.sleep(0.25)
         print(f"  DART 공시: {fetched}종목 수집 (1년 전량·모든 유형)")
-    # 🐞💀**공시가 비면 직전 것을 보존한다** — v335에서 네이버 공시를 폐기하자 DART 패스가 실패한
-    #   종목은 disc가 빈 채 저장됐고, fmap이 매번 새로 만들어져 **이전에 채운 공시까지 지웠다**
-    #   (2026-08-06 실사고: 클라우드 재생성 후 라이브 466종목 0건·중앙값 38→5, JYP 28→0).
-    #   financials·supply·오늘의신호·ECOS·딜과 같은 교훈 6번째: **실패로 축적본을 덮지 말 것.**
+    # 🐞💀**공시는 항상 이전 것과 합집합으로 병합한다** — v335에서 네이버 공시를 폐기하자 DART 실패
+    #   종목이 빈 채 저장되고 fmap 신규 생성이 이전 공시까지 지웠다(2026-08-06 실사고: 라이브 466종목
+    #   0건·중앙값 38→5). 1차 수정('비면 보존')은 **부분 실패**(40건 중 3건만 수신)를 통과시켰다 →
+    #   합집합이 정답이다: 새 수집은 **추가만** 할 수 있고, 삭제는 1년 창 밖으로 밀려날 때만 일어난다.
+    #   financials·supply·오늘의신호·ECOS·딜과 같은 교훈: **네트워크 결과로 덮을 땐 병합이 기본값.**
     kept = 0
     for k, old_e in prev.items():
         if not k.startswith("kr_"):
@@ -1099,11 +1118,13 @@ def build_feed(quick: bool = False, prev: dict | None = None) -> dict:
             if old_e.get("disc") or old_e.get("news"):
                 fmap[k] = old_e            # 이번 수집이 통째로 실패한 종목 — 이전 항목 유지
                 kept += 1
-        elif not fmap[k].get("disc") and old_e.get("disc"):
-            fmap[k]["disc"] = old_e["disc"]   # DART 실패 — 이전 공시 유지(비우는 것보다 낫다)
-            kept += 1
+        else:
+            merged2 = _merge_disc(old_e.get("disc"), fmap[k].get("disc"))
+            if len(merged2) > len(fmap[k].get("disc") or []):
+                kept += 1
+            fmap[k]["disc"] = merged2
     if kept:
-        print(f"  이전 공시 보존: {kept}종목 (이번 수집 실패분)")
+        print(f"  이전 공시 병합 보강: {kept}종목 (이번 수집이 놓친 건 복원)")
     ciks = _cik_map()
     for i, tk in enumerate(tickers, 1):
         d = us_feed(tk, ciks.get(tk.replace("-", "")))
@@ -1211,8 +1232,18 @@ def main():
             if args.quick:
                 cur.get("map", {}).update(fmap)
                 fmap = cur["map"]
-            FEED.write_text(json.dumps({"generated": now, "map": fmap},
-                                       ensure_ascii=False, allow_nan=False), encoding="utf-8")
+            # 최후 안전망: 합집합 병합이 있어 총 공시 건수는 줄 수 없다(1년 창 자연 탈락분 제외).
+            # 그런데도 60% 아래로 줄었다면 병합 이전 단계 어딘가가 깨진 것 — **쓰지 않고 보존**한다.
+            # (0건 사고·부분 유니버스 사고 모두 이 지점에서 잡힌다. 오늘의신호 MIN_STOCKS와 같은 패턴)
+            def _ndisc(m):
+                return sum(len(v.get("disc") or []) for k, v in (m or {}).items() if k.startswith("kr_"))
+            prev_n, new_n = _ndisc(cur.get("map")), _ndisc(fmap)
+            if prev_n >= 5000 and new_n < prev_n * 0.6:
+                print(f"⚠ feed 공시 급감({prev_n:,} → {new_n:,}) — 수집 이상으로 판단, 기존 파일 보존(쓰기 생략)",
+                      file=sys.stderr)
+            else:
+                FEED.write_text(json.dumps({"generated": now, "map": fmap},
+                                           ensure_ascii=False, allow_nan=False), encoding="utf-8")
         else:
             print("[2/2] feed 스킵 (20h 이내)")
     print("완료: stock_extras")
