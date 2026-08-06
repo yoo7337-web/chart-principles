@@ -11158,6 +11158,10 @@ function ftRows(st) {
     r.opm = d.rev && d.op != null ? (d.op / d.rev) * 100 : null;
     r.npm = d.rev && d.np != null ? (d.np / d.rev) * 100 : null;
     r.revG = prev && prev.rev && d.rev != null ? (d.rev / prev.rev - 1) * 100 : null;  // 연간=전년比, 분기=직전분기比(QoQ)
+    // 영업이익 증가율 — ⚠전기가 적자·0 근처면 증가율이 수천 %로 발산하거나 부호가 뒤집힌다(흑전·적전).
+    //   |전기| 기준으로 나누되, 전기 적자→흑자·흑자→적자 전환은 수치 대신 null(라벨은 표에서 흑전/적전으로).
+    r.opG = prev && Number.isFinite(prev.op) && Math.abs(prev.op) > 1 && Number.isFinite(d.op)
+      && (prev.op > 0) === (d.op > 0) ? (d.op / prev.op - 1) * 100 : null;
     r.roe = d.equity && d.np != null ? (d.np * (ftMode === "quarter" ? 4 : 1)) / d.equity * 100 : null;  // 분기=연환산
     r.debt = d.equity && d.liab != null ? (d.liab / d.equity) * 100 : null;
     r.cur = d.cl && d.ca != null ? (d.ca / d.cl) * 100 : null;
@@ -11356,7 +11360,9 @@ function renderFinTrends(st) {
     chartSvg = (bg.svg || "") + lineSvg;
     legend = (bg.legend || "") + `  <span style="color:#f0b34c">─</span> 영업이익률  <span style="color:#ff8c9a">┄</span> 순이익률`;
   } else if (ftView === "growth") {
-    const r1 = lineOn(["revG", "opm", "npm"], ["#4391ff", "#f0b34c", "#ff8c9a"], [gLab, "영업이익률", "순이익률"]);
+    const gLab2 = ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)";
+    const r1 = lineOn(["revG", "opG", "opm", "npm"], ["#4391ff", "#22c07a", "#f0b34c", "#ff8c9a"],
+      [gLab, gLab2, "영업이익률", "순이익률"], ["", "5 3", "", ""]);
     chartSvg = r1.svg; legend = r1.legend;
   } else if (ftView === "stability") {
     const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
@@ -11380,10 +11386,11 @@ function renderFinTrends(st) {
     : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`;
 
   // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----
-  const PCT = new Set(["opm", "npm", "revG", "roe", "debt", "cur"]);
+  const PCT = new Set(["opm", "npm", "revG", "opG", "roe", "debt", "cur"]);
   const SPECS = {
     perf: [["rev", "매출액"], ["op", "영업이익"], ["np", "순이익"], ["opm", "영업이익률"], ["npm", "순이익률"], ["revG", gLab], ["roe", roeLab]],
-    growth: [["revG", gLab], ["op", "영업이익"], ["opm", "영업이익률"], ["np", "순이익"], ["npm", "순이익률"], ["roe", roeLab]],
+    growth: [["revG", gLab], ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
+      ["opm", "영업이익률"], ["np", "순이익"], ["npm", "순이익률"], ["roe", roeLab]],
     stability: [["asset", "총자산"], ["liab", "총부채"], ["equity", "자본총계"], ["debt", "부채비율"], ["cur", "유동비율"], ["cash", "현금성자산"]],
     cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
   };
