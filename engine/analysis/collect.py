@@ -7,6 +7,7 @@ r"""데이터 수집: 한국(KOSPI 시총상위 200, pykrx) + 미국(대형주 1
     python analysis\collect.py --force   # 캐시 무시 전체 재수집
 """
 import argparse
+import os
 import sys
 import re
 import time
@@ -49,6 +50,14 @@ def norm_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     df = df[["open", "high", "low", "close", "volume"]].astype("float64")
     df = df[(df["close"] > 0) & (df["volume"] >= 0)].sort_index()
     return df[~df.index.duplicated(keep="last")]
+
+
+def save_parquet(df: pd.DataFrame, path: Path) -> None:
+    """임시 파일에 쓴 뒤 원자적 교체 — 배치 강제종료·동시 실행이 파일을 반토막 내지 않게.
+    (2026-08-07 실사고: 잘린 parquet 5개가 load_all()을 크래시시켜 market_dash가 24시간 정지)"""
+    tmp = path.with_name(path.name + ".tmp")
+    df.to_parquet(tmp)
+    os.replace(tmp, path)
 
 
 def cache_fresh(path: Path, days: int = 7) -> bool:
@@ -146,7 +155,7 @@ def collect_kr(quick: bool, force: bool) -> int:
             df = norm_ohlcv(raw)
             if len(df) < MIN_ROWS_COLLECT:  # 수집 바닥값(원칙 게이트는 load_research에서)
                 continue
-            df.to_parquet(path)
+            save_parquet(df, path)
             ok += 1
         except Exception as e:
             print(f"  [KR] {t} 실패: {e}", file=sys.stderr)
@@ -177,7 +186,7 @@ def collect_us(quick: bool, force: bool) -> int:
             if len(df) < MIN_ROWS:
                 print(f"  [US] {t} 데이터 부족({len(df)}행) 제외")
                 continue
-            df.to_parquet(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
+            save_parquet(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
             ok += 1
         except Exception as e:
             print(f"  [US] {t} 실패: {e}", file=sys.stderr)
@@ -191,7 +200,12 @@ def load_all() -> dict:
     out = {}
     for p in sorted(DATA_DIR.glob("kr_*.parquet")) + sorted(DATA_DIR.glob("us_*.parquet")):
         market, ticker = p.stem.split("_", 1)
-        out[(market, ticker)] = pd.read_parquet(p)
+        try:
+            out[(market, ticker)] = pd.read_parquet(p)
+        except Exception as e:
+            # ⚠손상 캐시 하나가 전체를 죽이면 안 된다(2026-08-07: 잘린 parquet 5개 →
+            #   market_dash 24시간 정지). 건너뛰고 경고만 — 파일 삭제 후 재수집으로 복구.
+            print(f"  [load_all] {p.name} 읽기 실패(손상 캐시, 건너뜀): {e}", file=sys.stderr)
     return out
 
 
@@ -214,7 +228,7 @@ def _append_new(path: Path, new: pd.DataFrame) -> int:
     merged = pd.concat([kept, new]).sort_index()
     merged = merged[~merged.index.duplicated(keep="last")]
     changed = len(merged) - len(old)
-    merged.to_parquet(path)
+    save_parquet(merged, path)
     return max(changed, 0)
 
 
@@ -308,7 +322,7 @@ def collect_cloud() -> None:
                 sub = raw[t] if len(todo) > 1 else raw
                 df = norm_ohlcv(sub.rename(columns=str.lower).dropna(subset=["close"]))
                 if len(df) >= 200:
-                    df.to_parquet(DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
+                    save_parquet(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
             except Exception:
                 pass
     # KR
@@ -338,7 +352,7 @@ def collect_cloud() -> None:
                     old = pd.read_parquet(path)
                     df = pd.concat([old, df]).sort_index()
                     df = df[~df.index.duplicated(keep="last")]   # 겹치면 새 fetch가 이김
-                df.to_parquet(path)
+                save_parquet(df, path)
                 ok += 1
         except Exception as e:
             print(f"  [KR] {t} 실패: {e}", file=sys.stderr)
