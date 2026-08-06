@@ -96,8 +96,16 @@ jobs:
           else
             git commit -m "refresh(cloud) $(date -u '+%Y-%m-%d %H:%M') UTC"
             git checkout -- . || true   # copy-back이 남긴 미스테이지 변경이 rebase를 막는다(실측 06:30 런) — 커밋 안 한 건 버려도 됨
-            git pull --rebase --autostash origin main || (git rebase --abort || true)
-            git push origin HEAD:main || echo "push 실패(무시, 배포는 진행)"
+            # 🐞rebase 충돌 시 abort만 하면 **이 런의 데이터가 통째로 버려진다**(실측 2026-08-06:
+            #   노트북 시딩 push와 계속 충돌 → market.json이 23시간 스테일). CLOUD_OWNED 데이터는
+            #   이 런이 방금 만든 쪽이 최신이므로 **충돌은 우리 커밋(-X theirs=재적용되는 쪽) 승**으로 풀고,
+            #   그래도 실패하면 한 번 더 시도한 뒤에만 포기한다.
+            for i in 1 2 3; do
+              git pull --rebase --autostash -X theirs origin main && break
+              git rebase --abort || true
+              sleep $((i*5))
+            done
+            git push origin HEAD:main || { git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main; } || echo "push 실패(무시, 배포는 진행)"
           fi
 
       # ⚠게시 직전 **최신 main으로 동기화**한다.
