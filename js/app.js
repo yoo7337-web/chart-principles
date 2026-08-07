@@ -88,7 +88,7 @@ const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap",
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
   // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
-  rotation:  [["rotation", "산업"], ["secmet", "🏭 산업 지표"]],
+  rotation:  [["rotation", "산업수익률"], ["secmet", "🏭 산업 지표"]],   // 상단 탭은 "산업", 소탭은 내용을 구체적으로
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
