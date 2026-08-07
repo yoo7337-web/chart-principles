@@ -3828,6 +3828,11 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v354", "2026-08-07", "AI 질문 바 슬림화 · '전체 해제'가 실제로 신호를 끄도록",
+   "접힌 상태의 **'이 종목에 물어보기' 바 높이를 절반 이하로** 줄였습니다(펼치면 기존과 동일).\n\n"
+   + "원칙 목록의 **전체 해제** 버튼이 눌러도 변화가 없던 문제를 고쳤습니다 — '선택 없음=전체 표시'가 기본이라 "
+   + "해제해도 그대로였던 것. 이제 전체 해제를 누르면 **신호 마커가 전부 꺼져 캔들만** 남고, 상태 문구도 "
+   + "'신호 숨김'으로 바뀝니다. 원칙을 하나라도 클릭하면 자동으로 다시 켜집니다."],
   ["v353", "2026-08-07", "Snapshot 성장·이익률 뷰 정리",
    "성장·이익률 뷰에서 **영업이익률·순이익률을 뺐습니다**(실적 뷰에 이미 있어 중복). "
    + "이제 이 뷰는 매출성장률과 영업이익 증가율 두 성장 지표에 집중합니다 — 선 4개가 겹치던 차트도 읽기 쉬워졌습니다."],
@@ -9817,23 +9822,28 @@ function buildSigChips(st) {
   host.innerHTML = legend ? bar + `<div class="rule-legend-wrap">${legend}</div>` : "";
   const mark = () => {
     host.querySelectorAll(".rl-item").forEach((c) =>
-      c.classList.toggle("on", lookupRuleSet.has(c.dataset.rid)));
+      c.classList.toggle("on", !lookupHideSignals && lookupRuleSet.has(c.dataset.rid)));
     const n = document.getElementById("rl-count");
-    if (n) n.textContent = lookupRuleSet.size
-      ? `${lookupRuleSet.size}종 선택 — 그 신호만 표시`
-      : `선택 없음 — 전체 신호 표시`;
+    // ⚠'선택 없음=전체 표시'가 기본이라, 전체 해제가 set만 비우면 아무 변화가 없다(사용자 제보)
+    //   → 전체 해제는 lookupHideSignals로 마커를 실제로 숨기고 상태 문구도 구분한다.
+    if (n) n.textContent = lookupHideSignals
+      ? `전체 해제 — 신호 숨김(캔들만 표시)`
+      : lookupRuleSet.size
+        ? `${lookupRuleSet.size}종 선택 — 그 신호만 표시`
+        : `선택 없음 — 전체 신호 표시`;
   };
   mark();
   host.querySelectorAll(".rl-item").forEach((c) => c.addEventListener("click", () => {
     const rid = c.dataset.rid;
+    lookupHideSignals = false;   // 원칙을 고르는 행위 = 신호를 보겠다는 뜻
     if (lookupRuleSet.has(rid)) lookupRuleSet.delete(rid); else lookupRuleSet.add(rid);
     mark();
     drawLookupChart();
   }));
   const all = document.getElementById("rl-all");
-  if (all) all.onclick = () => { allRids.forEach((r) => lookupRuleSet.add(r)); mark(); drawLookupChart(); };
+  if (all) all.onclick = () => { lookupHideSignals = false; allRids.forEach((r) => lookupRuleSet.add(r)); mark(); drawLookupChart(); };
   const none = document.getElementById("rl-none");
-  if (none) none.onclick = () => { lookupRuleSet.clear(); mark(); drawLookupChart(); };
+  if (none) none.onclick = () => { lookupHideSignals = true; lookupRuleSet.clear(); mark(); drawLookupChart(); };
 }
 
 /* ---------- 종목 조회: TradingView 위젯 + 재무 카드 ---------- */

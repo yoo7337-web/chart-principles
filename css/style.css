@@ -69,6 +69,10 @@
 .micro-full > summary { cursor: pointer; font-size: .82rem; color: var(--muted); margin: 8px 0 4px; }
 .micro-full > summary:hover { color: var(--ink); }
 /* AI Q&A 접힘(details) */
+/* 접힌 상태는 슬림 스트립(v354) — 펼치면 기존 여백 복귀 */
+details.lk-why { padding: 6px 14px; margin-top: 8px; }
+details.lk-why[open] { padding: 12px 14px; }
+details.lk-why > summary .sub-note { font-size: .78rem; }
 details.lk-why > summary { cursor: pointer; list-style: none; }
 details.lk-why > summary::-webkit-details-marker { display: none; }
 details.lk-why > summary::after { content: "▾"; color: var(--muted); margin-left: 6px; }
