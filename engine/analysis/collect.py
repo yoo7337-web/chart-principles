@@ -137,6 +137,25 @@ def save_parquet(df: pd.DataFrame, path: Path) -> None:
     os.replace(tmp, path)
 
 
+def save_merge(df: pd.DataFrame, path: Path) -> None:
+    """기존 parquet과 **병합** 후 원자적 저장(겹치는 날짜는 새 수집이 이김).
+
+    ⚠전체 재수집(`--force`)이 `save_parquet`으로 통째로 덮어쓰면 **수집 시작일(START) 이전 이력이
+      영구히 사라진다**. 2026-08-08에 US를 상장일부터(J&J 1962년) 재수집해 놓고 보니, 주 1회 권장인
+      `--force`가 다음 실행에서 그걸 2016년으로 잘라낼 구조였다.
+    ⚠겹치는 구간은 새 값이 이겨야 한다 — `--force`의 목적 자체가 **미국 수정주가 드리프트 교정**이다.
+      (financials·supply·ECOS·오늘의신호에서 반복해 배운 규칙: **네트워크 결과로 덮어쓸 땐 병합이 기본값**)
+    """
+    if path.exists():
+        try:
+            old = pd.read_parquet(path)
+            df = pd.concat([old, df]).sort_index()
+            df = df[~df.index.duplicated(keep="last")]
+        except Exception as e:                      # 손상 파일이면 새 수집으로 대체(자가 치유)
+            print(f"  기존 파일 병합 실패({path.name}: {e}) — 새 수집으로 대체", file=sys.stderr)
+    save_parquet(df, path)
+
+
 def cache_fresh(path: Path, days: int = 7) -> bool:
     if not path.exists():
         return False
@@ -232,7 +251,7 @@ def collect_kr(quick: bool, force: bool) -> int:
             df = norm_ohlcv(raw)
             if len(df) < MIN_ROWS_COLLECT:  # 수집 바닥값(원칙 게이트는 load_research에서)
                 continue
-            save_parquet(df, path)
+            save_merge(df, path)   # ⚠병합 — 무료 소스 상한(3,000행) 이전 이력을 지우지 않는다
             ok += 1
         except Exception as e:
             print(f"  [KR] {t} 실패: {e}", file=sys.stderr)
@@ -253,7 +272,9 @@ def collect_us(quick: bool, force: bool) -> int:
     ok = done
     if not todo:
         return ok
-    raw = yf.download(todo, start=START, group_by="ticker", auto_adjust=True,
+    # v380: START(2016) 대신 **상장일부터 전부**(period="max") — 차트를 전기간으로 늘렸으므로
+    #   재수집도 같은 범위로 받아야 한다(J&J·P&G 1962년~, 최대 16,258행).
+    raw = yf.download(todo, period="max", group_by="ticker", auto_adjust=True,
                       threads=True, progress=False)
     for t in todo:
         try:
@@ -266,7 +287,7 @@ def collect_us(quick: bool, force: bool) -> int:
             if len(df) < MIN_ROWS_COLLECT:
                 print(f"  [US] {t} 데이터 부족({len(df)}행) 제외")
                 continue
-            save_parquet(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
+            save_merge(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")   # ⚠병합(과거 이력 보존)
             ok += 1
         except Exception as e:
             print(f"  [US] {t} 실패: {e}", file=sys.stderr)
@@ -402,7 +423,9 @@ def collect_cloud() -> None:
                 sub = raw[t] if len(todo) > 1 else raw
                 df = norm_ohlcv(sub.rename(columns=str.lower).dropna(subset=["close"]))
                 if len(df) >= 200:
-                    save_parquet(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
+                    # ⚠KR 경로는 병합인데 여기만 덮어쓰고 있었다 — 매 런이 US 캐시를 start_us(약 4.3년)로
+                    #   잘라 **소급 적립(DEEPEN)을 되돌린다**. 병합으로 통일한다(겹치면 새 fetch가 이김).
+                    save_merge(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")
             except Exception:
                 pass
     # KR
