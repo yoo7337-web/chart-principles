@@ -3828,6 +3828,11 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v355", "2026-08-07", "성장·이익률 분기에 '전년 동분기(YoY)' 비교 토글",
+   "성장·이익률 뷰의 분기 모드에 **[직전분기 대비(QoQ) | 전년 동분기 대비(YoY)] 토글**을 추가했습니다 — "
+   + "26년 2분기가 25년 2분기 대비 몇 % 성장했는지를 바로 봅니다. 계절성이 있는 업종(유통·게임·조선 등)은 "
+   + "직전분기 비교가 계절 효과에 가려지는데, 전년 동분기 비교는 그 왜곡이 없습니다. "
+   + "발산 방지 가드(전기 적자·흑전/적전은 수치 대신 표에서 구분)는 기존과 동일하게 적용됩니다."],
   ["v354", "2026-08-07", "AI 질문 바 슬림화 · '전체 해제'가 실제로 신호를 끄도록",
    "접힌 상태의 **'이 종목에 물어보기' 바 높이를 절반 이하로** 줄였습니다(펼치면 기존과 동일).\n\n"
    + "원칙 목록의 **전체 해제** 버튼이 눌러도 변화가 없던 문제를 고쳤습니다 — '선택 없음=전체 표시'가 기본이라 "
@@ -11275,6 +11280,7 @@ function bandTabs(host, st) {
 
 /* ---------- 실적·재무 추이 통합 카드 ([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) ---------- */
 let ftView = "perf", ftMode = "annual", ftFs = "cfs";
+let ftGrowCmp = "qoq";   // 성장·이익률 분기 비교 기준: qoq=직전분기 / yoy=전년 동분기(v355)
 const FT_VIEWS = [["perf", "실적"], ["growth", "성장·이익률"], ["stability", "재무안정성"],
                   ["cash", "현금흐름"], ["div", "배당"]];
 // Snapshot 표시 단위 — 저장값(KR 억원 / US 백만$) 기준 배율. 상세 재무제표와 동일 체계.
@@ -11303,6 +11309,7 @@ function ftRows(st) {
     estRows.sort((a, b) => a[0].localeCompare(b[0]));
   }
   const merged = ps.map((k) => [k, data[k], false]).concat(estRows.map(([k, d]) => [k, d, true]));
+  const byP = new Map(merged.map(([k, d]) => [k, d]));   // 전년 동분기(YoY) 비교용 키 색인
   return merged.map(([p, d, isEst], i) => {
     const prev = i > 0 ? merged[i - 1][1] : null;
     const r = { p: isEst ? p + "(E)" : p, est: isEst, ...d };
@@ -11315,6 +11322,15 @@ function ftRows(st) {
     //   |전기| 기준으로 나누되, 전기 적자→흑자·흑자→적자 전환은 수치 대신 null(라벨은 표에서 흑전/적전으로).
     r.opG = prev && Number.isFinite(prev.op) && Math.abs(prev.op) > 1 && Number.isFinite(d.op)
       && (prev.op > 0) === (d.op > 0) ? (d.op / prev.op - 1) * 100 : null;
+    // v355: 분기 **전년 동분기(YoY)** 비교 — 26Q2 vs 25Q2. 계절성이 있는 업종은 QoQ보다 이쪽이 정직하다.
+    //   라벨("25Q2")에서 연도-1 키를 찾아 비교(발산·흑전/적전 가드는 opG와 동일).
+    if (ftMode === "quarter") {
+      const m = String(p).match(/^(\d{2,4})Q(\d)$/);
+      const py = m ? byP.get(`${String(+m[1] - 1).padStart(m[1].length, "0")}Q${m[2]}`) : null;
+      r.revGY = py && py.rev && d.rev != null ? (d.rev / py.rev - 1) * 100 : null;
+      r.opGY = py && Number.isFinite(py.op) && Math.abs(py.op) > 1 && Number.isFinite(d.op)
+        && (py.op > 0) === (d.op > 0) ? (d.op / py.op - 1) * 100 : null;
+    }
     r.roe = d.equity && d.np != null ? (d.np * (ftMode === "quarter" ? 4 : 1)) / d.equity * 100 : null;  // 분기=연환산
     r.debt = d.equity && d.liab != null ? (d.liab / d.equity) * 100 : null;
     r.cur = d.cl && d.ca != null ? (d.ca / d.cl) * 100 : null;
@@ -11526,8 +11542,12 @@ function renderFinTrends(st) {
     legend = (bg.legend || "") + `  <span style="color:#f0b34c">─</span> 영업이익률  <span style="color:#ff8c9a">┄</span> 순이익률`;
   } else if (ftView === "growth") {
     // v353: 영업이익률·순이익률 제거(사용자 요청 — 실적 뷰에 이미 있음) → 성장률 2종에 집중
-    const gLab2 = ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)";
-    const r1 = lineOn(["revG", "opG"], ["#4391ff", "#22c07a"], [gLab, gLab2], ["", "5 3"]);
+    // v355: 분기 모드에 [직전분기(QoQ) | 전년 동분기(YoY)] 비교 토글 — 26Q2 vs 25Q2를 볼 수 있게
+    const useYoY = ftMode === "quarter" && ftGrowCmp === "yoy";
+    const gl = ftMode === "annual" ? gLab : useYoY ? "매출성장률(전년 동분기比)" : "매출성장률(QoQ)";
+    const gl2 = ftMode === "annual" ? "영업이익 증가율(YoY)"
+      : useYoY ? "영업이익 증가율(전년 동분기比)" : "영업이익 증가율(QoQ)";
+    const r1 = lineOn(useYoY ? ["revGY", "opGY"] : ["revG", "opG"], ["#4391ff", "#22c07a"], [gl, gl2], ["", "5 3"]);
     chartSvg = r1.svg; legend = r1.legend;
   } else if (ftView === "stability") {
     const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
@@ -11546,16 +11566,24 @@ function renderFinTrends(st) {
     legend = `<span style="color:#22c07a">■</span> 영업활동  <span style="color:#5b8def">■</span> 투자활동  <span style="color:#9aa4b2">■</span> 재무활동  <span style="color:#f0b34c">●─</span> FCF(잉여현금흐름)  <span class="sub-note">(${unit})</span>`;
   }
   // 값 라벨은 도형을 전부 그린 뒤 겹치지 않게 배치해 맨 위에 얹는다
-  $("#ft-chart").innerHTML = chartSvg
+  const ftCmpBar = ftView === "growth" && ftMode === "quarter"
+    ? `<div class="mk-toggle ft-cmp" style="margin:2px 0 6px">
+        <button data-c="qoq" class="${ftGrowCmp === "qoq" ? "active" : ""}">직전분기 대비(QoQ)</button>
+        <button data-c="yoy" class="${ftGrowCmp === "yoy" ? "active" : ""}">전년 동분기 대비(YoY)</button></div>` : "";
+  $("#ft-chart").innerHTML = ftCmpBar + (chartSvg
     ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}${placeLabels()}</svg><p class="legend">${legend}</p>`
-    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`;
+    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`);
+  host.querySelectorAll(".ft-cmp button").forEach((b) => b.onclick = () => { ftGrowCmp = b.dataset.c; renderFinTrends(st); });
 
   // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----
-  const PCT = new Set(["opm", "npm", "revG", "opG", "roe", "debt", "cur"]);
+  const PCT = new Set(["opm", "npm", "revG", "opG", "revGY", "opGY", "roe", "debt", "cur"]);
   const SPECS = {
     perf: [["rev", "매출액"], ["op", "영업이익"], ["np", "순이익"], ["opm", "영업이익률"], ["npm", "순이익률"], ["revG", gLab], ["roe", roeLab]],
-    growth: [["revG", gLab], ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
-      ["np", "순이익"], ["roe", roeLab]],
+    growth: (ftMode === "quarter" && ftGrowCmp === "yoy")
+      ? [["revGY", "매출성장률(전년 동분기比)"], ["op", "영업이익"], ["opGY", "영업이익 증가율(전년 동분기比)"],
+         ["np", "순이익"], ["roe", roeLab]]
+      : [["revG", gLab], ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
+         ["np", "순이익"], ["roe", roeLab]],
     stability: [["asset", "총자산"], ["liab", "총부채"], ["equity", "자본총계"], ["debt", "부채비율"], ["cur", "유동비율"], ["cash", "현금성자산"]],
     cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
   };
