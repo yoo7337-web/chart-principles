@@ -3828,6 +3828,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v352", "2026-08-07", "Snapshot 배당 뷰 메뉴바 고정",
+   "Snapshot에서 **배당을 클릭하면 메뉴바가 움직이던 문제**를 고쳤습니다 — 배당 뷰에서 연결/별도·연간/분기·"
+   + "단위 컨트롤이 통째로 사라져 버튼들이 자리를 옮겼던 것. 이제 같은 자리에 그대로 두고 배당에 적용되지 "
+   + "않는 컨트롤만 흐리게 표시합니다."],
   ["v351", "2026-08-07", "기업개요 + 종목 메모 상단 분할 배치",
    "차트 위 영역을 아래 본문과 같은 좌우 분할로 맞췄습니다 — **왼쪽에 기업 개요, 오른쪽에 종목 메모**. "
    + "메모가 우측 레일 아래쪽에 묻혀 있던 것을 종목을 열자마자 바로 쓰고 볼 수 있는 자리로 올렸습니다."],
@@ -11319,31 +11323,43 @@ function renderFinTrends(st) {
   if (!fin?.[ftFs] || !(ftFs === "cfs" ? hasCfs : hasOfs))
     ftFs = hasCfs ? "cfs" : hasOfs ? "ofs" : (cfsLen >= ofsLen ? "cfs" : "ofs");
   const rows = ftRows(st);
+  const _u = ftUnits(st.market);
+  if (!ftUnitSel || !_u[ftUnitSel]) ftUnitSel = st.market === "kr" ? "mil" : "musd";  // 기본 백만원
+  const [unit, uMul] = _u[ftUnitSel];
+  const bothFs = st.market === "kr" && hasCfs && hasOfs;
   // 배당 뷰는 financials가 아니라 배당 이력을 쓰므로 rows 조건과 무관하게 먼저 처리한다
   if (ftView === "div") {
     const dv = divPanel(st);
     host.style.display = "";
+    // ⚠헤더 컨트롤(연결/별도·연간/분기·단위)을 빼면 메뉴바가 뷰마다 움직인다(사용자 제보)
+    //   → 같은 자리에 그대로 그리되 배당 뷰엔 미적용이므로 비활성(.ft-dis)으로 고정한다.
     host.innerHTML = `<h3 class="lk-h3">📊 Snapshot <span class="sub-note">(배당)</span>
-        <span style="flex:1"></span>
+        <span class="ft-ctrls">
         <span class="mk-toggle ft-view">${FT_VIEWS.map(([id, lab]) =>
-          `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span></h3>
+          `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span>
+        ${bothFs ? `<span class="mk-toggle ft-fs ft-dis" title="배당 뷰에는 적용되지 않습니다">
+          <button data-f="cfs" class="${ftFs === "cfs" ? "active" : ""}">연결</button>
+          <button data-f="ofs" class="${ftFs === "ofs" ? "active" : ""}">별도</button>
+        </span>` : ""}
+        <span class="mk-toggle ft-mode ft-dis" title="배당 뷰에는 적용되지 않습니다">
+          <button data-m="annual" class="${ftMode === "annual" ? "active" : ""}">연간</button>
+          <button data-m="quarter" class="${ftMode === "quarter" ? "active" : ""}">분기</button>
+        </span>
+        <select id="ft-unit" class="ft-dis" disabled title="배당 뷰에는 적용되지 않습니다">${Object.entries(_u).map(([k, [lab]]) =>
+          `<option value="${k}"${k === ftUnitSel ? " selected" : ""}>${lab}</option>`).join("")}</select></span></h3>
       ${dv || `<p class="mini-note">배당 이력이 없는 종목입니다.</p>`}`;
     host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
     return;
   }
   if (rows.length < 2) { host.style.display = "none"; return; }
   host.style.display = "";
-  const _u = ftUnits(st.market);
-  if (!ftUnitSel || !_u[ftUnitSel]) ftUnitSel = st.market === "kr" ? "mil" : "musd";  // 기본 백만원
-  const [unit, uMul] = _u[ftUnitSel];
-  const bothFs = st.market === "kr" && hasCfs && hasOfs;
   const fsNote = st.market === "kr" ? (ftFs === "cfs" ? "연결" : "별도") + " 기준 · " : "";
   const gLab = ftMode === "annual" ? "매출성장률(YoY)" : "매출성장률(QoQ)";
   const roeLab = ftMode === "quarter" ? "ROE(연환산)" : "ROE";
 
   host.innerHTML = `<h3 class="lk-h3">📊 Snapshot
       <span class="sub-note">(${fsNote}${st.market === "kr" ? "DART" : "yfinance"} · 단위 ${unit})</span>
-      <span style="flex:1"></span>
+      <span class="ft-ctrls">
       <span class="mk-toggle ft-view">${FT_VIEWS.map(([id, lab]) =>
         `<button data-v="${id}" class="${ftView === id ? "active" : ""}">${lab}</button>`).join("")}</span>
       ${bothFs ? `<span class="mk-toggle ft-fs">
@@ -11355,7 +11371,7 @@ function renderFinTrends(st) {
         <button data-m="quarter" class="${ftMode === "quarter" ? "active" : ""}">분기</button>
       </span>
       <select id="ft-unit" title="단위">${Object.entries(_u).map(([k, [lab]]) =>
-        `<option value="${k}"${k === ftUnitSel ? " selected" : ""}>${lab}</option>`).join("")}</select></h3>
+        `<option value="${k}"${k === ftUnitSel ? " selected" : ""}>${lab}</option>`).join("")}</select></span></h3>
     <div id="ft-chart"></div><div id="ft-table"></div>`;
   host.querySelectorAll(".ft-view button").forEach((b) => b.onclick = () => { ftView = b.dataset.v; renderFinTrends(st); });
   host.querySelectorAll(".ft-mode button").forEach((b) => b.onclick = () => { ftMode = b.dataset.m; renderFinTrends(st); });
