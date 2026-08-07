@@ -3828,6 +3828,9 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v350", "2026-08-07", "기업개요 차트 상단 복귀",
+   "v349에서 하단으로 내렸던 **기업개요를 차트 위(원래 자리)로 되돌렸습니다**. 요약 접기(전체 펼치기)는 "
+   + "유지되어 차트는 여전히 첫 화면 부근에 있습니다. 앵커 바 순서도 페이지 순서(기업정보→차트→재무→뉴스·공시→원칙)로 맞췄습니다."],
   ["v349", "2026-08-07", "종목조회 대정리 — 재무 탭 통합·통합 피드·첫 화면 재구성",
    "종목조회의 흩어진 정보를 정리했습니다.\n\n"
    + "① **재무 카드 1장** — Snapshot·PER/PBR 밴드·상세 재무제표·동종비교 4카드(세로 2,600px)를 탭으로 묶어 700px대로. "
@@ -12320,8 +12323,8 @@ function buildLkAnchors() {
   const bar = document.getElementById("lk-anchors");
   if (!bar || bar.dataset.bound) return;
   bar.dataset.bound = "1";
-  const items = [["차트", "lookup-tfbar"], ["재무", "lookup-finhub"], ["뉴스·공시", "lookup-unifeed"],
-                 ["원칙", "lookup-stats-title"], ["기업정보", "lookup-overview"]];
+  const items = [["기업정보", "lookup-overview"], ["차트", "lookup-tfbar"], ["재무", "lookup-finhub"],
+                 ["뉴스·공시", "lookup-unifeed"], ["원칙", "lookup-stats-title"]];   // 페이지 순서와 일치(v350)
   bar.innerHTML = items.map(([lab, id]) => `<button class="lk-anchor" data-t="${id}">${lab}</button>`).join("");
   bar.querySelectorAll("button").forEach((b) => b.onclick = () => {
     const el = document.getElementById(b.dataset.t);
