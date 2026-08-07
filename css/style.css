@@ -2445,9 +2445,9 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 /* 관심종목 재무 카드(v273) — 값을 그래프 안에 */
 .ws-fin-tg { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .ws-fin-tg i { margin-left: 6px; }
-.ws-fin-val { font-size: 7.4px; fill: var(--muted); }
+.ws-fin-val { font-size: 10.5px; fill: var(--muted); }
 .ws-fin-val.kdn { fill: var(--kdn); }
-.ws-fin-spark { height: 68px; }
+.ws-fin-spark { height: 78px; }
 
 /* 종목조회 신호·원칙 — 우측 레일(v276). 차트 폭은 건드리지 않는다 */
 .lk-side #lookup-filter { display: block; margin: 0 0 10px; }
@@ -2530,7 +2530,7 @@ header h1 { margin-right: auto; }
 .ws-card-h .ws-fin-tg { transform: none; margin-left: 8px; }
 .ws-card-h .ws-fin-tg button { padding: 1px 8px; font-size: .68rem; }
 .ws-card-h .ws-fin-tg i { font-size: .64rem; margin-left: 4px; }
-.ws-fin-gr { font-size: 6.8px; }
+.ws-fin-gr { font-size: 9.5px; }
 .ws-fin-gr.pos { fill: var(--kup); } .ws-fin-gr.neg { fill: var(--kdn); }
 /* ⚠축 SVG에 flex:1이 없으면 스파크라인과 **폭이 달라져 눈금이 데이터와 어긋난다**(실측) */
 .ws-fin-axis { flex: 1; height: 14px; display: block; overflow: visible; }

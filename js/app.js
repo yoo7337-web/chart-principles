@@ -4027,6 +4027,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v371", "2026-08-07", "재무 Snapshot 숫자 눌림 해결",
+   "관심종목 재무 Snapshot의 숫자가 납작하게 눌려 보이던 문제를 고쳤습니다 — 그래프 좌표계가 실제 폭보다 "
+   + "좁아 글자가 **가로로만 1.5배 늘어나** 있었습니다. 좌표계를 실제 폭에 맞추니 글자 비율이 정상으로 돌아왔고, "
+   + "값과 증감률이 각자 줄을 갖도록 위아래 여백도 넓혔습니다(겹침 0건)."],
   ["v370", "2026-08-07", "🔄 순환성 분석 — 종목별 사이클 강도와 '과거 같은 시기' 경로",
    "종목이 **경기 사이클에 얼마나 민감한가**를 10년 데이터로 점수화해 프로파일에 넣었습니다(0~100). "
    + "연간 수익률 변동·매출/영업이익 증감 변동·적자 연도·시장 베타를 전 종목 백분위로 환산해 평균한 값입니다. "
@@ -8059,17 +8063,21 @@ function wsFinDraw(key, mk, co, m) {
       if (hi === lo) { hi += 1; lo -= 1; }
       // v369: 행이 너무 낮아 값·증감률이 답답했다 → viewBox와 CSS 높이를 같은 비율(1.36배)로 키운다
       //   ⚠preserveAspectRatio="none"이라 한쪽만 키우면 글자가 늘어난다(비율을 맞춰야 한다).
-      const W = 300, H = 68, fs2 = 7;      // fs2 = 증감률 라벨 높이 기준
-      const X = (i) => 10 + (i / (rows.length - 1)) * (W - 20);
-      const Y = (v) => 14 + (hi - v) / (hi - lo) * (H - 22);
+      /* v371: 값이 세로로 눌려 보인 진짜 원인은 **좌표계 가로 왜곡**이었다 —
+         viewBox W=300을 실제 450px대로 늘리며(preserveAspectRatio="none") 글자가 가로로만 1.5배
+         퍼져 납작해 보였다. → viewBox 폭을 실제 렌더 폭에 맞추고(460) 위아래 여백을 넓혀
+         값 라벨과 증감률 라벨이 각자 줄을 갖도록 한다. */
+      const W = 460, H = 78, fs2 = 9;      // fs2 = 증감률 라벨 높이 기준
+      const X = (i) => 14 + (i / (rows.length - 1)) * (W - 28);
+      const Y = (v) => 22 + (hi - v) / (hi - lo) * (H - 40);
       const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
       const area = `${X(pts[0].i).toFixed(1)},${H - 3} ${line} ${X(pts[pts.length - 1].i).toFixed(1)},${H - 3}`;
       const zero = (lo < 0 && hi > 0)
         ? `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8b8b93" stroke-dasharray="3 3" stroke-width="0.8"/>` : "";
       // 점마다 값(위) + **두 점 사이에 증감률**(아래) — 표를 없앤 대신 그래프에서 바로 읽히게
       const labs = pts.map((x, j) => {
-        const up = Y(x.v) > 24;                     // 위가 좁으면 아래로
-        const ty = up ? Y(x.v) - 5 : Y(x.v) + 11;
+        const up = Y(x.v) > H * 0.42;                // 위가 좁으면 아래로
+        const ty = up ? Y(x.v) - 8 : Y(x.v) + 15;   // 선과 라벨 사이 간격 확보(눌림 방지)
         const anchor = j === 0 ? "start" : j === pts.length - 1 ? "end" : "middle";
         let g = "";
         if (j > 0) {
@@ -8085,7 +8093,7 @@ function wsFinDraw(key, mk, co, m) {
             cls = r2 >= 0 ? "pos" : "neg";
           }
           // ⚠그래프 높이를 벗어나면 잘린다('적전'이 반만 보였다) → 위아래로 클램프
-          const gy = Math.min(H - 3, Math.max(fs2 + 2, my2 + 13));
+          const gy = Math.min(H - 4, Math.max(fs2 + 3, my2 + 17));
           if (txt) g = `<text x="${mx2.toFixed(1)}" y="${gy.toFixed(1)}" text-anchor="middle"
             class="ws-fin-gr ${cls}">${txt}</text>`;
         }
