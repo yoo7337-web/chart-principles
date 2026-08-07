@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=377">
-<script src="firebase-config.js?v=377"></script>
-<script src="js/auth.js?v=377"></script>
+<link rel="stylesheet" href="css/style.css?v=378">
+<script src="firebase-config.js?v=378"></script>
+<script src="js/auth.js?v=378"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=377"></script>
+<script src="js/sync.js?v=378"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -610,18 +610,40 @@
           <div class="scr-chain-flow" id="scr-chain-flow"></div>
           <div id="scr-sub-host"></div>
         </div>
+        <!-- v378: 우측 사이드에서 상단 ①범위 단계로 이동 — 시총도 "어디서 찾을까"의 조건이다 -->
+        <div class="card-flat scr-filters">
+              <div class="scr-frow">
+            <span class="scr-label">시가총액</span>
+            <span class="scr-mcap">
+              <input type="number" id="scr-mcap-min" class="scr-num" placeholder="최소" min="0" step="0.1">
+              <span class="scr-tilde">~</span>
+              <input type="number" id="scr-mcap-max" class="scr-num" placeholder="최대" min="0" step="0.1">
+              <span class="sub-note" id="scr-mcap-unit">조원</span>
+            </span>
+          </div>
+          <span class="scr-tiers" id="scr-tiers"></span>
+    </div>
       </div>
       <div class="scr-panel" id="scr-panel-style" style="display:none">
         <div class="scr-themes-head">⭐ 투자 스타일 <span class="sub-note">재무 조건 묶음 — 하나 선택 · </span><span class="sub-note" id="scr-theme-desc"></span></div>
         <div class="scr-themes" id="scr-themes"></div>
+        <!-- v378: 세부 지표도 "어떤 회사를" 고르는 조건이라 ②단계로 이동(우측 사이드 폐지) -->
+        <div class="card-flat scr-detail">
+          <div class="scr-detail-head"><b>세부 지표 필터</b>
+        <span class="sub-note" id="scr-detail-note">재무 데이터 로딩 중…</span>
+        <span style="flex:1"></span>
+        <button class="today-chart-btn" id="scr-reset">지표 초기화</button></div>
+          <div id="scr-metrics"></div>
+      <details class="scr-unavail"><summary class="sub-note">ℹ️ 구현하지 못한 항목과 사유</summary>
+        <ul id="scr-unavail-list"></ul></details>
+    </div>
       </div>
       <div class="scr-panel" id="scr-panel-signal" style="display:none">
         <div class="scr-themes-wrap" id="scr-tech"></div>
       </div>
     </div>
 
-    <div class="scr-layout">
-    <div class="scr-main">
+    <div class="scr-results">
     <div class="scr-bar">
       <div class="scr-summary" id="scr-summary"></div>
       <label class="scr-sortlbl">정렬
@@ -635,30 +657,6 @@
       </label>
     </div>
     <div class="tablewrap card-flat"><table id="scr-table"></table></div>
-    </div>
-    <aside class="scr-side">
-    <div class="card-flat scr-filters">
-      <div class="scr-frow">
-        <span class="scr-label">시가총액</span>
-        <span class="scr-mcap">
-          <input type="number" id="scr-mcap-min" class="scr-num" placeholder="최소" min="0" step="0.1">
-          <span class="scr-tilde">~</span>
-          <input type="number" id="scr-mcap-max" class="scr-num" placeholder="최대" min="0" step="0.1">
-          <span class="sub-note" id="scr-mcap-unit">조원</span>
-        </span>
-      </div>
-      <span class="scr-tiers" id="scr-tiers"></span>
-    </div>
-    <div class="card-flat scr-detail">
-      <div class="scr-detail-head"><b>세부 지표 필터</b>
-        <span class="sub-note" id="scr-detail-note">재무 데이터 로딩 중…</span>
-        <span style="flex:1"></span>
-        <button class="today-chart-btn" id="scr-reset">지표 초기화</button></div>
-      <div id="scr-metrics"></div>
-      <details class="scr-unavail"><summary class="sub-note">ℹ️ 구현하지 못한 항목과 사유</summary>
-        <ul id="scr-unavail-list"></ul></details>
-    </div>
-    </aside>
     </div>
   </section>
 
@@ -1256,7 +1254,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=377"></script>
+<script src="js/app.js?v=378"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">
