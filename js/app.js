@@ -3828,6 +3828,11 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v359", "2026-08-07", "동종업계 상대주가 5년 · 글씨 크기 정리",
+   "관심종목의 **동종업계 상대주가를 6개월 → 5년**으로 늘렸습니다. 짧은 구간에서는 보이지 않던 "
+   + "장기 격차(같은 업종 안에서 누가 계속 이겨왔나)가 드러납니다.\n\n"
+   + "그래프 안 글씨가 주변보다 크게 보이던 것도 맞췄습니다 — 좌표계가 실제 카드 폭보다 좁아 글자가 "
+   + "1.5배로 확대돼 있었고, 종목명·수익률이 오른쪽에서 잘리던 것도 함께 해결했습니다."],
   ["v357", "2026-08-07", "관심종목 첫 카드에 기업 개요 · 산업",
    "관심종목 상세의 **첫 번째 카드로 '🏢 기업 개요 · 산업'**을 추가했습니다 — 무슨 회사인지 한눈에 읽히는 "
    + "개요와 사업 구조 요약, 그리고 **산업군·밸류체인 단계 배지**(클릭하면 주식찾기에서 같은 산업 종목으로 이동)를 "
@@ -7908,7 +7913,7 @@ async function wsRelChart(key, mk) {
   // ⚠await 사이에 카드가 다시 그려지면 먼저 잡아둔 el은 DOM에서 떨어진다 → 여기서 다시 조회
   const el = document.getElementById("ws-ind-rel");
   if (!el || wsSel !== key) return;
-  const N = 126;                                   // 약 6개월(거래일)
+  const N = 1260;                                  // 약 5년(거래일) — v359, 사용자 요청
   const defs = [];
   keys.forEach((k, i) => {
     const s = ss[i];
@@ -7923,7 +7928,10 @@ async function wsRelChart(key, mk) {
                 v: cut.map((r) => cl(r) / base * 100) });
   });
   if (defs.length < 2) { el.innerHTML = ""; return; }
-  const W = 300, H = 132, P = { l: 4, r: 60, t: 12, b: 14 };
+  /* ⚠SVG 폰트는 viewBox 폭에 좌우된다 — width:100%로 늘리면 좁은 좌표계의 글자가 그 비율만큼 확대돼
+     보인다(카드 실폭 ~470px인데 W=300이면 1.57배). 카드 폭에 가깝게 W를 키워 글자 크기를 주변 폰트와
+     맞춘다(CLAUDE.md v277 교훈). 라벨 자리(P.r)도 넉넉히 — 이름+수익률이 잘려 있었다. */
+  const W = 470, H = 150, P = { l: 4, r: 108, t: 12, b: 14 };
   const n = Math.max(...defs.map((d) => d.v.length));
   const all = defs.flatMap((d) => d.v);
   const lo = Math.min(...all), hi = Math.max(...all);
@@ -7937,10 +7945,11 @@ async function wsRelChart(key, mk) {
     return `<polyline points="${pts}" fill="none" stroke="${C[i % 4]}" stroke-width="${i === 0 ? 2 : 1.3}"/>`;
   }).join("");
   ends.sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 11);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 12);
   const labs = ends.map((e) => `<text x="${W - P.r + 4}" y="${e.y + 3}" fill="${e.c}"
-    style="font-size:8.5px">${dsEsc(e.name).slice(0, 7)} ${Math.round(e.v - 100) >= 0 ? "+" : ""}${Math.round(e.v - 100)}%</text>`).join("");
-  el.innerHTML = `<div class="ws-kv-h">동종업계 상대주가 <span class="sub-note">(6개월 · 시작=100)</span></div>
+    style="font-size:11px">${dsEsc(e.name).slice(0, 8)} ${Math.round(e.v - 100) >= 0 ? "+" : ""}${Math.round(e.v - 100)}%</text>`).join("");
+  const yrs = (Math.max(...defs.map((d) => d.v.length)) / 252).toFixed(1);
+  el.innerHTML = `<div class="ws-kv-h">동종업계 상대주가 <span class="sub-note">(최근 ${yrs}년 · 시작=100)</span></div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
       <line x1="${P.l}" y1="${Y(100)}" x2="${W - P.r}" y2="${Y(100)}" stroke="#8b8b93" stroke-dasharray="3 3"/>
       ${paths}${labs}</svg>`;
