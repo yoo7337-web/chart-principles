@@ -69,7 +69,8 @@ jobs:
           python analysis/market_pro.py
           python analysis/deal_news.py || echo "deal_news 실패(무시)"
           python analysis/calendar_events.py || echo "calendar 실패(무시)"
-          python analysis/stock_extras.py || echo "stock_extras 실패(무시)"
+          # stock_extras(feed·company)는 하루 1회 ~52분짜리라 30분 사이클을 밀어 후속 런을
+          # 연쇄 취소시켰다(2026-08-07 실측) → extras.yml(매일 06:00 KST)로 분리
           python analysis/investor.py || echo "investor 실패(무시)"
           python analysis/sector_news.py || echo "sector_news 실패(무시)"
           python analysis/disclosure_scan.py || echo "disclosure_scan 실패(무시)"
