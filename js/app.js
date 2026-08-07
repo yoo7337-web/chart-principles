@@ -4026,6 +4026,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v375", "2026-08-08", "산업 맥락 카드 빈 공간 활용",
+   "관심종목 **산업 맥락 카드의 오른쪽이 비어 있던 문제**를 고쳤습니다 — 고정 2열이라 카드가 좁아지면 통째로 "
+   + "1열이 되어, 내용이 왼쪽에만 세로로 길게 쌓였습니다. 실물 지표·산업 합산 실적·동종업계 상대주가를 "
+   + "**세 블록으로 나눠 폭에 맞게 3열→2열로 자연히 접히게** 했습니다. 같은 내용의 세로 길이가 절반으로 줄어듭니다."],
   ["v373", "2026-08-08", "매매일지 탭 삭제 · '산업' 탭 이름 정리",
    "내 투자에서 **매매일지 탭을 없앴습니다** — 이제 포트폴리오·투자 다이어리·종목 메모 세 탭입니다. "
    + "토스 체결내역 가져올 때 매매일지에 기록하던 절차와 '매매일지 진행중 불러오기' 버튼도 함께 정리했습니다.\n\n"
@@ -8606,7 +8610,7 @@ function wsShow(key) {
       fill("ws-ind", `${gmeta?.icon || ""} <b>${g.name}</b> — 1개월 <b class="${(g.m1 ?? 0) >= 0 ? "pos" : "neg"}">${pct(g.m1 ?? 0, 1)}</b>
         <span class="sub-note">(${groups.length}개 산업 중 ${rank}위 · 시장 대비 ${pct(g.rs_m1 ?? 0, 1)})</span>
         <div class="sub-note">1주 ${pct(g.w1 ?? 0, 1)} · 3개월 ${pct(g.m3 ?? 0, 1)} · 소속 ${g.n}종목</div>
-        <div class="ws-ind-cols"><div id="ws-ind-met"></div><div id="ws-ind-rel"></div></div>
+        <div class="ws-ind-cols"><div id="ws-ind-met"></div><div id="ws-ind-fund"></div><div id="ws-ind-rel"></div></div>
         ${plist.length ? `<div class="ws-kv-h">동종 상위</div>` + plist.map((x) =>
           `<div class="ws-kv-row"><span>${x.name}</span><b class="${(x.chg || 0) >= 0 ? "kup" : "kdn"}">${x.chg != null ? (x.chg >= 0 ? "+" : "") + x.chg.toFixed(1) + "%" : "-"}</b>
              <i class="sub-note">${x.price != null ? Math.round(x.price).toLocaleString() + "원" : ""}</i></div>`).join("") : ""}`);
@@ -8641,19 +8645,23 @@ function wsShow(key) {
           const eok = (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
           const kv = (lab, val, chg, unit = "") => `<div class="ws-kv-row"><span>${lab}</span>
             <b>${val}</b>${chg == null ? "<i></i>" : `<i class="${chg >= 0 ? "pos" : "neg"}">${chg >= 0 ? "+" : ""}${chg.toFixed(1)}${unit}</i>`}</div>`;
-          fundRows = `<div class="ws-kv-h" style="margin-top:8px">산업 합산 실적
+          fundRows = `<div class="ws-kv-h">산업 합산 실적
               <span class="sub-note">${a.y} · 소속 ${a.n}개사(DART)</span></div>`
             + kv("합산 매출", eok(a.rev), g(a.rev, b.rev), "%")
             + kv("합산 CAPEX", eok(a.capex), g(a.capex, b.capex), "%")
             + (a.opm != null ? kv("영업이익률", a.opm.toFixed(1) + "%",
                 b.opm != null ? a.opm - b.opm : null, "%p") : "");
         }
-        if (rows2 || fundRows) el.innerHTML =
-          (rows2 ? `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업수익률 탭과 동일 소스)</span></div>` + rows2 : "")
-          + fundRows
-          + `<button class="today-chart-btn" id="ws-ind-more" style="margin-top:7px">📊 산업 지표 자세히 →</button>`;
-        const more = document.getElementById("ws-ind-more");
-        if (more && tile?.grp) more.onclick = () => gotoSecmet(tile.grp);
+        // v375: 실물 지표와 합산 실적을 **별 블록**으로 — 한 칼럼에 몰아 세로로만 길어지던 것을 나눈다
+        if (rows2) el.innerHTML =
+          `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업수익률 탭과 동일 소스)</span></div>` + rows2;
+        const fel = document.getElementById("ws-ind-fund");
+        if (fel && fundRows) {
+          fel.innerHTML = fundRows
+            + `<button class="today-chart-btn" id="ws-ind-more" style="margin-top:8px">📊 산업 지표 자세히 →</button>`;
+          const more = document.getElementById("ws-ind-more");
+          if (more && tile?.grp) more.onclick = () => gotoSecmet(tile.grp);
+        }
       });
       wsRelChart(key, mk);                 // 동종업계 상대주가 추이
     }

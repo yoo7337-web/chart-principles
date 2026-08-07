@@ -2440,7 +2440,9 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 
 /* 관심종목 카드 보강(v272) */
 .ws-grid > .ws-ind { grid-column: 1 / -1; }          /* 산업 맥락은 좌우 전폭 */
-.ws-ind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; align-items: start; }
+/* ⚠고정 2열은 카드가 좁아지면 통째로 1열이 되어 **오른쪽이 텅 빈 채 세로로만 길어졌다**(v375, 사용자 지적).
+   → 3블록(지표·합산 실적·상대주가)을 auto-fit으로 흘려 넓이에 맞게 3열→2열→1열로 자연히 접히게 한다. */
+.ws-ind-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px 18px; align-items: start; }
 .ws-rets { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; }
 .ws-ret { display: inline-flex; align-items: baseline; gap: 4px; font-size: .82rem; }
 .ws-cons-bar { position: relative; height: 6px; background: var(--line); border-radius: 3px;
@@ -2449,7 +2451,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   background: var(--accent); border-radius: 2px; }
 .ws-cons-bar .lo { position: absolute; left: 0; top: 9px; font-size: .7rem; }
 .ws-cons-bar .hi { position: absolute; right: 0; top: 9px; font-size: .7rem; }
-@media (max-width: 1000px) { .ws-ind-cols { grid-template-columns: 1fr; } }
+
 
 /* 관심종목 재무 카드(v273) — 값을 그래프 안에 */
 .ws-fin-tg { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; }
