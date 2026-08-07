@@ -24,6 +24,48 @@
 .dsc-dot.ok { background: var(--buy); }
 .dsc-dot.warn { background: #ffb020; }
 .dsc-dot.bad { background: var(--sell); }
+
+/* ===== 종목조회 재정리 (v349) ===== */
+/* 헤더 압축: 배지·버튼·링크 3줄 → 한 줄 wrap */
+.lk-subhead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin: 2px 0 8px; }
+.lk-subhead .lk-industry, .lk-subhead .lk-report, .lk-subhead .ext-links { margin: 0; }
+/* 핵심지표 스트립 */
+.lk-kpis { display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; margin: 6px 0 8px; }
+.lk-kpi { display: inline-flex; align-items: baseline; gap: 7px; font-size: .86rem; }
+.lk-kpi b { font-size: .95rem; }
+/* 앵커 바 */
+.lk-anchors { display: flex; gap: 4px; align-items: center; }
+.lk-sticky.empty .lk-anchors { display: none; }
+.lk-anchor { background: none; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: .78rem; padding: 3px 10px; cursor: pointer; }
+.lk-anchor:hover { color: var(--ink); border-color: var(--accent); }
+#lookup-tfbar, #lookup-finhub, #lookup-unifeed, #lookup-stats-title, #lookup-overview { scroll-margin-top: 52px; }
+/* 재무 허브: 비활성 패널은 오프스크린 absolute(폭 유지 — SVG 0폭 함정 회피) */
+.finhub-tabs { margin-left: 10px; }
+.finhub-body { position: relative; }
+.finhub-panel { position: absolute; left: -9999px; top: 0; width: 100%; }
+.finhub-panel.on { position: static; }
+/* 통합 피드 */
+.uf-chips { margin-left: 10px; }
+.uf-sec { margin-top: 10px; }
+.uf-sec-h { font-weight: 700; font-size: .88rem; margin-bottom: 4px; }
+/* 기업개요 접기 */
+.lk-overview { position: relative; }
+.lk-overview.collapsed { max-height: 240px; overflow: hidden; padding-bottom: 40px; }
+.lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
+.lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 호가 요약 접기 */
+.micro-full > summary { cursor: pointer; font-size: .82rem; color: var(--muted); margin: 8px 0 4px; }
+.micro-full > summary:hover { color: var(--ink); }
+/* AI Q&A 접힘(details) */
+details.lk-why > summary { cursor: pointer; list-style: none; }
+details.lk-why > summary::-webkit-details-marker { display: none; }
+details.lk-why > summary::after { content: "▾"; color: var(--muted); margin-left: 6px; }
+details.lk-why[open] > summary::after { content: "▴"; }
+details.lk-why .lk-why-ask { margin-top: 10px; }
 html { color-scheme: dark; }
 body {
   font-family: "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;

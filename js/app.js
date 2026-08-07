@@ -1274,7 +1274,10 @@ function loadLookup(key) {
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
+    finhubUser = false; finhubSel = "snap";   // 종목이 바뀌면 기본 탭(Snapshot) 우선으로 복귀
     initFinhub();               // 💰 재무 허브 탭(v349) — 패널 display 변화를 관찰해 탭 동기화
+    // ⚠렌더러가 이전 종목과 같은 display 값을 다시 쓰면 옵저버가 발화하지 않는다 → 명시 동기화
+    finhubSync();
     buildLkAnchors();           // 상단 sticky 앵커 바(v349)
     loadExtras().then(() => {
       if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
@@ -3825,6 +3828,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v349", "2026-08-07", "종목조회 대정리 — 재무 탭 통합·통합 피드·첫 화면 재구성",
+   "종목조회의 흩어진 정보를 정리했습니다.\n\n"
+   + "① **재무 카드 1장** — Snapshot·PER/PBR 밴드·상세 재무제표·동종비교 4카드(세로 2,600px)를 탭으로 묶어 700px대로. "
+   + "② **통합 피드** — 증권사 리포트와 공시/뉴스를 필터 칩(전체/뉴스/공시/리포트) 하나의 카드로. "
+   + "③ **첫 화면에 차트** — 기업개요는 요약 접기로 하단 이동, 헤더는 2줄로 압축하고 그 아래 핵심지표 한 줄(시총·PER·PBR·52주 위치·컨센 괴리·배당). "
+   + "AI 질문 패널은 접힘 상태로 시작합니다. "
+   + "④ **레일 정리** — 호가·체결은 5호가 요약+펼치기(1,210→480px), 메모를 위로, 원칙 이야기를 성적 카드에 흡수. "
+   + "상단 고정 바에 **앵커 버튼**(차트|재무|뉴스·공시|원칙|기업정보)을 달아 긴 페이지를 점프할 수 있습니다."],
   ["v348", "2026-08-07", "갱신 기준표에 실시간 상태 표시",
    "데이터 갱신 기준표에 **'현재 상태' 열**을 추가했습니다 — 표를 열 때마다 각 데이터 파일의 실제 생성 시각을 "
    + "읽어 와 🟢정상(주기 이내) / 🟠지연 / 🔴이상으로 표시합니다. 어떤 데이터가 밀리고 있는지 이 표 한 장에서 "
@@ -4913,7 +4924,7 @@ function renderLookupMicro(st) {
   if (!mi || (!mi.asks?.length && !mi.trades?.length)) { host.style.display = "none"; host.innerHTML = ""; return; }
   host.style.display = "";
   const fmtP = (v) => fmtPrice(v, st.market);
-  let obHtml = "";
+  let obHtml = "", ob5Html = "";
   if (mi.asks?.length && mi.bids?.length) {
     const maxV = Math.max(...mi.asks.map((x) => x[1]), ...mi.bids.map((x) => x[1])) || 1;
     const row = (p, v, side) => `<div class="ob-row ${side}">
@@ -4921,6 +4932,9 @@ function renderLookupMicro(st) {
       <span class="ob-p">${fmtP(p)}</span><span class="ob-v">${v.toLocaleString()}</span></div>`;
     obHtml = `<div class="ob-col"><div class="ob-h">매도 호가</div>${[...mi.asks].reverse().map((x) => row(x[0], x[1], "ask")).join("")}</div>
       <div class="ob-col"><div class="ob-h">매수 호가</div>${mi.bids.map((x) => row(x[0], x[1], "bid")).join("")}</div>`;
+    // v349: 레일에서 1,210px를 차지하던 카드 → 기본은 5호가 요약, 전체 10호가·체결은 접힘
+    ob5Html = `<div class="ob-col"><div class="ob-h">매도 호가</div>${mi.asks.slice(0, 5).reverse().map((x) => row(x[0], x[1], "ask")).join("")}</div>
+      <div class="ob-col"><div class="ob-h">매수 호가</div>${mi.bids.slice(0, 5).map((x) => row(x[0], x[1], "bid")).join("")}</div>`;
   }
   let trHtml = "";
   if (mi.trades?.length) {
@@ -4957,7 +4971,9 @@ function renderLookupMicro(st) {
   }
   host.innerHTML = `<h2>호가·체결 스냅샷 <span class="sub-note">(토스증권 · ${TOSSM.generated} 수집${mi.at ? ` · 호가 ${mi.at} 기준` : ""} — 실시간 아님, 거래대금 상위 종목만)</span></h2>
     ${ratioHtml}
-    <div class="micro-wrap card-flat">${obHtml}${trHtml}</div>`;
+    ${ob5Html ? `<div class="micro-wrap card-flat">${ob5Html}</div>` : ""}
+    <details class="micro-full"><summary>전체 10호가 · 최근 체결 보기</summary>
+      <div class="micro-wrap card-flat">${obHtml}${trHtml}</div></details>`;
 }
 
 /* ---------- 📖 기업 이해 보고서 (감사관점×투자관점, 분기 갱신) ---------- */
@@ -12192,7 +12208,7 @@ function fmtMcap(v, mk) {
    탭은 display를 건드리지 않고 .on 클래스(오프스크린 absolute ↔ static)로만 전환한다 —
    숨긴 채(display:none) 렌더하면 SVG 폭이 0이 되는 함정(CLAUDE.md) 때문. */
 const FINHUB_TABS = [["snap", "📈 Snapshot"], ["band", "📐 밴드·배수"], ["fs", "📋 상세 재무제표"], ["peers", "🏭 동종비교"]];
-let finhubSel = "snap";
+let finhubSel = "snap", finhubUser = false;   // finhubUser: 사용자가 직접 탭을 골랐는가
 function finhubSync() {
   const hub = document.getElementById("lookup-finhub");
   if (!hub) return;
@@ -12202,11 +12218,14 @@ function finhubSync() {
   const any = Object.values(avail).some(Boolean);
   hub.style.display = any ? "" : "none";
   if (!any) return;
-  if (!avail[finhubSel]) finhubSel = FINHUB_TABS.find(([k]) => avail[k])[0];
+  // ⚠렌더러들이 도착하는 순서가 제각각이라(financials fetch가 늦음) 먼저 뜬 패널로 탭이 넘어가 버린다
+  //   → 사용자가 직접 고르기 전엔 Snapshot이 뜨는 즉시 기본 탭으로 되돌린다.
+  if (!finhubUser && avail.snap) finhubSel = "snap";
+  else if (!avail[finhubSel]) finhubSel = FINHUB_TABS.find(([k]) => avail[k])[0];
   const bar = document.getElementById("finhub-tabs");
   bar.innerHTML = FINHUB_TABS.filter(([k]) => avail[k]).map(([k, lab]) =>
     `<button data-ft="${k}" class="${k === finhubSel ? "active" : ""}">${lab}</button>`).join("");
-  bar.querySelectorAll("button").forEach((b) => b.onclick = () => { finhubSel = b.dataset.ft; finhubSync(); });
+  bar.querySelectorAll("button").forEach((b) => b.onclick = () => { finhubSel = b.dataset.ft; finhubUser = true; finhubSync(); });
   panels.forEach((p) => p.classList.toggle("on", p.dataset.ft === finhubSel && avail[p.dataset.ft]));
 }
 function initFinhub() {
