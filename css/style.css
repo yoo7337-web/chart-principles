@@ -761,7 +761,8 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-toprow .scr-frow-top { display: block; }
 /* ── 발굴 3단계(v209): 카드=탭 + 조건 칩바. 구 그리드 배치는 패널 내부로 흡수 ── */
 .scr-toprow { display: block; }
-.scr-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+/* v379: 3단계 → 4단계(③재무 필터 분리) */
+.scr-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
 .scr-step { text-align: left; background: var(--card2); border: 1px solid var(--line);
   border-radius: 10px; padding: 9px 12px; cursor: pointer; display: flex; flex-direction: column;
   gap: 2px; min-width: 0; color: inherit; font: inherit; }
@@ -784,6 +785,7 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .scr-chip.c1 { background: rgba(67,145,255,.16); color: #8ab8ff; }
 .scr-chip.c2 { background: rgba(34,192,122,.16); color: #57d99f; }
 .scr-chip.c3 { background: rgba(240,179,76,.18); color: #f0b34c; }
+.scr-chip.c4 { background: rgba(167,139,250,.18); color: #b79bff; }   /* ③재무 필터(v379) */
 .scr-chip-count { margin-left: auto; color: var(--muted); }
 .scr-chip-count b { color: #e7e7ec; font-size: .9rem; }
 .scr-chip-reset { border: 1px solid var(--line); background: none; color: var(--muted);

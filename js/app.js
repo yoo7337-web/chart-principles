@@ -4026,6 +4026,16 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v379", "2026-08-08", "주식찾기 4단계 대분류 + 재무 필터 9종으로 단순화",
+   "v378에서 필터를 상단으로 올렸지만 **대분류가 없어 조건들이 한 패널에 뒤섞여** 있었습니다(사용자 지적). "
+   + "**①🏭 산업·밸류체인(+시총) → ②⭐ 투자 스타일 → ③📊 재무 필터 → ④📈 차트 신호** 네 대분류로 나누고, "
+   + "각 대분류 아래에 하위 조건이 들어갑니다. 조건을 고르면 대분류별 색 칩(①파랑 ②초록 ③보라 ④주황)으로 집계되고 "
+   + "칩 ×로 그 단계만 해제할 수 있습니다.\n\n"
+   + "**재무 필터는 22종 → 핵심 9종**으로 줄였습니다 — PER·PBR·배당수익률 / 매출 성장률·영업이익 성장률 / "
+   + "영업이익률·ROE·부채비율 / 외국인 순매수·시총. 구간도 3~4개로 좁혀 고민 없이 고를 수 있습니다. "
+   + "지운 지표들(PSR·CAGR·연속증가·배당성향 등)의 조합은 ②투자 스타일 테마 12종이 이미 담고 있습니다.\n\n"
+   + "표 계산은 그대로라 결과 열·테마 판정은 영향이 없습니다. 검증: 4단계 전환·재클릭 접힘, "
+   + "3조건 AND(반도체+재무우량주+ROE 20%↑ = 12종목), 칩 해제·전체 초기화 정상."],
   ["v378", "2026-08-08", "주식찾기 레이아웃 — 필터를 상단으로, 표를 전폭으로",
    "주식찾기에서 **오른쪽 필터 사이드바를 없애고 상단 단계 카드로 묶었습니다**(사용자 요청). "
    + "시가총액은 ①어디서 찾을까, 세부 지표 필터는 ②어떤 회사를 단계로 들어갔습니다 — 조건의 성격에 맞는 자리입니다.\n\n"
@@ -4775,53 +4785,28 @@ function scrBuildVals() {
 
 /* --- 세부 지표 레지스트리 (버킷=구간 필터, 다중선택=OR) --- */
 function _b(l, lo, hi) { return { l, lo, hi }; }
+/* v379: 22종 → **핵심 9종**으로 단순화(사용자 확정). 구간도 3~4개로 줄였다.
+   지운 지표들(PSR·CAGR·연속증가·배당성향·유동비율 등)의 조합은 ②투자 스타일 테마가 이미 담고 있고,
+   값 계산(scrComputeVals)은 그대로라 테마·표 컬럼은 영향이 없다 — 이 목록은 **필터 UI만** 정한다. */
 const SCR_METRICS = [
-  // 수급(외국인) — ⚠매수 신호로 검증되지 않았다(SUP_EVIDENCE 참고). 정보·참고용 필터다.
-  { id: "fdr20", cat: "수급", label: "외국인 지분율 20일 변화", unit: "%p",
-    note: "외국인 보유율(%)의 20거래일 변화. ⚠증자·주식수 변동·등록 정정으로도 움직인다(의심 종목엔 ⚠ 표시)",
-    buckets: [_b("감소", null, 0), _b("0~0.3", 0, 0.3), _b("0.3~1", 0.3, 1), _b("1~2", 1, 2), _b("2↑", 2, null)] },
+  // 가치
+  { id: "per", cat: "가치", label: "PER", unit: "배", buckets: [_b("적자", null, 0), _b("10 미만", 0, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "pbr", cat: "가치", label: "PBR", unit: "배", buckets: [_b("1 미만", 0, 1), _b("1~2", 1, 2), _b("2↑", 2, null)] },
+  { id: "dyield", cat: "가치", label: "배당수익률", unit: "%", buckets: [_b("~2", 0, 2), _b("2~4", 2, 4), _b("4↑", 4, null)] },
+  // 성장
+  { id: "rev_yoy", cat: "성장", label: "매출 성장률(YoY)", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~30", 10, 30), _b("30↑", 30, null)] },
+  { id: "op_yoy", cat: "성장", label: "영업이익 성장률(YoY)", unit: "%", buckets: [_b("감소", null, 0), _b("0~20", 0, 20), _b("20~50", 20, 50), _b("50↑", 50, null)] },
+  // 수익성·건전성
+  { id: "opm", cat: "수익성·건전성", label: "영업이익률", unit: "%", buckets: [_b("적자", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "roe", cat: "수익성·건전성", label: "ROE", unit: "%", buckets: [_b("적자", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
+  { id: "debt", cat: "수익성·건전성", label: "부채비율", unit: "%", buckets: [_b("50 미만", 0, 50), _b("50~150", 50, 150), _b("150↑", 150, null)] },
+  // 수급 — ⚠매수 신호로 검증되지 않았다(SUP_EVIDENCE 참고). 정보·참고용.
   { id: "fmcap20", cat: "수급", label: "외국인 20일 순매수/시총", unit: "%",
     note: "20일 누적 순매수 금액 ÷ 시가총액. 규모로 정규화한 유입 강도",
-    buckets: [_b("순매도", null, 0), _b("0~0.2", 0, 0.2), _b("0.2~0.5", 0.2, 0.5), _b("0.5~1", 0.5, 1), _b("1↑", 1, null)] },
-  { id: "fshare20", cat: "수급", label: "외국인 20일 순매수/거래대금", unit: "%",
-    note: "그 기간 거래대금 중 외국인 순매수가 차지한 비율 — 매매를 누가 주도했나",
-    buckets: [_b("순매도", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
-  { id: "fdays20", cat: "수급", label: "외국인 순매수일 비율(20일)", unit: "%",
-    note: "20일 중 외국인이 순매수한 날의 비율 — 하루 몰빵인지 꾸준한 매집인지",
-    buckets: [_b("~40", null, 40), _b("40~55", 40, 55), _b("55~70", 55, 70), _b("70~85", 70, 85), _b("85↑", 85, null)] },
-  { id: "imcap20", cat: "수급", label: "기관 20일 순매수/시총", unit: "%",
-    note: "기관 20일 누적 순매수 ÷ 시가총액",
-    buckets: [_b("순매도", null, 0), _b("0~0.2", 0, 0.2), _b("0.2~0.5", 0.2, 0.5), _b("0.5↑", 0.5, null)] },
-  // 기업가치 (배)
-  { id: "per", cat: "기업가치", label: "PER", unit: "배", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~15", 10, 15), _b("15~20", 15, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "pbr", cat: "기업가치", label: "PBR", unit: "배", buckets: [_b("0~0.5", 0, 0.5), _b("0.5~1", 0.5, 1), _b("1~1.5", 1, 1.5), _b("1.5~2", 1.5, 2), _b("2~3", 2, 3), _b("3↑", 3, null)] },
-  { id: "psr", cat: "기업가치", label: "PSR", unit: "배", note: "한국은 시총÷최근매출로 계산", buckets: [_b("0~0.5", 0, 0.5), _b("0.5~1", 0.5, 1), _b("1~2", 1, 2), _b("2~3", 2, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
-  // 성장성 (%)
-  { id: "rev_yoy", cat: "성장성", label: "매출 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "rev_cagr", cat: "성장성", label: "매출 연평균성장(CAGR)", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "rev_streak", cat: "성장성", label: "매출 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
-  { id: "op_yoy", cat: "성장성", label: "영업이익 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "op_streak", cat: "성장성", label: "영업이익 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
-  { id: "net_yoy", cat: "성장성", label: "순이익 증감률", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "net_cagr", cat: "성장성", label: "순이익 연평균성장(CAGR)", unit: "%", buckets: [_b("감소", null, 0), _b("0~10", 0, 10), _b("10~20", 10, 20), _b("20~30", 20, 30), _b("30↑", 30, null)] },
-  { id: "net_streak", cat: "성장성", label: "순이익 연속증가", unit: "년", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null), _b("4년↑", 4, null)] },
-  // 수익성 (%)
-  { id: "opm", cat: "수익성", label: "영업이익률", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
-  { id: "npm", cat: "수익성", label: "순이익률", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~20", 10, 20), _b("20↑", 20, null)] },
-  { id: "roe", cat: "수익성", label: "ROE", unit: "%", buckets: [_b("적자", null, 0), _b("0~5", 0, 5), _b("5~10", 5, 10), _b("10~15", 10, 15), _b("15~20", 15, 20), _b("20↑", 20, null)] },
-  { id: "roa", cat: "수익성", label: "ROA", unit: "%", note: "ROE·부채비율로 추정", buckets: [_b("적자", null, 0), _b("0~3", 0, 3), _b("3~6", 3, 6), _b("6~10", 6, 10), _b("10↑", 10, null)] },
-  // 재무건전성
-  { id: "debt", cat: "재무건전성", label: "부채비율", unit: "%", buckets: [_b("0~50", 0, 50), _b("50~100", 50, 100), _b("100~200", 100, 200), _b("200↑", 200, null)] },
-  { id: "curr", cat: "재무건전성", label: "유동비율", unit: "%", note: "주로 미국(국내는 당좌비율만 제공)", buckets: [_b("100미만", null, 100), _b("100~150", 100, 150), _b("150~200", 150, 200), _b("200↑", 200, null)] },
-  { id: "intcov", cat: "재무건전성", label: "이자보상배율", unit: "배", note: "미국만 제공", buckets: [_b("1미만", null, 1), _b("1~3", 1, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
-  // 배당
-  { id: "dyield", cat: "배당", label: "배당수익률", unit: "%", buckets: [_b("0~1", 0, 1), _b("1~2", 1, 2), _b("2~3", 2, 3), _b("3~5", 3, 5), _b("5↑", 5, null)] },
-  { id: "payout", cat: "배당", label: "배당성향", unit: "%", note: "한국은 DPS÷EPS로 계산", buckets: [_b("0~20", 0, 20), _b("20~40", 20, 40), _b("40~60", 40, 60), _b("60~100", 60, 100), _b("100↑", 100, null)] },
-  { id: "div_pay", cat: "배당", label: "배당 연속지급", unit: "년", note: "국내만(최근 수년 데이터 한정)", buckets: [_b("3년↑", 3, null), _b("5년↑", 5, null)] },
-  { id: "div_grow", cat: "배당", label: "배당 연속증가", unit: "년", note: "국내만(최근 수년 데이터 한정)", buckets: [_b("2년↑", 2, null), _b("3년↑", 3, null)] },
+    buckets: [_b("순매도", null, 0), _b("0~0.5", 0, 0.5), _b("0.5↑", 0.5, null)] },
 ];
 const SCR_METRIC_BY_ID = Object.fromEntries(SCR_METRICS.map((m) => [m.id, m]));
-const SCR_CATS = ["수급", "기업가치", "성장성", "수익성", "재무건전성", "배당"];
+const SCR_CATS = ["가치", "성장", "수익성·건전성", "수급"];
 // 구현 불가 항목(원인) — UI에 안내
 const SCR_UNAVAIL = [
   ["PFCR", "잉여현금흐름(FCF) 미수집 — 현금흐름표 수집 필요"],
@@ -4934,8 +4919,8 @@ function initScreener() {
   screenerRendered = true;
   // 수급 지표는 별도 파일이라 늦게 온다 → 도착하면 값 캐시를 다시 만들고 한 번 더 그린다
   loadSupplyScan().then((j) => { if (j) { scrBuildVals(); if (screenerRendered) renderScreener(); } });
-  $("#scr-context").innerHTML = `<b>주식찾기</b> — 종목 발굴 3단계: <b>① 어디서</b>(산업·밸류체인) → <b>② 어떤 회사를</b>(투자 스타일) → <b>③ 언제</b>(차트 신호). 각 단계는 건너뛰어도 되고, 고른 조건은 <b>모두 동시 적용(AND)</b>됩니다. 오른쪽 세부 지표(PER·성장률 등)로 더 좁힐 수 있습니다.`;
-  // 발굴 3단계 카드 — 클릭=해당 패널 펼침(하나만), 활성 카드 재클릭=접힘
+  $("#scr-context").innerHTML = `<b>주식찾기</b> — 종목 발굴 4단계: <b>① 어디서</b>(산업·밸류체인·시총) → <b>② 어떤 회사를</b>(투자 스타일) → <b>③ 숫자로</b>(재무 필터 9종) → <b>④ 언제</b>(차트 신호). 각 단계는 건너뛰어도 되고, 고른 조건은 <b>모두 동시 적용(AND)</b>됩니다.`;
+  // 발굴 4단계 카드 — 클릭=해당 패널 펼침(하나만), 활성 카드 재클릭=접힘
   document.querySelectorAll("#scr-steps .scr-step").forEach((b) =>
     b.onclick = () => scrSetStep(b.dataset.step));
   scrStep = null; scrSetStep("industry");   // 첫 진입은 ①산업 펼침
@@ -4966,12 +4951,10 @@ function initScreener() {
     scrState.sortCol = null;      // 드롭다운을 쓰면 헤더 정렬 해제(둘이 동시에 걸리면 사용자가 혼란)
     renderScreener();
   };
-  // 세부 지표·테마 초기화
+  // 재무 지표 초기화 — v379부터 테마는 ②단계로 분리됐으므로 여기선 지표만 지운다
   const rb = $("#scr-reset");
   if (rb) rb.onclick = () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]);
-    scrThemeActive = null;
-    document.querySelectorAll("#scr-metrics .scr-bk.active").forEach((x) => x.classList.remove("active"));
-    renderScrThemes(); renderScreener(); };
+    renderScrMetrics(); renderScreener(); };
 
   const cc = $("#scr-chain-clear");
   if (cc) cc.onclick = () => { scrChainSel.clear(); renderScrChain(); renderScreener(); };
@@ -5591,13 +5574,14 @@ function buildScrTiers() {
   });
 }
 
-/* ── 발굴 3단계 패널(v209) — 카드=탭(하나만 펼침·재클릭=접힘), 선택 상태는 칩바·카드 요약에 집계 ── */
+/* ── 발굴 4단계 패널(v209 3단계 → v379 재무 필터 분리) — 카드=탭(하나만 펼침·재클릭=접힘), 선택 상태는 칩바·카드 요약에 집계 ── */
 let scrStep = "industry";
+const SCR_STEPS = ["industry", "style", "fin", "signal"];
 function scrSetStep(s) {
   scrStep = (scrStep === s) ? null : s;   // 활성 카드 재클릭 = 접힘(첫 화면을 결과 위주로)
   document.querySelectorAll("#scr-steps .scr-step").forEach((b) =>
     b.classList.toggle("active", b.dataset.step === scrStep));
-  ["industry", "style", "signal"].forEach((k) => {
+  SCR_STEPS.forEach((k) => {
     const p = $("#scr-panel-" + k);
     if (p) p.style.display = (k === scrStep) ? "" : "none";
   });
@@ -5625,12 +5609,19 @@ function scrSignalLabel() {
   if (scrTechActive.startsWith("gap_")) return GAP_DEF[scrTechActive]?.name || scrTechActive;
   return TECHPAT?.patterns?.find((p) => p.id === scrTechActive)?.name || scrTechActive;
 }
+function scrFinLabel() {   // v379: 선택된 재무 지표를 "PER·ROE 외 1" 형태로 요약
+  const ids = Object.keys(scrMetricSel).filter((k) => scrMetricSel[k]?.size);
+  if (!ids.length) return null;
+  const names = ids.map((k) => SCR_METRIC_BY_ID[k]?.label || k);
+  return `${names.slice(0, 2).join("·")}${names.length > 2 ? ` 외 ${names.length - 2}` : ""}`;
+}
 function scrChips(nRows, nPool) {
   const bar = $("#scr-chipbar"); if (!bar) return;
   const defs = [
     ["industry", "c1", "①", scrIndustryLabel()],
     ["style", "c2", "②", scrThemeActive ? SCR_THEMES.find((x) => x.id === scrThemeActive)?.name : null],
-    ["signal", "c3", "③", scrSignalLabel()],
+    ["fin", "c4", "③", scrFinLabel()],
+    ["signal", "c3", "④", scrSignalLabel()],
   ];
   // 카드 요약도 같은 텍스트로 동기화
   defs.forEach(([k, , , label]) => {
@@ -5648,6 +5639,7 @@ function scrChips(nRows, nPool) {
     industry: () => { scrState.groups = scrState.sectors = null; scrOpenGroup = null;
       scrChainIndustry = null; scrChainSel.clear(); buildScrSectors(); renderScrChain(); },
     style: () => { scrThemeActive = null; renderScrThemes(); },
+    fin: () => { Object.keys(scrMetricSel).forEach((k) => delete scrMetricSel[k]); renderScrMetrics(); },
     signal: () => { scrTechActive = null; renderScrTech(); },
   };
   bar.querySelectorAll("[data-act]").forEach((b) => b.onclick = () => {
@@ -5857,12 +5849,14 @@ function renderScrMetrics() {
   host.innerHTML = SCR_CATS.map((cat) => {
     const ms = SCR_METRICS.filter((m) => m.cat === cat);
     const rows = ms.map((m) => {
+      // 활성 상태는 항상 scrMetricSel에서 다시 그린다 — 재렌더(칩 해제 등)에도 표시가 어긋나지 않게
       const chips = m.buckets.map((b, i) =>
-        `<button class="scr-bk" data-mid="${m.id}" data-i="${i}">${b.l}</button>`).join("");
+        `<button class="scr-bk${scrMetricSel[m.id]?.has(i) ? " active" : ""}" data-mid="${m.id}" data-i="${i}">${b.l}</button>`).join("");
       const note = m.note ? `<span class="scr-mnote">${m.note}</span>` : "";
       return `<div class="scr-metric-row"><span class="scr-mlabel">${m.label}<span class="sub-note"> (${m.unit})</span>${note}</span><span class="scr-bks">${chips}</span></div>`;
     }).join("");
-    return `<details class="scr-cat"${cat === "수급" ? " open" : ""}><summary>${cat} <span class="sub-note scr-cat-n" data-cat="${cat}"></span></summary>${rows}${
+    // v379: 지표가 9종뿐이라 전 분류를 펼쳐 둔다(예전 22종일 때만 접어둘 이유가 있었다)
+    return `<details class="scr-cat" open><summary>${cat} <span class="sub-note scr-cat-n" data-cat="${cat}"></span></summary>${rows}${
       cat === "수급" ? SUP_EVIDENCE : ""}</details>`;
   }).join("");
   host.querySelectorAll(".scr-bk").forEach((b) => b.onclick = () => {

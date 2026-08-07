@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=378">
-<script src="firebase-config.js?v=378"></script>
-<script src="js/auth.js?v=378"></script>
+<link rel="stylesheet" href="css/style.css?v=379">
+<script src="firebase-config.js?v=379"></script>
+<script src="js/auth.js?v=379"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=378"></script>
+<script src="js/sync.js?v=379"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -572,8 +572,8 @@
         <button data-c="us">🇺🇸 미국</button>
       </span>
     </div>
-    <!-- 발굴 3단계(v209): ①범위(산업·밸류체인) ②질(투자 스타일) ③타이밍(차트 신호).
-         카드=탭(하나만 펼침·다시 클릭=접힘), 선택 상태는 카드 요약+조건 칩바에 집계. 세 단계는 전부 AND. -->
+    <!-- 발굴 4단계(v209 3단계 → v379): ①범위(산업·밸류체인+시총) ②질(투자 스타일) ③숫자(재무 필터) ④타이밍(차트 신호).
+         카드=탭(하나만 펼침·다시 클릭=접힘), 선택 상태는 카드 요약+조건 칩바에 집계. 네 단계는 전부 AND. -->
     <div class="card-flat scr-toprow">
       <div class="scr-steps" id="scr-steps">
         <button class="scr-step" data-step="industry">
@@ -586,8 +586,13 @@
           <span class="scr-step-t">⭐ 투자 스타일</span>
           <span class="scr-step-sum" id="scr-sum-style">전체</span>
         </button>
+        <button class="scr-step" data-step="fin">
+          <span class="scr-step-k">③ 숫자로 거르면</span>
+          <span class="scr-step-t">📊 재무 필터</span>
+          <span class="scr-step-sum" id="scr-sum-fin">전체</span>
+        </button>
         <button class="scr-step" data-step="signal">
-          <span class="scr-step-k">③ 언제 살까</span>
+          <span class="scr-step-k">④ 언제 살까</span>
           <span class="scr-step-t">📈 차트 신호</span>
           <span class="scr-step-sum" id="scr-sum-signal">전체</span>
         </button>
@@ -627,9 +632,11 @@
       <div class="scr-panel" id="scr-panel-style" style="display:none">
         <div class="scr-themes-head">⭐ 투자 스타일 <span class="sub-note">재무 조건 묶음 — 하나 선택 · </span><span class="sub-note" id="scr-theme-desc"></span></div>
         <div class="scr-themes" id="scr-themes"></div>
-        <!-- v378: 세부 지표도 "어떤 회사를" 고르는 조건이라 ②단계로 이동(우측 사이드 폐지) -->
+      </div>
+      <!-- v379: 세부 지표는 ③재무 필터 대분류로 독립(②는 스타일 묶음, ③은 개별 숫자 조건) -->
+      <div class="scr-panel" id="scr-panel-fin" style="display:none">
         <div class="card-flat scr-detail">
-          <div class="scr-detail-head"><b>세부 지표 필터</b>
+          <div class="scr-detail-head"><b>재무 필터</b>
         <span class="sub-note" id="scr-detail-note">재무 데이터 로딩 중…</span>
         <span style="flex:1"></span>
         <button class="today-chart-btn" id="scr-reset">지표 초기화</button></div>
@@ -1254,7 +1261,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=378"></script>
+<script src="js/app.js?v=379"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">
