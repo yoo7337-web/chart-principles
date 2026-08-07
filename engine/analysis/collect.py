@@ -7,6 +7,7 @@ r"""데이터 수집: 한국(KOSPI 시총상위 200, pykrx) + 미국(대형주 1
     python analysis\collect.py --force   # 캐시 무시 전체 재수집
 """
 import argparse
+import json
 import os
 import sys
 import re
@@ -21,8 +22,13 @@ START = "2016-01-01"
 MIN_ROWS = 750  # 원칙 연구 게이트(≥3년) — load_research()에서 적용
 MIN_ROWS_COLLECT = 20  # 수집 바닥값 — 신규상장·소형주도 수집(주식찾기·마켓현황·종목조회용). c5는 ≥6행 필요
 
-# 미국 대형·인기주 (S&P500 시총 상위 + 나스닥 대표 + 인기 성장/테마주, 2026 기준)
-US_TICKERS = [
+# 미국 대형·인기주 큐레이션 — **US_CORE**(무거운 소비자 전용) 겸 유니버스 폴백.
+#  ⚠v358에서 유니버스를 S&P500+나스닥100(~600)으로 넓혔지만, 아래 소비자는 종목당 비용이 커서
+#    전체로 돌리면 안 된다 → `US_CORE`를 쓴다:
+#    ·intraday(분봉): 138종목에 일 4.7MB — 600이면 연 4GB대로 repo가 무너진다
+#    ·biz_deep(SEC 10-K 발췌): 종목당 수 MB 파싱 + UA 제한
+#  전체 유니버스가 필요한 곳(가격·히트맵·종목조회·주식찾기·company/feed/financials)은 US_TICKERS.
+US_CURATED = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "BRK-B", "LLY",
     "JPM", "V", "XOM", "UNH", "MA", "COST", "HD", "PG", "WMT", "NFLX",
     "JNJ", "CRM", "BAC", "ORCL", "ABBV", "CVX", "MRK", "KO", "AMD", "PEP",
@@ -39,7 +45,78 @@ US_TICKERS = [
     "PLUG", "F", "GM", "NKE", "CMG", "MAR", "DAL", "CCL", "ARM", "DELL",
     "WDC", "ON", "ENPH", "FSLR", "CVNA", "DKNG", "ZS", "TTD",
 ]
-US_TICKERS = list(dict.fromkeys(US_TICKERS))  # 중복 제거(순서 보존)
+US_CURATED = list(dict.fromkeys(US_CURATED))  # 중복 제거(순서 보존)
+US_UNIVERSE_FILE = DATA_DIR / "us_universe.json"
+
+
+def us_universe(refresh: bool = False) -> dict:
+    """미국 유니버스 = S&P500 + 나스닥100 + 큐레이션 → {ticker: {name, src}} (v358).
+
+    ⚠미국엔 pykrx 같은 목록 API가 없다 → 위키피디아 구성종목 표를 읽는다(무키·안정적).
+      나스닥100은 본문 페이지에서 표가 빠졌고 `List_of_NASDAQ-100_companies`에 있다(실측).
+    ⚠**실패 시 기존 파일을 보존**한다(네트워크 결과로 덮어쓸 때는 병합이 기본 — CLAUDE.md 교훈).
+      두 소스가 다 실패하고 캐시도 없으면 큐레이션만으로 돌아간다(사이트가 죽지 않게)."""
+    old = {}
+    if US_UNIVERSE_FILE.exists():
+        try:
+            old = json.loads(US_UNIVERSE_FILE.read_text(encoding="utf-8")).get("map", {})
+        except Exception:
+            old = {}
+    if old and not refresh:
+        return old
+
+    import io
+    import urllib.request
+
+    def wiki_table(url: str, sym_cols=("symbol", "ticker"), name_cols=("security", "company", "name")):
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"})
+        html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
+        tables = pd.read_html(io.StringIO(html))
+        cands = [t for t in tables if any(str(c).lower() in sym_cols for c in t.columns)]
+        if not cands:
+            raise RuntimeError("구성종목 표를 찾지 못함(위키 구조 변경 가능)")
+        t = max(cands, key=len)
+        scol = [c for c in t.columns if str(c).lower() in sym_cols][0]
+        ncol = next((c for c in t.columns if str(c).lower() in name_cols), None)
+        out = {}
+        for _, row in t.iterrows():
+            tk = str(row[scol]).strip().upper()
+            if not re.fullmatch(r"[A-Z][A-Z.\-]{0,6}", tk):
+                continue
+            out[tk.replace(".", "-")] = str(row[ncol]).strip() if ncol else tk   # BRK.B → BRK-B(yfinance 표기)
+        return out
+
+    new = {}
+    for src, url in (("sp500", "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"),
+                     ("ndx100", "https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies")):
+        try:
+            got = wiki_table(url)
+            for tk, nm in got.items():
+                new.setdefault(tk, {"name": nm, "src": []})["src"].append(src)
+            print(f"  [US uni] {src} {len(got)}종목")
+        except Exception as e:
+            print(f"  [US uni] {src} 실패({e}) — 이 소스 생략", file=sys.stderr)
+    for tk in US_CURATED:
+        new.setdefault(tk, {"name": tk, "src": []})["src"].append("curated")
+
+    # 지수 소스가 전부 실패하면 기존 캐시(또는 큐레이션)를 그대로 쓴다 — 유니버스가 줄어드는 사고 방지
+    if not any("sp500" in v["src"] or "ndx100" in v["src"] for v in new.values()):
+        if old:
+            print("  [US uni] 지수 소스 실패 — 기존 캐시 유지", file=sys.stderr)
+            return old
+        print("  [US uni] 지수 소스 실패 — 큐레이션만 사용", file=sys.stderr)
+        return new
+    # 기존 유니버스는 **지우지 않는다**(상장폐지·지수 편출도 이력을 유지 — 종목조회에서 계속 조회 가능)
+    merged = {**old, **new}
+    US_UNIVERSE_FILE.write_text(json.dumps(
+        {"generated": date.today().isoformat(), "map": merged}, ensure_ascii=False), encoding="utf-8")
+    print(f"  [US uni] 총 {len(merged)}종목 (신규 {len(set(new) - set(old))})")
+    return merged
+
+
+US_TICKERS = list(us_universe().keys()) or US_CURATED   # 전체 유니버스(가격·화면용)
+US_CORE = US_CURATED                                    # 무거운 소비자용(분봉·SEC 발췌)
 
 
 def norm_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -183,7 +260,10 @@ def collect_us(quick: bool, force: bool) -> int:
             sub = raw[t] if len(todo) > 1 else raw
             sub = sub.rename(columns=str.lower)
             df = norm_ohlcv(sub.dropna(subset=["close"]))
-            if len(df) < MIN_ROWS:
+            # ⚠국내는 MIN_ROWS_COLLECT(20)인데 미국만 750이라 **신규상장이 통째로 빠졌다**
+            #   (실측 v358: ARM·GEV·SOLV·VLTO·ALAB 등 12종목). 원칙 검증 게이트는 load_research가
+            #   따로 걸므로 수집 바닥값은 양 시장을 통일한다.
+            if len(df) < MIN_ROWS_COLLECT:
                 print(f"  [US] {t} 데이터 부족({len(df)}행) 제외")
                 continue
             save_parquet(df, DATA_DIR / f"us_{t.replace('-', '_')}.parquet")

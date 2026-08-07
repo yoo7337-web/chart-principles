@@ -234,10 +234,17 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
         cm = cached.get("map") or {}
         kr_have = sum(1 for k, v in cm.items() if k.startswith("kr_") and (v or {}).get("mcap"))
         need = max(600, int(len(kr_names or {}) * 0.9))
-        if age <= SECTOR_MAX_AGE_DAYS and kr_have >= need:
+        # ⚠US에도 같은 가드가 필요하다 — 없어서 유니버스를 136→533으로 넓혔을 때 신규 398종목이
+        #   30일 내내 섹터·시총 없이 남을 구조였다(v358). 캐시는 '나이'가 아니라 '쓸 만한가'로 판정.
+        us_all = [tk for (mk, tk) in data if mk == "us"]
+        us_have = sum(1 for k, v in cm.items() if k.startswith("us_") and (v or {}).get("sector"))
+        us_need = int(len(us_all) * 0.9)
+        if age <= SECTOR_MAX_AGE_DAYS and kr_have >= need and us_have >= us_need:
             return cm
         if kr_have < need:
             print(f"  섹터맵 시총 커버리지 부족({kr_have} < {need}) — 캐시 무시하고 재생성")
+        if us_have < us_need:
+            print(f"  섹터맵 US 커버리지 부족({us_have} < {us_need}) — 캐시 무시하고 재생성")
 
     print("  섹터맵 재생성(월 1회)...")
     smap = {}
@@ -297,19 +304,34 @@ def build_sector_map(data: dict, kr_names: dict) -> dict:
                       file=sys.stderr)
     print(f"  KR 시총: 코스피 {got[0]} + 코스닥 {got[1]} = {got[0] + got[1]}종목")
 
-    # --- US: yfinance info (99종목, 1회성) ---
+    # --- US: yfinance info (v358: 유니버스 533) ---
+    # ⚠실패를 "기타/0"으로 덮어쓰면 안 된다 — 일시적 오류가 곧 데이터 소실이다(CLAUDE.md 반복 교훈).
+    #   기존 캐시값이 있으면 그것을 유지(STICKY)하고, 없을 때만 기타/0으로 남긴다.
     import yfinance as yf
+    prev = {}
+    if SECTOR_MAP.exists():
+        try:
+            prev = json.loads(SECTOR_MAP.read_text(encoding="utf-8")).get("map", {})
+        except Exception:
+            prev = {}
     us = [tk for (mk, tk) in data if mk == "us"]
+    us_fail = 0
     for i, tk in enumerate(us, 1):
+        k = f"us_{tk}"
         try:
             info = yf.Ticker(tk).info
-            smap[f"us_{tk}"] = {"sector": info.get("sector") or "기타",
-                                "mcap": float(info.get("marketCap") or 0)}
+            sec, mc = info.get("sector"), float(info.get("marketCap") or 0)
+            if sec or mc:
+                smap[k] = {"sector": sec or (prev.get(k) or {}).get("sector") or "기타", "mcap": mc}
+            else:
+                raise ValueError("empty info")
         except Exception:
-            smap[f"us_{tk}"] = {"sector": "기타", "mcap": 0}
-        if i % 25 == 0:
-            print(f"  US info {i}/{len(us)}")
+            us_fail += 1
+            smap[k] = prev.get(k) or {"sector": "기타", "mcap": 0}
+        if i % 50 == 0:
+            print(f"  US info {i}/{len(us)} (실패 {us_fail})")
         time.sleep(0.2)
+    print(f"  US 섹터·시총 {len(us) - us_fail}/{len(us)}종목")
 
     SECTOR_MAP.write_text(json.dumps({"generated": date.today().isoformat(), "map": smap},
                                      ensure_ascii=False), encoding="utf-8")
