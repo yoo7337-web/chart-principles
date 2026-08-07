@@ -11512,9 +11512,9 @@ function renderFinTrends(st) {
     chartSvg = (bg.svg || "") + lineSvg;
     legend = (bg.legend || "") + `  <span style="color:#f0b34c">─</span> 영업이익률  <span style="color:#ff8c9a">┄</span> 순이익률`;
   } else if (ftView === "growth") {
+    // v353: 영업이익률·순이익률 제거(사용자 요청 — 실적 뷰에 이미 있음) → 성장률 2종에 집중
     const gLab2 = ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)";
-    const r1 = lineOn(["revG", "opG", "opm", "npm"], ["#4391ff", "#22c07a", "#f0b34c", "#ff8c9a"],
-      [gLab, gLab2, "영업이익률", "순이익률"], ["", "5 3", "", ""]);
+    const r1 = lineOn(["revG", "opG"], ["#4391ff", "#22c07a"], [gLab, gLab2], ["", "5 3"]);
     chartSvg = r1.svg; legend = r1.legend;
   } else if (ftView === "stability") {
     const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
@@ -11542,7 +11542,7 @@ function renderFinTrends(st) {
   const SPECS = {
     perf: [["rev", "매출액"], ["op", "영업이익"], ["np", "순이익"], ["opm", "영업이익률"], ["npm", "순이익률"], ["revG", gLab], ["roe", roeLab]],
     growth: [["revG", gLab], ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
-      ["opm", "영업이익률"], ["np", "순이익"], ["npm", "순이익률"], ["roe", roeLab]],
+      ["np", "순이익"], ["roe", roeLab]],
     stability: [["asset", "총자산"], ["liab", "총부채"], ["equity", "자본총계"], ["debt", "부채비율"], ["cur", "유동비율"], ["cash", "현금성자산"]],
     cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
   };
