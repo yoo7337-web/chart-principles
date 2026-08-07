@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from collect import DATA_DIR, load_all
+from collect import DATA_DIR, US_TICKERS, load_all
 from common import APP_DATA, ROOT
 from regimes import regime_map
 
@@ -711,9 +711,30 @@ def main():
     wide = load_all()  # 전체 확보분(주식찾기·마켓현황·종목조회) — 신규상장·소형주 포함
     # ⚠750일(원칙 연구) 필터는 여기 넣지 않음 — 클라우드는 2년치만 캐시하므로 core가 텅 비어 크래시함(2026-07-20 사고).
     # 시장폭·국면은 core_data의 유동성 랭킹(코스피 상위300+US)만으로 충분 — load_research()는 리서치 스크립트 전용.
-    core = core_data(wide)  # 시장폭·국면은 유동성 코어(로컬10년/클라우드2년 모두 대응)
     names_path = ROOT / "data" / "kr_names.json"
     kr_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {}
+    # 🐞유니버스 밖 캐시 잔재 제거(v360): load_all()은 **파일 기준**이라 예전에 수집됐다가 유니버스에서
+    #   빠진 종목이 계속 살아난다. 클라우드는 parquet을 actions/cache에 들고 있어 특히 잘 남는다 —
+    #   실측: 라이브 히트맵에 **우선주 31종목이 이름 없이 코드로**(005935 삼성전자우 141조 등) 떠 있었고,
+    #   섹터 시총이 본주와 이중 계상되어 산업 집계·시총가중 수익률까지 오염됐다.
+    #   → 여기서 한 번 걸러 heatmap·home_extras·breadth·sector_map 전부 같은 유니버스를 보게 한다.
+    #   ⚠kr_names/us 유니버스가 비어 있으면(파일 없음) 필터를 걸지 않는다 — 전량 삭제 사고 방지.
+    if kr_names:
+        drop_kr = [k for k in wide if k[0] == "kr" and k[1] not in kr_names]
+        for k in drop_kr:
+            wide.pop(k)
+        if drop_kr:
+            print(f"  유니버스 밖 KR 캐시 {len(drop_kr)}종목 제외(우선주·상장폐지 등): "
+                  f"{', '.join(t for _, t in drop_kr[:8])}{' …' if len(drop_kr) > 8 else ''}")
+    us_set = set(US_TICKERS)
+    if us_set:
+        drop_us = [k for k in wide if k[0] == "us" and k[1].replace("_", "-") not in us_set
+                   and k[1] not in us_set]
+        for k in drop_us:
+            wide.pop(k)
+        if drop_us:
+            print(f"  유니버스 밖 US 캐시 {len(drop_us)}종목 제외: {', '.join(t for _, t in drop_us[:8])}")
+    core = core_data(wide)  # 시장폭·국면은 유동성 코어(로컬10년/클라우드2년 모두 대응)
     breadth, hot, _ = compute_breadth(core, kr_names)  # 시장폭·급증은 코어 대상
     reg = regime_map(core)
     regime = {mk: (str(r[r != "na"].iloc[-1]) if len(r[r != "na"]) else "neutral") for mk, r in reg.items()}
