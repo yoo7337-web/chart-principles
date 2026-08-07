@@ -381,23 +381,29 @@
     <!-- v269: 검색창 디자인을 내재가치 탭과 통일(라벨 + 넓은 입력) -->
     <div id="lk-sticky" class="lk-sticky empty">
       <span class="sub-note" id="lk-sticky-hint">위 <b>🔍 종목 조회</b> 검색창에 종목명을 입력하세요</span>
+      <!-- v349: 긴 페이지 점프용 앵커 바(차트·재무·뉴스공시·원칙·기업정보) — 종목 로드 후 채움 -->
+      <span class="lk-anchors" id="lk-anchors"></span>
       <span class="lk-sticky-gap"></span>
     </div>
     <!-- v285: 헤더·기업개요는 **그리드 밖 전폭**. 안에 두면 오른쪽 레일의 첫 카드(원칙)가
          기업개요 옆에서 시작해 차트와 어긋난다(사용자 제보). 밖으로 빼면 원칙이 차트와 나란해진다. -->
+    <!-- v349: 헤더 4줄(배지·버튼·링크 각 1줄)을 2줄로 압축 — 배지·버튼·링크는 한 줄(.lk-subhead)에 wrap -->
     <div id="lookup-head" class="lookup-head" style="display:none"></div>
-    <div id="lookup-industry" class="lk-industry" style="display:none"></div>
-    <div id="lookup-report" class="lk-report" style="display:none"></div>
-    <div id="lookup-links" class="ext-links" style="display:none"></div>
-    <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+    <!-- 핵심지표 스트립: 시총·PER·PBR·52주 위치·컨센 괴리·배당 — loadExtras 도착 후 채움(v349) -->
+    <div id="lookup-kpis" class="lk-kpis" style="display:none"></div>
+    <div class="lk-subhead">
+      <div id="lookup-industry" class="lk-industry" style="display:none"></div>
+      <div id="lookup-report" class="lk-report" style="display:none"></div>
+      <div id="lookup-links" class="ext-links" style="display:none"></div>
+    </div>
     <!-- 아래부터 2단: 좌=차트·실적 / 우=레일(원칙·투자지표·호가·컨센·메모) -->
     <div class="lk-grid">
     <div class="lk-main">
     <!-- v220: AI 변동 사유 — 이 종목의 주가·공시·뉴스·수급을 근거로 Gemini가 상승/하락 이유를 설명 -->
-    <div id="lookup-why" class="card-flat lk-why" style="display:none">
-      <div class="lk-why-head">🤖 이 종목에 물어보기 <span class="sub-note">(주가·공시·뉴스·수급·재무·밸류에이션·배당·업계 비교 — 질문 속 기간을 자동 인식, 없으면 최근 3개월)</span>
-        <span style="flex:1"></span>
-      </div>
+    <!-- v349: 평소엔 접어 차트가 첫 화면에 오게 한다(details) — 열면 기존 그대로 -->
+    <details id="lookup-why" class="card-flat lk-why" style="display:none">
+      <summary class="lk-why-head">🤖 이 종목에 물어보기 <span class="sub-note">(주가·공시·뉴스·수급·재무·밸류에이션 — 질문 속 기간 자동 인식)</span>
+      </summary>
       <div class="lk-why-ask">
         <input type="text" id="why-q" placeholder="질문 — 예: 6월엔 왜 오르고 7월엔 왜 빠졌어? · 최근 실적 어때? · 지금 밸류에이션 비싼가?">
         <button class="today-chart-btn" id="why-go">분석</button>
@@ -405,7 +411,7 @@
         <button class="today-chart-btn" id="why-key" title="Gemini API 키 등록/변경 (이 브라우저에만 저장)">🔑</button>
       </div>
       <div id="why-out" class="lk-why-out" style="display:none"></div>
-    </div>
+    </details>
     <div class="controls" id="lookup-tfbar" style="display:none">
       <span class="mk-toggle" id="lookup-tf">
         <button data-tf="1m" id="tf-1m" style="display:none">당일 1분</button><button data-tf="5m" id="tf-5m" style="display:none">5분</button><button data-tf="60m" id="tf-60m" style="display:none">60분</button><button data-tf="d" class="active">일봉</button><button data-tf="w">주봉</button><button data-tf="m">월봉</button>
@@ -466,15 +472,23 @@
       </div>
       <div id="lookup-profile" class="card-flat" style="display:none"></div>
     </div>
-    <!-- ⑤ 실적: 분기 → 연간 → 서프라이즈 → 안정성 → 배당 -->
-    <!-- 실적·재무 추이 통합 카드([실적|성장·이익률|재무안정성|현금흐름] × [연간|분기]) — financials 기반 -->
-    <div id="lookup-finq" class="card-flat" style="display:none"></div>
-    <!-- PER/PBR 밴드 — 주가가 역사적 밸류에이션 범위 중 어디인지 -->
-    <div id="lookup-band" class="card-flat" style="display:none;margin-top:16px"></div>
+    <!-- 💰 재무 허브(v349): 흩어져 있던 4카드(Snapshot·밴드·상세 재무제표·동종비교)를 탭 1장으로.
+         ⚠비활성 패널은 display:none이 아니라 **오프스크린 absolute**(.finhub-panel) — 숨긴 채 렌더하면
+         SVG 폭이 0이 되는 함정(CLAUDE.md) 회피. 각 패널 id·렌더러는 기존 그대로(탭 흡수 규칙). -->
+    <div id="lookup-finhub" class="card-flat" style="display:none;margin-top:16px">
+      <h3 class="lk-h3">💰 재무 <span class="mk-toggle finhub-tabs" id="finhub-tabs"></span></h3>
+      <div class="finhub-body" id="finhub-body">
+        <div id="lookup-finq" class="finhub-panel" data-ft="snap" style="display:none"></div>
+        <div id="lookup-band" class="finhub-panel" data-ft="band" style="display:none"></div>
+        <div id="lookup-financials" class="finhub-panel" data-ft="fs" style="display:none"></div>
+        <div id="lookup-peers" class="finhub-panel" data-ft="peers" style="display:none"></div>
+      </div>
+    </div>
     <div id="lookup-surprise" class="card-flat" style="display:none"></div>
     <div id="lookup-dividend" class="card-flat" style="display:none"></div>
-    <div id="lookup-financials" class="card-flat" style="display:none;margin-top:16px"></div>
-    <div id="lookup-peers" class="card-flat" style="display:none;margin-top:16px"></div>
+    <!-- 📬 통합 피드(v349): 리포트 카드 + 공시/뉴스 2열을 필터 칩 타임라인 하나로.
+         구 #lookup-reports·#lookup-feed 마크업은 id 보존을 위해 남겨두되 렌더 호출은 끊었다(항상 숨김). -->
+    <div id="lookup-unifeed" class="card-flat" style="display:none;margin-top:16px"></div>
     <div id="lookup-reports" class="card-flat" style="display:none;margin-top:16px"></div>
     <div class="lookup-two" id="lookup-feed" style="display:none;margin-top:16px">
       <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 1년)</span></h3>
@@ -482,10 +496,13 @@
       <div class="card-flat"><h3 class="lk-h3">📰 뉴스 <span class="sub-note">(최근 3개월)</span></h3>
         <div id="lookup-news" class="lk-feed-list"></div></div>
     </div>
-    <!-- 이 종목의 원칙 이야기 + 원칙별 10년 성적 (최하단) -->
-    <div id="lookup-story" class="commentary" style="display:none"></div>
-    <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙별 10년 성적</h2>
-    <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none"><table id="lookup-stats"></table></div>
+    <!-- 기업개요(v349: 첫 화면에서 하단으로 이동, 4줄 요약+펼치기) -->
+    <div id="lookup-overview" class="card-flat lk-overview" style="display:none;margin-top:16px"></div>
+    <!-- 이 종목의 원칙 이야기 + 원칙별 10년 성적 (최하단) — v349: 내러티브를 성적 카드에 흡수 -->
+    <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙 이야기와 10년 성적</h2>
+    <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none">
+      <div id="lookup-story" class="commentary" style="display:none"></div>
+      <table id="lookup-stats"></table></div>
     </div><!-- /lk-main -->
     <aside class="lk-side">
       <!-- v276: 신호·원칙은 차트와 함께 봐야 하지만 차트 폭을 뺏으면 안 된다(사용자 요청)
@@ -497,10 +514,11 @@
     </div>
       <!-- ③ 투자지표 → ④ 컨센서스 (기업개요는 v275에서 본문 최상단으로 이동) -->
       <!-- v283: 투자지표를 우측 레일로(원칙 목록과 같은 열) -->
+      <!-- v349 순서: 지표 → 컨센 → 메모(위로) → 호가(요약 접기, 맨 아래) -->
       <div id="lookup-metrics" class="card-flat" style="display:none"></div>
-      <div id="lookup-micro" style="display:none"></div>
       <div id="lookup-cons" class="card-flat" style="display:none"></div>
       <div id="lookup-memo" class="card-flat" style="display:none"></div>
+      <div id="lookup-micro" style="display:none"></div>
     </aside>
     </div><!-- /lk-grid -->
   </section>

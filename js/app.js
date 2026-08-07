@@ -1274,6 +1274,8 @@ function loadLookup(key) {
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
+    initFinhub();               // 💰 재무 허브 탭(v349) — 패널 display 변화를 관찰해 탭 동기화
+    buildLkAnchors();           // 상단 sticky 앵커 바(v349)
     loadExtras().then(() => {
       if (LOOKUP_ST !== st) return;  // 로드 중 다른 종목으로 이동한 경우
       renderLookupHead(st);
@@ -1286,8 +1288,8 @@ function loadLookup(key) {
       renderLookupDividend(st);
       renderLookupPeers(st);
       renderLookupFinancials(st);
-      renderLookupReports(st);
-      renderLookupFeed(st);
+      renderLookupKpis(st);       // 헤더 아래 핵심지표 스트립(v349) — extras 도착 후에만 채울 수 있다
+      renderUnifiedFeed(st);      // v349: 리포트+공시+뉴스 통합 피드(구 renderLookupReports/Feed 대체)
       // 🐞공시 띠는 차트 생성 시점(rAF)에 한 번 그려지는데, 콜드 로드에선 feed가 그보다 늦게 와서
       //   빈 판정 → display:none으로 숨은 채 **스크롤 전까지 안 깨어났다**(JYP 실사고).
       //   feed 도착 후 반드시 다시 그린다.
@@ -9930,6 +9932,23 @@ function renderLookupOverview(st) {
     <p class="sub-note">출처: ${st.market === "kr" ? "와이즈리포트(개요·매출구성) · DART(주주·기업정보)" : "Yahoo Finance"} · 주 1회 갱신 · 매출구성·지분율은 최근 보고서 기준</p>`;
   loadBizDeep(st);
   ovGroup(st);
+  setupOvCollapse(host);   // v349: 첫 화면에서 하단으로 옮기며 4줄 요약+펼치기로 접는다
+}
+
+// 기업개요 접기(v349) — 내용이 길 때만 클램프 + '전체 펼치기' 버튼(종목 전환 시 다시 접힘)
+function setupOvCollapse(host) {
+  host.querySelector(".ov-expand")?.remove();
+  host.classList.remove("collapsed");
+  if (host.scrollHeight < 300) return;   // 짧으면 접을 필요 없음
+  host.classList.add("collapsed");
+  const btn = document.createElement("button");
+  btn.className = "ov-expand today-chart-btn";
+  btn.textContent = "전체 펼치기 ▾";
+  btn.onclick = () => {
+    const on = host.classList.toggle("collapsed");
+    btn.textContent = on ? "전체 펼치기 ▾" : "접기 ▴";
+  };
+  host.appendChild(btn);
 }
 
 /* 🏛 그룹 관계(v275) — 기업개요에서 "이 회사 위·아래에 누가 있나"를 바로 보여준다.
@@ -12166,6 +12185,129 @@ function renderLookupFeed(st) {
 function fmtMcap(v, mk) {
   if (mk === "kr") return v >= 1e12 ? (v / 1e12).toFixed(1) + "조원" : (v / 1e8).toFixed(0) + "억원";
   return v >= 1e12 ? "$" + (v / 1e12).toFixed(2) + "T" : "$" + (v / 1e9).toFixed(0) + "B";
+}
+
+/* ---------- 💰 재무 허브 (v349) — Snapshot·밴드·상세 재무제표·동종비교를 탭 1장으로 ----------
+   각 패널의 렌더러·id는 기존 그대로(탭 흡수 규칙). 렌더러가 host display를 스스로 켜고 끄므로,
+   탭은 display를 건드리지 않고 .on 클래스(오프스크린 absolute ↔ static)로만 전환한다 —
+   숨긴 채(display:none) 렌더하면 SVG 폭이 0이 되는 함정(CLAUDE.md) 때문. */
+const FINHUB_TABS = [["snap", "📈 Snapshot"], ["band", "📐 밴드·배수"], ["fs", "📋 상세 재무제표"], ["peers", "🏭 동종비교"]];
+let finhubSel = "snap";
+function finhubSync() {
+  const hub = document.getElementById("lookup-finhub");
+  if (!hub) return;
+  const panels = [...hub.querySelectorAll(".finhub-panel")];
+  const avail = {};
+  panels.forEach((p) => { avail[p.dataset.ft] = p.style.display !== "none"; });
+  const any = Object.values(avail).some(Boolean);
+  hub.style.display = any ? "" : "none";
+  if (!any) return;
+  if (!avail[finhubSel]) finhubSel = FINHUB_TABS.find(([k]) => avail[k])[0];
+  const bar = document.getElementById("finhub-tabs");
+  bar.innerHTML = FINHUB_TABS.filter(([k]) => avail[k]).map(([k, lab]) =>
+    `<button data-ft="${k}" class="${k === finhubSel ? "active" : ""}">${lab}</button>`).join("");
+  bar.querySelectorAll("button").forEach((b) => b.onclick = () => { finhubSel = b.dataset.ft; finhubSync(); });
+  panels.forEach((p) => p.classList.toggle("on", p.dataset.ft === finhubSel && avail[p.dataset.ft]));
+}
+function initFinhub() {
+  const hub = document.getElementById("lookup-finhub");
+  if (!hub || hub.dataset.bound) return;
+  hub.dataset.bound = "1";
+  // 렌더러들이 각자 다른 시점(loadExtras·financials fetch)에 display를 바꾼다 → 관찰로 동기화
+  const mo = new MutationObserver(() => finhubSync());
+  hub.querySelectorAll(".finhub-panel").forEach((p) => mo.observe(p, { attributes: true, attributeFilter: ["style"] }));
+  finhubSync();
+}
+
+/* ---------- 📬 통합 피드 (v349) — 뉴스·공시·리포트를 필터 칩 하나의 카드로 ----------
+   날짜 포맷이 소스마다 달라(뉴스 "MM-DD HH:MM" · 공시 "YYYY-MM-DD" · 리포트 상이) 무리하게
+   한 줄로 섞지 않는다 — '전체'는 종류별 최근 몇 건씩, 칩을 고르면 그 종류 전량. */
+let unifeedSel = "all";
+function renderUnifiedFeed(st) {
+  const host = $("#lookup-unifeed");
+  if (!host) return;
+  const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`] || {};
+  const news = fd.news || [], disc = fd.disc || [], reps = fd.reports || [];
+  if (!news.length && !disc.length && !reps.length) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
+  const newsRow = (n) => `<div class="lk-feed-row"><span class="lk-feed-date">${esc(n.t)}</span>
+    <a href="${n.link}" target="_blank" rel="noopener">${esc(n.title)}</a>${n.src ? `<span class="sub-note">${esc(n.src)}</span>` : ""}</div>`;
+  const discRow = (d) => `<div class="lk-feed-row"><span class="lk-feed-date">${esc((d.d || "").slice(2))}</span>
+    ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${esc(d.title)}</a>` : `<span>${esc(d.title)}</span>`}</div>`;
+  const repRow = (r) => st.market === "kr"
+    ? `<div class="lk-feed-row"><span class="lk-feed-date">${esc(r.d)}</span>
+        ${r.link ? `<a href="${r.link}" target="_blank" rel="noopener">${esc(r.title)}</a>` : `<span>${esc(r.title)}</span>`}
+        <span class="sub-note">${esc(r.broker)}${r.target != null ? ` · 목표 ${r.target.toLocaleString()}원` : ""}${r.opinion ? ` · ${esc(r.opinion)}` : ""}</span></div>`
+    : `<div class="lk-feed-row"><span class="lk-feed-date">${esc(r.d)}</span>
+        <span>${esc(r.grade)}${r.action ? ` <b>${esc(r.action)}</b>` : ""}${r.target ? ` · ${esc(r.target)}` : ""}</span>
+        <span class="sub-note">${esc(r.broker)}</span></div>`;
+  const sec = (title, rows, note) => rows.length
+    ? `<div class="uf-sec"><div class="uf-sec-h">${title} <span class="sub-note">${note || ""}</span></div>${rows.join("")}</div>` : "";
+  const more = (rows, n) => rows.length > n
+    ? rows.slice(0, n).join("") + `<details class="lk-feed-more"><summary>+ ${rows.length - n}건 더 보기</summary>${rows.slice(n).join("")}</details>`
+    : rows.join("");
+  const draw = () => {
+    const chips = [["all", `전체`], ["news", `뉴스 ${news.length}`], ["disc", `공시 ${disc.length}`], ["rep", `리포트 ${reps.length}`]]
+      .filter(([k]) => k === "all" || { news, disc, rep: reps }[k].length);
+    let body = "";
+    if (unifeedSel === "all") {
+      body = sec("📰 뉴스", news.slice(0, 6).map(newsRow), "최근 3개월")
+        + sec("📢 공시", disc.slice(0, 8).map(discRow), "최근 1년")
+        + sec(st.market === "kr" ? "📑 증권사 리포트" : "📑 애널리스트 등급 변경", reps.slice(0, 4).map(repRow), "");
+    } else if (unifeedSel === "news") body = more(news.map(newsRow), 30);
+    else if (unifeedSel === "disc") body = more(disc.map(discRow), 30);
+    else body = more(reps.map(repRow), 30);
+    host.innerHTML = `<h3 class="lk-h3">📬 뉴스 · 공시 · 리포트
+        <span class="mk-toggle uf-chips">${chips.map(([k, lab]) =>
+          `<button data-uf="${k}" class="${k === unifeedSel ? "active" : ""}">${lab}</button>`).join("")}</span></h3>
+      <div class="lk-feed-list">${body || `<p class="mini-note">데이터 없음</p>`}</div>
+      <p class="sub-note" style="margin:6px 0 0">뉴스 3개월 · 공시 1년 · ${st.market === "kr" ? "리포트=한경 컨센서스(클릭 시 PDF)" : "등급 변경=yfinance"}</p>`;
+    host.querySelectorAll("[data-uf]").forEach((b) => b.onclick = () => { unifeedSel = b.dataset.uf; draw(); });
+  };
+  draw();
+}
+
+/* ---------- 📌 핵심지표 스트립 (v349) — 헤더 바로 아래 한 줄 요약 ---------- */
+function renderLookupKpis(st) {
+  const host = $("#lookup-kpis");
+  if (!host) return;
+  const key = `${st.market}_${st.ticker}`;
+  const co = EXTRAS.company?.map?.[key] || {};
+  const m = co.metrics || {}, f = FUND?.map?.[key] || {};
+  const { cur } = freshQuote(st);
+  const per = m.per ?? f.per, pbr = m.pbr ?? f.pbr;
+  const pos52 = f.hi52 != null && f.lo52 != null && cur != null && f.hi52 > f.lo52
+    ? Math.max(0, Math.min(100, (cur - f.lo52) / (f.hi52 - f.lo52) * 100)) : null;
+  const target = co.cons?.target, upside = target && cur ? target / cur - 1 : null;
+  const dps = m.dps ?? co.dividend?.dps;
+  const yld = dps && cur ? dps / cur * 100 : f.div_yield;
+  const items = [
+    f.mcap != null && ["시가총액", fmtMcap(f.mcap, st.market), ""],
+    per != null && ["PER", per.toFixed(1) + "배", ""],
+    pbr != null && ["PBR", pbr.toFixed(1) + "배", ""],
+    pos52 != null && ["52주 위치", pos52.toFixed(0) + "%", ""],
+    upside != null && ["컨센 목표가까지", pct(upside, 1), upside >= 0 ? "pos" : "neg"],
+    yld != null && ["배당수익률", yld.toFixed(1) + "%", ""],
+  ].filter(Boolean);
+  if (!items.length) { host.style.display = "none"; return; }
+  host.style.display = "flex";
+  host.innerHTML = items.map(([k, v, c]) =>
+    `<span class="lk-kpi"><span class="sub-note">${k}</span><b class="${c}">${v}</b></span>`).join("");
+}
+
+/* ---------- 🧭 앵커 바 (v349) — sticky 헤더에서 긴 페이지를 점프 ---------- */
+function buildLkAnchors() {
+  const bar = document.getElementById("lk-anchors");
+  if (!bar || bar.dataset.bound) return;
+  bar.dataset.bound = "1";
+  const items = [["차트", "lookup-tfbar"], ["재무", "lookup-finhub"], ["뉴스·공시", "lookup-unifeed"],
+                 ["원칙", "lookup-stats-title"], ["기업정보", "lookup-overview"]];
+  bar.innerHTML = items.map(([lab, id]) => `<button class="lk-anchor" data-t="${id}">${lab}</button>`).join("");
+  bar.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    const el = document.getElementById(b.dataset.t);
+    if (el && el.style.display !== "none") el.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 /* ---------- 딜 레이더 (M&A — deal-radar 소스 재사용) ---------- */
