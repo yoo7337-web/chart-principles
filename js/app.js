@@ -1347,7 +1347,10 @@ const TF_KO = { "1m": "당일 1분", "5m": "5분(60일)", "60m": "60분(2년)", 
    (용량 절충 — stock_pages.DAILY_BARS 주석 참고). 일봉 뷰에서만 경계를 언급한다(주·월봉이면 무의미). */
 function lkRangeNote(st, s, tf) {
   const ser = st.series || [];
-  const from = ser.length ? ser[0][0] : "";
+  // ⚠normStock()이 로드 직후 배열 [t,o,h,l,c,v]을 **객체 {t,o,…}로 되돌린다** → 둘 다 받는다
+  //   (처음에 ser[0][0]만 읽어 각주가 조용히 사라졌다 — 압축 배열 포맷을 쓰는 곳의 상습 함정)
+  const first = ser.length ? ser[0] : null;
+  const from = !first ? "" : (Array.isArray(first) ? first[0] : first.t) || "";
   const n = `${s.length.toLocaleString()}봉`;
   if (!from) return n;
   const yrs = (new Date(st.asof) - new Date(from)) / 31557600000;
@@ -4039,6 +4042,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v381", "2026-08-08", "📈 차트 안내줄에 실제 보유 구간 표시",
+   "v380에서 차트 기간이 종목마다 달라졌는데 안내줄이 봉 수만 보여주고 **시작 연도와 주봉 경계가 "
+   + "빠져 있었습니다**(series가 객체로 변환된 걸 배열로 읽어 각주가 조용히 사라졌습니다). "
+   + "이제 \"1962-01-05부터 65년 · 5,432봉\"처럼 실제 구간과 주봉 경계를 표시합니다."],
   ["v380", "2026-08-08", "📈 종목 차트 전기간으로 — 미국은 1962년까지",
    "가격 이력을 **보유 가능한 최대치까지 재수집**했습니다(사용자 요청). 미국은 상장일부터 전부 받아 "
    + "J&J·P&G가 **1962년**, 애플이 1980년부터 보입니다(최대 16,258봉). 한국은 무료 소스(네이버 기반)가 "
