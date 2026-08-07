@@ -2507,6 +2507,7 @@ const DI_TYPES = [
   { k: "ask", ico: "❓", name: "궁금" },
   { k: "learn", ico: "📌", name: "배움" },
   { k: "regret", ico: "⚠️", name: "반성" },
+  { k: "stock", ico: "📈", name: "종목" },   // v361: 특정 종목에 대한 기록(관련 종목 칸과 함께 쓰면 좋다)
 ];
 let diFilter = "all";
 let diEditId = null;
@@ -2640,7 +2641,7 @@ function diRender() {
   }
   host.innerHTML = all.map((x) => {
     const m = diMeta(x.type);
-    return `<div class="di-card" data-card="${x.id}">
+    return `<div class="di-card k-${x.type}" data-card="${x.id}">
       <div class="di-head"><span class="di-type t-${x.type}">${m.ico} ${m.name}</span>
         <span class="sub-note">${x.d}${x.updated && x.updated !== x.d ? ` (수정 ${x.updated})` : ""}</span>
         ${x.tk ? `<button class="di-tk" data-go="${x.tk.key}">${diEsc(x.tk.name)} →</button>` : ""}
@@ -3830,6 +3831,12 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v361", "2026-08-07", "투자 다이어리 포스트잇 배치 · '📈 종목' 카테고리 추가",
+   "다이어리를 세로로 긴 목록에서 **포스트잇을 벽에 붙인 메모판**으로 바꿨습니다 — 3열로 배치되고 "
+   + "카테고리별로 색이 다르며(생각 노랑·궁금 주황·배움 초록·반성 빨강·종목 파랑), 살짝 어긋난 각도가 "
+   + "마우스를 올리면 반듯하게 펴집니다. 편집·삭제 버튼은 평소 흐리게 두어 메모 내용이 먼저 읽힙니다.\n\n"
+   + "카테고리에 **📈 종목**을 추가했습니다 — 특정 종목에 대한 생각을 따로 모아 볼 수 있습니다"
+   + "(관련 종목 칸을 함께 채우면 카드에서 바로 종목조회로 이동)."],
   ["v360", "2026-08-07", "🏭 산업 지표 독립 탭 — 12산업군 한눈 비교 · 미국 유니버스 532종목",
    "섹터 로테이션에서 산업군을 클릭해야만 보이던 **산업지표(수출지수·전방지표·펀더멘털 합산)를 독립 탭**으로 "
    + "분리했습니다(시장 보기 › 🏭 산업 지표). 상단 **비교 보드**에서 12개 산업군의 시가총액·수익률(당일/1M/3M, "

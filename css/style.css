@@ -2109,9 +2109,34 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   border-radius: 10px; padding: 9px 13px; margin-bottom: 12px; font-size: .84rem; }
 .di-openq-row { padding: 3px 0; cursor: pointer; opacity: .9; }
 .di-openq-row:hover { opacity: 1; color: #e0a93f; }
-.di-card { background: var(--card); border: 1px solid var(--line); border-radius: 11px;
-  padding: 11px 14px; margin-bottom: 9px; }
-.di-card.di-flash { border-color: #e0a93f; box-shadow: 0 0 0 2px rgba(224,145,47,.25); }
+/* 📌 포스트잇 배치 (v361) — 세로 목록 → 벽에 붙인 메모판.
+   ⚠masonry는 CSS columns로 구현한다(grid는 높이가 다른 카드에서 빈칸이 생긴다).
+     columns를 쓰면 카드가 열 사이에서 쪼개지므로 break-inside: avoid 필수. */
+#di-list { columns: 3 280px; column-gap: 14px; }
+@media (max-width: 900px) { #di-list { columns: 1; } }
+.di-card { break-inside: avoid; -webkit-column-break-inside: avoid;
+  background: var(--card); border: 1px solid var(--line); border-radius: 3px;
+  padding: 12px 14px 14px; margin: 0 0 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .38); position: relative;
+  border-top: 3px solid rgba(255, 255, 255, .10);
+  transition: transform .14s ease, box-shadow .14s ease; }
+/* 살짝 어긋난 각도 — 손으로 붙인 느낌(hover 시 반듯하게 펴지며 올라온다) */
+.di-card:nth-child(3n+1) { transform: rotate(-.5deg); }
+.di-card:nth-child(3n+2) { transform: rotate(.4deg); }
+.di-card:nth-child(3n+3) { transform: rotate(-.25deg); }
+.di-card:hover { transform: rotate(0) translateY(-2px); box-shadow: 0 7px 18px rgba(0, 0, 0, .5); z-index: 2; }
+/* 타입별 포스트잇 색 — 다크 표면이라 옅은 틴트로(글자는 그대로 읽히게) */
+.di-card.k-think { background: #2a2717; border-top-color: #d8b64a; }
+.di-card.k-ask { background: #2b2314; border-top-color: #e0a93f; }
+.di-card.k-learn { background: #16271f; border-top-color: #22c07a; }
+.di-card.k-regret { background: #2b1a1d; border-top-color: #f5445a; }
+.di-card.k-stock { background: #1c2233; border-top-color: #4391ff; }
+.di-card.di-flash { border-color: #e0a93f; box-shadow: 0 0 0 2px rgba(224,145,47,.35), 0 7px 18px rgba(0,0,0,.5); }
+.di-card .di-head { margin-bottom: 7px; }
+/* 편집·삭제 버튼은 평소 흐리게 — 메모 내용이 먼저 읽히게 */
+.di-card .di-mini { opacity: .45; transition: opacity .14s; }
+.di-card:hover .di-mini { opacity: 1; }
+.di-type.t-stock { background: rgba(67,145,255,.16); color: #7cb1ff; }
 .di-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .di-type { font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
   background: rgba(255,255,255,.07); }
