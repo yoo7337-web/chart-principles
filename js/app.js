@@ -4026,6 +4026,13 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v376", "2026-08-08", "📈 증권 탭에 지수 차트 · 종목 차트 기간 확대",
+   "증권(시장 내부) 탭 **맨 위에 지수 차트**를 넣었습니다 — 한국은 코스피·코스닥, 미국은 S&P500·나스닥·다우. "
+   + "구성 종목의 체력(시장폭·신고가 등)을 보기 전에 지수 자체가 어디 있는지 먼저 확인할 수 있습니다. "
+   + "시장·기간 선택(1/3/5년)을 그대로 따르고, 카드를 누르면 기존 5년 상세 팝업이 열립니다. "
+   + "**다우지수를 새로 수집**해 추가했습니다.\n\n"
+   + "종목조회 차트의 10년 제한을 풀어 **보유한 이력 전부**를 그립니다(대부분 종목이 2016년부터라 약 4개월 늘어납니다). "
+   + "더 긴 차트는 가격 데이터를 더 과거부터 다시 모아야 합니다."],
   ["v375", "2026-08-08", "산업 맥락 카드 빈 공간 활용",
    "관심종목 **산업 맥락 카드의 오른쪽이 비어 있던 문제**를 고쳤습니다 — 고정 2열이라 카드가 좁아지면 통째로 "
    + "1열이 되어, 내용이 왼쪽에만 세로로 길게 쌓였습니다. 실물 지표·산업 합산 실적·동종업계 상대주가를 "
@@ -9526,6 +9533,53 @@ function renderInternals() {
 
 // 시장 진단 차트 표시 기간(년) — 데이터는 5년 보관, 1/3/5년 확대만 조절
 let intRange = 5;
+/* 📈 지수 차트(v376) — 시장 내부(체력) 지표를 보기 전에 **지수 자체의 위치**를 먼저 보여준다.
+   데이터는 이미 있는 macro의 5년 주봉(w5/w5d)을 재사용한다(추가 수집 0).
+   ⚠지수마다 스케일이 전혀 다르므로(코스피 6,258 ↔ 다우 53,966) 한 축에 겹치지 않고 **카드별 개별 차트**로. */
+const INT_IDX = { kr: ["^KS11", "^KQ11"], us: ["^GSPC", "^IXIC", "^DJI"] };
+function drawIntIndex(mk) {
+  const host = document.getElementById("int-index");
+  if (!host) return;
+  const ids = INT_IDX[mk] || INT_IDX.kr;
+  const items = ids.map((id) => (MARKET?.macro || []).find((x) => x.id === id)).filter(Boolean);
+  if (!items.length) { host.innerHTML = ""; return; }
+  const cutISO = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - intRange); return d.toISOString().slice(0, 10); })();
+  host.innerHTML = items.map((x) => {
+    const ds = x.w5d || [], vs = x.w5 || [];
+    const pts = ds.map((t, i) => [t, vs[i]]).filter(([t, v]) => t >= cutISO && Number.isFinite(v));
+    const use = pts.length > 3 ? pts : ds.map((t, i) => [t, vs[i]]).filter(([, v]) => Number.isFinite(v));
+    if (use.length < 3) return "";
+    const ys = use.map((p) => p[1]);
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    const W = 460, H = 96, P = { l: 6, r: 6, t: 14, b: 16 };
+    const X = (i) => P.l + (i / (use.length - 1)) * (W - P.l - P.r);
+    const Y = (v) => P.t + (hi - v) / (hi - lo || 1) * (H - P.t - P.b);
+    const line = use.map((p, i) => `${X(i).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
+    const area = `${X(0).toFixed(1)},${H - P.b} ${line} ${X(use.length - 1).toFixed(1)},${H - P.b}`;
+    const first = ys[0], last = ys[ys.length - 1];
+    const per = first ? (last / first - 1) * 100 : null;   // 선택 기간 수익률
+    const col = (x.chg ?? 0) >= 0 ? "var(--kup)" : "var(--kdn)";
+    const fmt = (v) => v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2);
+    const yrLab = [use[0][0].slice(0, 4), use[use.length - 1][0].slice(0, 4)];
+    return `<div class="int-idx-card" data-id="${x.id}">
+      <div class="int-idx-h"><b>${x.name}</b>
+        <span class="int-idx-px">${fmt(last)}</span>
+        <span class="${(x.chg ?? 0) >= 0 ? "kup" : "kdn"}">${x.chg == null ? "" : pct(x.chg, 2)}</span>
+        <span style="flex:1"></span>
+        ${per == null ? "" : `<span class="sub-note">${intRange}년 <b class="${per >= 0 ? "pos" : "neg"}">${per >= 0 ? "+" : ""}${per.toFixed(1)}%</b></span>`}</div>
+      <svg viewBox="0 0 ${W} ${H}" class="int-idx-svg" preserveAspectRatio="none">
+        <polygon points="${area}" fill="${col}" opacity="0.10"/>
+        <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.8"/>
+        <circle cx="${X(use.length - 1)}" cy="${Y(last)}" r="2.6" fill="${col}"/>
+      </svg>
+      <div class="int-idx-ax"><span>${yrLab[0]}</span><span class="sub-note">고 ${fmt(hi)} · 저 ${fmt(lo)}</span><span>${yrLab[1]}</span></div>
+    </div>`;
+  }).join("");
+  // 카드 클릭 = 기존 5년 팝업(매크로 탭과 같은 상세)
+  host.querySelectorAll(".int-idx-card").forEach((c) =>
+    c.onclick = () => { if (typeof openMacroDialog === "function") openMacroDialog(c.dataset.id); });
+}
+
 function intSlice(arr) {
   if (!arr?.length) return arr || [];
   const d = new Date();
@@ -9640,6 +9694,7 @@ function drawInternals() {
   intCharts.forEach((c) => c.remove());
   intCharts = [];
   const mk = $("#int-mk").value;
+  drawIntIndex(mk);          // v376: 지수 차트(KR 코스피·코스닥 / US S&P500·나스닥·다우) — 내부 지표보다 먼저
   renderIntVerdict(mk);
   const h = MPRO.breadth_hist?.[mk];
   if (!h) return;
