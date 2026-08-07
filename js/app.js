@@ -86,12 +86,15 @@ const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatma
 /* ---------- 소탭(통합 페이지) — nav에는 부모탭만, 자식은 섹션 상단 pill로 전환 ----------
    기존 섹션(id=tab-X)·렌더·딥링크는 그대로 두고 표시만 부모탭으로 묶는다. */
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
-  // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외
+  // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
+  // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
+  rotation:  [["rotation", "산업 진단"], ["secmet", "🏭 산업 지표"]],
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
 };
-const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings" };
+const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings",
+  secmet: "rotation" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
 function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
@@ -1773,8 +1776,35 @@ function redrawDrawings() {
       drawSelect(+sh.dataset.i);
     };
     sh.oncontextmenu = (ev) => { ev.preventDefault(); ev.stopPropagation(); drawDelete(+sh.dataset.i); };
+    // v363: 말풍선·텍스트는 더블클릭으로 내용 수정(지우고 다시 그리지 않게)
+    sh.ondblclick = (ev) => {
+      if (drawMode) return;
+      const it = (drawLoad()[drawKey()] || [])[+sh.dataset.i];
+      if (!it || (it.type !== "callout" && it.type !== "text")) return;
+      ev.stopPropagation(); ev.preventDefault();
+      const t = prompt("메모 수정", it.text || "");
+      if (t == null) return;
+      if (!t.trim()) { drawDelete(+sh.dataset.i); return; }   // 비우면 삭제
+      drawSel = +sh.dataset.i;
+      drawApplyToSel({ text: t.trim() });
+    };
   });
   drawPaintSelection();
+}
+
+// 말풍선 줄바꿈 — 공백 단위로 채우고, 한 낱말이 길면 그대로 한 줄(최대 4줄)
+function calloutLines(text, per = 12) {
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  let cur = "";
+  for (const w of words) {
+    if (!cur) cur = w;
+    else if ((cur + " " + w).length <= per) cur += " " + w;
+    else { out.push(cur); cur = w; }
+    if (out.length >= 4) break;
+  }
+  if (cur && out.length < 4) out.push(cur);
+  return out.length ? out : [" "];
 }
 
 /* 도형 1개 → SVG. 보이는 도형 + 그 위에 투명 히트영역(클릭용)을 함께 낸다. */
@@ -1795,6 +1825,27 @@ function drawShapeSvg(d, i, X, Y, w, h) {
   if (d.type === "text")
     return `<text class="dw dw-text" data-i="${i}" x="${x1}" y="${y1}" fill="${col}">${String(d.text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>
       <rect ${hit} x="${x1 - 4}" y="${y1 - 14}" width="${Math.max(24, (d.text || "").length * 9 + 8)}" height="20" stroke="none" fill="transparent"/>`;
+  /* 💬 말풍선(v363) — 꼬리가 앵커(그 봉·그 가격)를 가리키고 본문은 그 위에 놓인다.
+     ⚠SVG엔 자동 줄바꿈이 없다 → 12자 기준으로 손수 끊어 <tspan>으로 쌓는다.
+     ⚠폭은 글자 수로 추정한다(한글은 폭이 커서 8.6px/자로 잡아야 테두리를 넘지 않는다). */
+  if (d.type === "callout") {
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const lines = calloutLines(d.text || "");
+    const fs = 11.5, lh = 15;
+    const bw = Math.max(56, Math.max(...lines.map((s) => s.length)) * 8.6 + 16);
+    const bh = lines.length * lh + 10;
+    const bx = x1 - bw / 2, by = y1 - bh - 12;            // 꼬리 12px 위에 버블
+    const tail = `${x1 - 5},${by + bh} ${x1 + 5},${by + bh} ${x1},${y1 - 1}`;
+    return `<g class="dw dw-callout" data-i="${i}">
+        <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6"
+          fill="${hexRGBA(col, 0.16)}" stroke="${col}" stroke-width="1.4"/>
+        <polygon points="${tail}" fill="${hexRGBA(col, 0.16)}" stroke="${col}" stroke-width="1.4"/>
+        <polyline points="${x1 - 4},${by + bh} ${x1 + 4},${by + bh}" stroke="${hexRGBA(col, 0.16)}" stroke-width="2"/>
+        ${lines.map((s, li) => `<text x="${x1}" y="${by + 16 + li * lh}" font-size="${fs}"
+          text-anchor="middle" fill="${col}">${esc(s)}</text>`).join("")}
+      </g>
+      <rect ${hit} x="${bx}" y="${by}" width="${bw}" height="${bh + 14}" stroke="none" fill="transparent"/>`;
+  }
   const x2 = X(d.t2, d.fo2), y2 = Y(d.p2);
   if (x2 == null || y2 == null) return "";
   if (d.type === "trend")
@@ -1841,6 +1892,20 @@ function drawPaintSelection() {
   const del = document.getElementById("draw-del");
   if (del) del.disabled = drawSel == null;
 }
+/* v363: 색·선모양 버튼은 '다음에 그릴 것'만 정했다 — 이미 그린 도형을 고치려면 지우고 다시 그려야 했다.
+   선택된 도형이 있으면 그 도형에 즉시 적용한다(undo 스택 저장 → Ctrl+Z로 되돌리기 가능). */
+function drawApplyToSel(patch) {
+  if (drawSel == null) return;
+  const o = drawLoad(), k = drawKey();
+  const it = o[k]?.[drawSel];
+  if (!it) return;
+  drawPush();
+  Object.assign(it, patch);
+  drawSaveAll(o);
+  redrawDrawings();            // 선택 인덱스는 그대로 유지 → 색을 연달아 바꿔볼 수 있다
+  drawPaintSelection();
+}
+
 function drawDelete(i) {
   const o = drawLoad(), k = drawKey();
   if (!o[k] || i == null || !o[k][i]) return;
@@ -1871,9 +1936,10 @@ const DRAW_HINT = {
   arrow: "드래그 방향으로 화살표를 그립니다",
   fib: "고점→저점(또는 반대)을 드래그하면 되돌림 비율선이 나옵니다",
   text: "클릭한 자리에 메모를 남깁니다",
+  callout: "클릭한 봉을 가리키는 말풍선 메모를 답니다 (드래그로 이동 · 선택 후 색 변경)",
 };
 // 한 번 클릭으로 끝나는 도구(드래그 불필요)
-const DRAW_CLICK1 = new Set(["hline", "vline", "text"]);
+const DRAW_CLICK1 = new Set(["hline", "vline", "text", "callout"]);
 
 function setDrawMode(m) {
   drawMode = m;
@@ -1903,11 +1969,13 @@ function bindDrawTools() {
   cwrap.querySelectorAll(".draw-sw").forEach((b) => b.onclick = () => {
     drawColor = b.dataset.c;
     cwrap.querySelectorAll(".draw-sw").forEach((x) => x.classList.toggle("active", x === b));
+    drawApplyToSel({ color: drawColor });   // v363: 선택한 도형이 있으면 그 도형도 바꾼다
   });
   // 선모양(실선/파선/점선)
   document.querySelectorAll("#draw-linestyle button").forEach((b) => b.onclick = () => {
     drawStyle = b.dataset.ls;
     document.querySelectorAll("#draw-linestyle button").forEach((x) => x.classList.toggle("active", x === b));
+    drawApplyToSel({ style: drawStyle });
   });
   document.getElementById("draw-clear").onclick = () => {
     if (!confirm("이 종목의 그림을 모두 지울까요?")) return;
@@ -2028,8 +2096,8 @@ function bindDrawTools() {
     if (DRAW_CLICK1.has(drawMode)) {          // 수평선·수직선·텍스트는 클릭 한 번으로 완성
       if (c.p == null || (c.t == null && c.fo == null)) return;
       let text = null;
-      if (drawMode === "text") {
-        text = prompt("메모 내용");
+      if (drawMode === "text" || drawMode === "callout") {
+        text = prompt(drawMode === "callout" ? "말풍선 메모 (이 봉에 남길 내용)" : "메모 내용");
         if (!text) return;
       }
       drawPush();
@@ -3648,7 +3716,7 @@ function ownPickRender() {
       (memHtml ? `<div class="own-sec-lab">🔎 '${ownEsc(ownQ)}'이(가) 포함된 지분도 — 골라서 여세요
         <span class="sub-note">★=이 회사와 가장 가까운(상위에 있는) 그룹</span></div>
         <div class="own-mem">${memHtml}</div>` : "") +
-      (groups.length ? `<div class="own-sec-lab">🏛 그룹 지분도</div>
+      (groups.length ? `<div class="own-sec-lab">🕸️ 그룹 지분도</div>
         <div class="own-pills">${groups.slice(0, 20).map((g) => btn(g)).join("")}</div>` : "") +
       (!groups.length && !memHtml
         ? `<p class="mini-note">'${ownEsc(ownQ)}' 검색 결과가 없습니다. 지분도는 시총 상위 그룹부터 수집합니다.</p>` : "");
@@ -3831,6 +3899,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v364", "2026-08-07", "💬 차트 말풍선 메모 · 도형 색·선모양 즉시 변경 · 산업 지표 위치 이동",
+   "차트에 **💬 말풍선 메모**를 추가했습니다 — 그리기 도구에서 💬를 고르고 봉을 클릭하면 그 지점을 "
+   + "가리키는 말풍선이 붙습니다(\"여기서 실적 발표\" 같은 기록). 드래그로 옮기고, **더블클릭하면 내용을 수정**하며, "
+   + "내용을 비우면 삭제됩니다.\n\n"
+   + "**이미 그린 도형의 색·선모양을 바로 바꿀 수 있습니다** — 도형을 클릭해 선택한 뒤 색 스와치나 선모양 버튼을 "
+   + "누르면 즉시 적용됩니다(예전엔 지우고 다시 그려야 했습니다). Ctrl+Z로 되돌릴 수 있습니다.\n\n"
+   + "**🏭 산업 지표**를 시장 보기에서 **종목 찾기 › 산업 진단의 소탭**으로 옮겼습니다(산업을 좁혀 종목으로 가는 "
+   + "흐름에 맞춤). 소유지분도 아이콘도 🕸️로 바꿨습니다."],
   ["v361", "2026-08-07", "투자 다이어리 포스트잇 배치 · '📈 종목' 카테고리 추가",
    "다이어리를 세로로 긴 목록에서 **포스트잇을 벽에 붙인 메모판**으로 바꿨습니다 — 3열로 배치되고 "
    + "카테고리별로 색이 다르며(생각 노랑·궁금 주황·배움 초록·반성 빨강·종목 파랑), 살짝 어긋난 각도가 "
@@ -11917,8 +11993,10 @@ function finDraw(st) {
     const isEst = data[p]?._est;
     return `<th class="${isEst ? "fin-est" : ""}">${mode === "annual" ? p + (isEst ? "(E)" : "") : p}</th>`;
   }).join("");
+  // 외국주권(코오롱티슈진 등)은 DART에 USD로 신고한다 → 연도별 기말환율로 환산한 값임을 밝힌다(v364)
+  const curNote = fin.cur_src ? ` · <b>${fin.cur_src} 공시 → 원화 환산</b>(연도별 기말환율)` : "";
   host.innerHTML = `<h3 class="lk-h3">📊 상세 재무제표
-      <span class="sub-note">(${src}${st.market === "kr" ? ` · ${finFsSel === "cfs" ? "연결" : "별도"} 기준 · 추정=네이버 컨센서스` : ""})</span>
+      <span class="sub-note">(${src}${st.market === "kr" ? ` · ${finFsSel === "cfs" ? "연결" : "별도"} 기준 · 추정=네이버 컨센서스` : ""}${curNote})</span>
       <span style="flex:1"></span>
       ${hasBothFs ? `<span class="mk-toggle fin-fs">
         <button data-fs="cfs" class="${finFsSel === "cfs" ? "active" : ""}">연결</button>
