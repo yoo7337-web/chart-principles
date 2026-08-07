@@ -4026,6 +4026,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v377", "2026-08-08", "📅 연도별 산업 수익률 표 — 10년 주도권 이동",
+   "산업 탭에 **연도별 산업 수익률 표**를 추가했습니다. 기존 로테이션은 1주·1개월·3개월만 보여줘 "
+   + "'어느 산업이 그 해를 주도했나'가 안 보였습니다. 이제 15개 산업 × 최근 10년을 한 표에서 보고, "
+   + "각 해 1위는 테두리로, 산업별 1위 횟수는 🏆로 표시합니다. 맨 아래 시장 중앙값과 비교하면 그 산업이 "
+   + "시장을 이겼는지 바로 읽힙니다.\n\n"
+   + "대표값은 **소속 종목 연간수익률의 중앙값**입니다 — 시총가중은 과거 시총이 없어 편향이 생기고, "
+   + "대형주 한두 개가 산업 전체를 대표해 버립니다. 미분류(기타)는 산업이 아니라 제외했습니다.\n\n"
+   + "실제로 주도 산업은 해마다 바뀝니다: 2020 2차전지 +65% → 2021 방산 +26% → 2024 조선 +2%(배터리 -47%) → 2025 지주회사 +74%."],
   ["v376", "2026-08-08", "📈 증권 탭에 지수 차트 · 종목 차트 기간 확대",
    "증권(시장 내부) 탭 **맨 위에 지수 차트**를 넣었습니다 — 한국은 코스피·코스닥, 미국은 S&P500·나스닥·다우. "
    + "구성 종목의 체력(시장폭·신고가 등)을 보기 전에 지수 자체가 어디 있는지 먼저 확인할 수 있습니다. "
@@ -9533,6 +9541,61 @@ function renderInternals() {
 
 // 시장 진단 차트 표시 기간(년) — 데이터는 5년 보관, 1/3/5년 확대만 조절
 let intRange = 5;
+/* 📅 연도별 산업 수익률(v377) — "지난 10년 어느 산업이 그 해를 주도했나".
+   대표값은 **소속 종목 연간수익률의 중앙값**이다(시총가중이 아니다 — 과거 시총이 없어 현재 시총을 쓰면
+   생존·성장 편향이 생기고, 대형주 1~2개가 산업 전체를 대표해 버린다).
+   각 연도 1위는 강조하고, 시장 중앙값도 같은 줄에 둬서 '시장을 이겼나'가 바로 읽히게 한다. */
+let IYEARS = null, iyearsLoading = null;
+function loadIndustryYears() {
+  if (IYEARS) return Promise.resolve(IYEARS);
+  if (iyearsLoading) return iyearsLoading;
+  iyearsLoading = fetch("data/industry_years.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (IYEARS = j)).catch(() => null);
+  return iyearsLoading;
+}
+
+function drawRotYears(mk) {
+  const host = document.getElementById("rot-years");
+  if (!host) return;
+  const D = IYEARS?.[mk];
+  if (!D) { host.innerHTML = ""; return; }
+  const gname = (gk) => {
+    const g = [...IND_GROUPS, SCR_GROUP_ETC].find((x) => x.key === gk);
+    return g ? `${g.icon} ${g.name}` : gk;
+  };
+  const years = D.years;
+  // 색: 수익률에 따라 빨강(상승)~파랑(하락) 농도. 국내 관례(상승=빨강) 유지
+  const cell = (v) => {
+    if (v == null) return `<td class="iy-na">-</td>`;
+    const a = Math.min(1, Math.abs(v) / 60);
+    const bg = v >= 0 ? `rgba(245,68,90,${(0.10 + a * 0.42).toFixed(2)})` : `rgba(67,145,255,${(0.10 + a * 0.42).toFixed(2)})`;
+    return `<td style="background:${bg}">${v >= 0 ? "+" : ""}${Math.round(v)}%</td>`;
+  };
+  // 산업 정렬: 기간 평균 높은 순
+  const gks = Object.keys(D.cells).sort((x, y) => (D.summary[y]?.avg ?? -999) - (D.summary[x]?.avg ?? -999));
+  const rows = gks.map((gk) => {
+    const per = D.cells[gk];
+    return `<tr><td class="iy-name">${gname(gk)}
+        ${D.summary[gk]?.wins ? `<span class="iy-win" title="이 기간 연간 1위 횟수">🏆${D.summary[gk].wins}</span>` : ""}</td>`
+      + years.map((y) => {
+        const c = per[y];
+        const isBest = D.tops[y]?.best === gk;
+        const td = cell(c ? c.med : null);
+        return isBest ? td.replace("<td", `<td class="iy-best" title="${y}년 1위 · 종목 ${c?.n ?? "-"}개"`) : td;
+      }).join("")
+      + `<td class="iy-avg"><b>${D.summary[gk]?.avg >= 0 ? "+" : ""}${Math.round(D.summary[gk]?.avg ?? 0)}%</b></td></tr>`;
+  }).join("");
+  const mktRow = `<tr class="iy-mkt"><td class="iy-name">시장 전체(중앙값)</td>`
+    + years.map((y) => cell(D.tops[y]?.mkt ?? null)).join("") + `<td class="iy-avg"></td></tr>`;
+  host.innerHTML = `<h2 style="margin-top:22px">📅 연도별 산업 수익률
+      <span class="sub-note">(${mk === "kr" ? "국내" : "미국"} · 각 산업 소속 종목 연간수익률의 <b>중앙값</b> · 🏆=그 해 1위)</span></h2>
+    <div class="tablewrap card-flat"><table class="iy-table">
+      <thead><tr><th class="iy-name">산업</th>${years.map((y) => `<th>${y.slice(2)}</th>`).join("")}<th class="iy-avg">평균</th></tr></thead>
+      <tbody>${rows}${mktRow}</tbody></table></div>
+    <p class="sub-note" style="margin-top:5px">${IYEARS.note} · 산업·연도별 종목 ${IYEARS.min_n}개 미만은 표시하지 않습니다 ·
+      ${IYEARS.generated} 기준. 주도 산업은 해마다 바뀝니다 — 특정 해의 1위가 다음 해에도 1위인 경우는 드뭅니다.</p>`;
+}
+
 /* 📈 지수 차트(v376) — 시장 내부(체력) 지표를 보기 전에 **지수 자체의 위치**를 먼저 보여준다.
    데이터는 이미 있는 macro의 5년 주봉(w5/w5d)을 재사용한다(추가 수집 0).
    ⚠지수마다 스케일이 전혀 다르므로(코스피 6,258 ↔ 다우 53,966) 한 축에 겹치지 않고 **카드별 개별 차트**로. */
@@ -9758,6 +9821,7 @@ function renderRotation() {
 
 function drawRotation() {
   const mk = $("#rot-mk").value;
+  loadIndustryYears().then(() => drawRotYears(mk));   // v377: 연도별 산업 수익률(표 아래)
   const rot = MPRO.rotation[mk];
   if (!rot) return;
   const m = rot.market;
