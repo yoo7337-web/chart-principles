@@ -61,6 +61,15 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 🔮 향후 6개월 방향 확률 (순환성 블록, v371) */
+.cyc-fwd { margin-top: 9px; padding: 8px 10px; background: var(--card2); border-radius: 9px; }
+.cyc-fwd-h { font-size: .82rem; font-weight: 700; display: flex; gap: 6px; align-items: baseline; }
+.cyc-fwd-bar { position: relative; height: 8px; border-radius: 4px; margin: 7px 0 5px;
+  background: linear-gradient(90deg, rgba(67,145,255,.25), rgba(255,255,255,.06), rgba(34,192,122,.3)); }
+.cyc-fwd-bar span { display: block; height: 100%; border-radius: 4px; background: rgba(255,255,255,.55); }
+.cyc-fwd-bar i { position: absolute; top: -3px; width: 1px; height: 14px; background: var(--muted); }
+.cyc-fwd-n { font-size: .82rem; }
+
 /* 🔄 순환성 경로 토글 (차트 컨트롤, v370) */
 #cyc-toggle.on { background: rgba(240,179,76,.18); border-color: rgba(240,179,76,.5); color: #f0b34c; }
 #cyc-note { font-size: .76rem; }

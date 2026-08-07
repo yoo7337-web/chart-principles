@@ -4027,6 +4027,15 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v372", "2026-08-08", "🔮 순환성 기반 향후 6개월 방향 확률 · 산업 합산 실적 요약",
+   "순환성을 활용해 **향후 6개월 방향을 확률로** 표시합니다. 개별 종목의 계절성은 표본이 10회뿐이어서 쓸 수 "
+   + "없으므로, **전 종목 10년을 (순환성 등급 × 사이클 위치)로 묶어** 표본을 구간당 300~9,900회까지 확보했습니다. "
+   + "확률은 '같은 시점 시장 중앙값을 이긴 비율'입니다 — 원수익으로 재면 강세장이 전부를 좋아 보이게 만들기 때문입니다.\n\n"
+   + "검증에서 나온 결론은 직관과 반대였습니다: **순환성 강한 종목은 낙폭이 클 때보다 고점권에서** 이후 6개월이 "
+   + "좋았습니다(고점권 승률 56.3%·초과 +5.6% ↔ 고점 -40% 이하 51.2%·+0.6%). 전·후반을 갈라도 방향이 유지됩니다. "
+   + "화면에는 표본 수·전후반 일관성·p값을 함께 적고, 유의하지 않으면 '근거 약함 — 참고용'이라고 밝힙니다.\n\n"
+   + "관심종목 **산업 맥락 카드에 산업 합산 실적**(소속 상장사 매출·CAPEX·영업이익률과 전년 대비)을 요약해 넣고, "
+   + "'📊 산업 지표 자세히 →' 버튼으로 그 산업 상세로 바로 갈 수 있게 했습니다."],
   ["v371", "2026-08-07", "재무 Snapshot 숫자 눌림 해결",
    "관심종목 재무 Snapshot의 숫자가 납작하게 눌려 보이던 문제를 고쳤습니다 — 그래프 좌표계가 실제 폭보다 "
    + "좁아 글자가 **가로로만 1.5배 늘어나** 있었습니다. 좌표계를 실제 폭에 맞추니 글자 비율이 정상으로 돌아왔고, "
@@ -8617,7 +8626,29 @@ function wsShow(key) {
             <b>${Math.abs(lastV) >= 1000 ? Math.round(lastV).toLocaleString() : lastV}</b>
             ${chg2 != null ? `<i class="${chg2 >= 0 ? "pos" : "neg"}">3개월 ${chg2 >= 0 ? "+" : ""}${chg2.toFixed(1)}%</i>` : "<i></i>"}</div>`;
         }).filter(Boolean).join("");
-        if (rows2) el.innerHTML = `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업 진단과 동일 소스)</span></div>` + rows2;
+        /* v371: 산업 지표 탭의 **산업군 상세**(소속 상장사 합산 펀더멘털)도 요약해 함께 보여준다
+           — 실물 지표만으로는 "그래서 이 산업의 실적은 어떤가"가 안 보였다(사용자 요청). */
+        const f = sm?.fund?.[tile?.grp];
+        let fundRows = "";
+        if (f?.length >= 2) {
+          const a = f[f.length - 1], b = f[f.length - 2];
+          const g = (cur, prev) => (prev ? ((cur / prev - 1) * 100) : null);
+          const eok = (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+          const kv = (lab, val, chg, unit = "") => `<div class="ws-kv-row"><span>${lab}</span>
+            <b>${val}</b>${chg == null ? "<i></i>" : `<i class="${chg >= 0 ? "pos" : "neg"}">${chg >= 0 ? "+" : ""}${chg.toFixed(1)}${unit}</i>`}</div>`;
+          fundRows = `<div class="ws-kv-h" style="margin-top:8px">산업 합산 실적
+              <span class="sub-note">${a.y} · 소속 ${a.n}개사(DART)</span></div>`
+            + kv("합산 매출", eok(a.rev), g(a.rev, b.rev), "%")
+            + kv("합산 CAPEX", eok(a.capex), g(a.capex, b.capex), "%")
+            + (a.opm != null ? kv("영업이익률", a.opm.toFixed(1) + "%",
+                b.opm != null ? a.opm - b.opm : null, "%p") : "");
+        }
+        if (rows2 || fundRows) el.innerHTML =
+          (rows2 ? `<div class="ws-kv-h">산업 지표 <span class="sub-note">(산업수익률 탭과 동일 소스)</span></div>` + rows2 : "")
+          + fundRows
+          + `<button class="today-chart-btn" id="ws-ind-more" style="margin-top:7px">📊 산업 지표 자세히 →</button>`;
+        const more = document.getElementById("ws-ind-more");
+        if (more && tile?.grp) more.onclick = () => gotoSecmet(tile.grp);
       });
       wsRelChart(key, mk);                 // 동종업계 상대주가 추이
     }
@@ -10165,8 +10196,37 @@ function cycProfileHtml(st) {
       <span class="cyc-track"><span class="cyc-fill ${cls}" style="width:${c.score}%"></span></span>
       <b>${c.score.toFixed(0)}</b><span class="sub-note">/100</span></div>
     ${rows.map(([k, v, tip]) => `<div class="ws-kv-row" title="${tip}"><span>${k}</span><b>${v}</b></div>`).join("")}
-    <p class="sub-note" style="margin-top:4px">10년 시계열 + DART 연간 실적으로 산출한 **상대 순위**(전 종목 백분위 평균)
+    ${cycFwd6Html(c)}
+    <p class="sub-note" style="margin-top:4px">10년 시계열 + DART 연간 실적으로 산출한 <b>상대 순위</b>(전 종목 백분위 평균)
       ${c.partial ? " · ⚠실적 데이터가 없어 가격 지표만 사용" : ""}</p>
+  </div>`;
+}
+
+/* 🔮 향후 6개월 방향 확률(v371) — 개별 종목 계절성(표본 10)이 아니라
+   **(순환성 등급 × 사이클 위치)로 전 종목 10년을 풀링**한 통계를 쓴다(구간당 표본 300~9,900).
+   ⚠확률은 '초과수익(같은 시점 시장 중앙값 대비) > 0' 비율이다 — 원수익으로 재면 강세장이 전부를
+     좋아 보이게 만든다. 전·후반 방향 일치와 p값을 함께 표시해 근거의 세기를 밝힌다. */
+function cycFwd6Html(c) {
+  const ph = c.phase, tbl = CYC?.phase_tbl;
+  if (!ph || !tbl) return "";
+  const cell = tbl[`${ph.cband}|${ph.band}`];
+  if (!cell) return "";
+  const w = cell.win;
+  const lean = w >= 55 ? ["상승 우위", "pos"] : w <= 45 ? ["하락 우위", "neg"] : ["중립(방향 불분명)", ""];
+  const strong = cell.consistent && cell.p < 0.05;
+  const ddLab = (CYC.dd_label || {})[ph.band] || ph.band;
+  return `<div class="cyc-fwd">
+    <div class="cyc-fwd-h">🔮 향후 6개월 방향 <b class="${lean[1]}">${lean[0]}</b>
+      <span class="sub-note">시장 대비</span></div>
+    <div class="cyc-fwd-bar"><span style="width:${Math.max(2, Math.min(98, w))}%"></span>
+      <i style="left:50%"></i></div>
+    <div class="cyc-fwd-n"><b class="${lean[1]}">${w}%</b> 확률로 시장을 이겼다
+      <span class="sub-note">(초과수익 중앙값 ${cell.ex_med >= 0 ? "+" : ""}${cell.ex_med}%)</span></div>
+    <p class="sub-note" style="margin-top:3px">현재 위치 <b>${ddLab}</b>(고점 대비 ${ph.dd}%) ·
+      순환성 ${ph.cband === "high" ? "강함" : ph.cband === "mid" ? "보통" : "약함"} 그룹의 같은 위치 표본 <b>${cell.n.toLocaleString()}회</b>
+      · 전·후반 ${cell.consistent ? "방향 일치" : "<b>방향 불일치</b>"} · p=${cell.p}
+      ${strong ? "" : " · <b>근거 약함 — 참고용</b>"}</p>
+    <p class="sub-note">전 종목 10년을 순환성 등급×사이클 위치로 묶은 통계입니다. 예측이 아니라 <b>과거 같은 상황의 분포</b>입니다.</p>
   </div>`;
 }
 
