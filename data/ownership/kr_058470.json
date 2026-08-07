@@ -1,1 +1,0 @@
-{"name": "리노공업", "code": "058470", "at": "2026-08-07", "year": 2025, "nodes": [{"id": "리노공업", "name": "리노공업", "lvl": 0, "listed": true, "ticker": "058470"}, {"id": "이채윤", "name": "이채윤", "lvl": -1, "listed": false, "ticker": null, "kind": "holder"}], "edges": [{"f": "이채윤", "t": "리노공업", "rate": 34.66}]}
