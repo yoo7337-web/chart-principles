@@ -3750,44 +3750,83 @@ function ownRender() {
   }
 }
 
-// 📅 데이터 갱신 기준표 — [그룹, [[화면(파일), 주기, 비고], …]]. 편성 변경 시 여기와 CLAUDE.md를 함께 갱신.
+// 📅 데이터 갱신 기준표 — [그룹, [[화면(파일), 주기, 비고, probe], …]]. 편성 변경 시 여기와 CLAUDE.md를 함께 갱신.
+// probe = {u: 파일 경로, exp: 정상 최대 나이(시간)} — Range 요청으로 머리 512B만 받아 generated/asof를 읽는다.
+//   {ls: localStorage 키}는 브라우저 저장분, null이면 전역 시각이 없는 데이터(종목별 증분).
 const DATA_SCHEDULE = [
   ["☁️ 클라우드 30분 — GitHub Actions (노트북 무관 24시간)", [
-    ["마켓 홈 · 매크로 · 히트맵 · 오늘의 종목 (market.json)", "30분", "시세는 확정가 기준 최대 30분 지연"],
-    ["시장 진단 · 섹터 로테이션 (market_pro.json)", "30분", "장기 시계열(breadth)은 하루 1점 적립"],
-    ["뉴스 (news.json)", "30분", "AI 브리핑은 하루 3회"],
-    ["딜 레이더 기사 (deals.json)", "30분", "AI 딜 브리핑은 하루 3회"],
-    ["오늘의 신호 (today_signals.json)", "30분", "확정 종가 기준 — 장중 잠정치로 판정하지 않음"],
-    ["공시 스캐너 (disclosures/)", "30분", "당일치 갱신 · 과거 날짜는 누적 보존(180일)"],
-    ["투자자 매매동향 · 외국인 랭킹 (investor.json)", "하루 1회 (20h 가드)", "30분 사이클에 실려 있으나 실호출은 일 1회"],
-    ["실적발표 · 경제지표 일정 (calendar.json)", "하루 1회 (20h 가드)", "US=yfinance · KR=KIND · 지표=TradingView"],
+    ["마켓 홈 · 매크로 · 히트맵 · 오늘의 종목 (market.json)", "30분", "시세는 확정가 기준 최대 30분 지연", { u: "data/market.json", exp: 1.5 }],
+    ["시장 진단 · 섹터 로테이션 (market_pro.json)", "30분", "장기 시계열(breadth)은 하루 1점 적립", { u: "data/market_pro.json", exp: 1.5 }],
+    ["뉴스 (news.json)", "30분", "AI 브리핑은 하루 3회", { u: "data/news.json", exp: 1.5 }],
+    ["딜 레이더 기사 (deals.json)", "30분", "AI 딜 브리핑은 하루 3회", { u: "data/deals.json", exp: 1.5 }],
+    ["오늘의 신호 (today_signals.json)", "30분", "확정 종가 기준 — 장중 잠정치로 판정하지 않음", { u: "data/today_signals.json", exp: 30 }],
+    ["공시 스캐너 (disclosures/)", "30분", "당일치 갱신 · 과거 날짜는 누적 보존(180일)", { u: "data/disclosures/index.json", exp: 1.5 }],
+    ["투자자 매매동향 · 외국인 랭킹 (investor.json)", "하루 1회 (20h 가드)", "30분 사이클에 실려 있으나 실호출은 일 1회", { u: "data/investor.json", exp: 26 }],
+    ["실적발표 · 경제지표 일정 (calendar.json)", "하루 1회 (20h 가드)", "US=yfinance · KR=KIND · 지표=TradingView", { u: "data/calendar.json", exp: 30 }],
   ]],
   ["☁️ 클라우드 일 1회", [
-    ["종목 피드: 뉴스·공시·증권사 리포트 (feed.json)", "매일 06:00", "2026-08-07부터 전용 워크플로(30분 사이클에서 분리)"],
-    ["기업개요 · 컨센서스 · 연간실적 · 투자지표 (company.json)", "6일 가드 (주 1회 수준)", "네이버·yfinance·DART"],
-    ["상세 재무제표 (financials/)", "매일 08:20 — 공시 트리거", "정기보고서 낸 종목만 · 분기 마감 후 전수 보완"],
+    ["종목 피드: 뉴스·공시·증권사 리포트 (feed.json)", "매일 06:00", "2026-08-07부터 전용 워크플로(30분 사이클에서 분리)", { u: "data/feed.json", exp: 30 }],
+    ["기업개요 · 컨센서스 · 연간실적 · 투자지표 (company.json)", "6일 가드 (주 1회 수준)", "네이버·yfinance·DART", { u: "data/company.json", exp: 24 * 7 }],
+    ["상세 재무제표 (financials/)", "매일 08:20 — 공시 트리거", "정기보고서 낸 종목만 · 분기 마감 후 전수 보완", null],
   ]],
   ["💻 노트북 배치 (꺼져 있으면 그 회차 건너뜀)", [
-    ["종목 차트 시계열 (stocks/)", "07:40 · 12:30 · 17:40 + 장중 30분", "오늘 봉은 브라우저가 30분 시세로 잠정 합성(고저 미확정)"],
-    ["당일 분봉 (intraday/)", "15:40", "장마감 스냅샷"],
-    ["실시간 랭킹 · 국고채 커브 · 호가 (toss_market.json)", "15:40", "토스 API — 허용 IP 등록제라 노트북 전용"],
-    ["보유 포트폴리오 동기화 (my_portfolio)", "15:40", "브라우저 반영은 '파일 가져오기' 수동 1스텝"],
-    ["크립토 (crypto.json)", "매일 07:40", "CoinGecko IP 제한으로 노트북 전용"],
-    ["트렌드 레이더 (trends.json)", "매일 07:40", ""],
-    ["종목 수급: 외국인·기관·개인 / 수급 스크리너", "매일 07:40", "네이버 — KR 전용"],
-    ["소유지분도 (ownership/) · 딜 구조 (deals_struct)", "매일 07:40", "90일/180일 증분"],
-    ["사업 심층 (bizdeep/) · 종목뉴스 아카이브 (stocknews/)", "매일 07:40", "종목별 90일 증분 / 1년치 증분"],
-    ["산업지표 (sector_metrics.json)", "하루 1회 (20h 가드)", "ECOS·야후 프록시"],
-    ["내재가치 · 재무 스냅샷 · 투자 대가 (valuation/fundamentals/gurus)", "주 1회", "heavy 배치"],
+    ["종목 차트 시계열 (stocks/)", "07:40 · 12:30 · 17:40 + 장중 30분", "오늘 봉은 브라우저가 30분 시세로 잠정 합성 · 상태=삼성전자 asof", { u: "data/stocks/kr_005930.json", exp: 30 }],
+    ["당일 분봉 (intraday/)", "15:40", "장마감 스냅샷", { u: "data/intraday/index.json", exp: 30 }],
+    ["실시간 랭킹 · 국고채 커브 · 호가 (toss_market.json)", "15:40", "토스 API — 허용 IP 등록제라 노트북 전용", { u: "data/toss_market.json", exp: 30 }],
+    ["보유 포트폴리오 동기화 (my_portfolio)", "15:40", "브라우저 반영은 '파일 가져오기' 수동 1스텝", { ls: "cp_toss_v1", exp: 30 }],
+    ["크립토 (crypto.json)", "매일 07:40", "CoinGecko IP 제한으로 노트북 전용", { u: "data/crypto.json", exp: 30 }],
+    ["트렌드 레이더 (trends.json)", "매일 07:40", "", { u: "data/trends.json", exp: 30 }],
+    ["종목 수급: 외국인·기관·개인 / 수급 스크리너", "매일 07:40", "네이버 — KR 전용 · 상태=수급 스크리너 기준", { u: "data/supply_scan.json", exp: 30 }],
+    ["소유지분도 (ownership/) · 딜 구조 (deals_struct)", "매일 07:40", "90일/180일 증분 · 상태=딜 구조 기준", { u: "data/deals_struct.json", exp: 30 }],
+    ["사업 심층 (bizdeep/) · 종목뉴스 아카이브 (stocknews/)", "매일 07:40", "종목별 90일 증분 / 1년치 증분", null],
+    ["산업지표 (sector_metrics.json)", "하루 1회 (20h 가드)", "ECOS·야후 프록시", { u: "data/sector_metrics.json", exp: 30 }],
+    ["내재가치 · 재무 스냅샷 · 투자 대가 (valuation/fundamentals/gurus)", "주 1회", "heavy 배치 · 상태=내재가치 기준", { u: "data/valuation.json", exp: 24 * 9 }],
   ]],
   ["📐 수동 · 분기", [
-    ["원칙 순위표 · 국면 · 2026 적용 (results/regimes/apply2026)", "90일 텀 수동 재검증", "잦은 재검증 = 커브 피팅이라 의도적 제한"],
-    ["기업 이해 보고서 (reports/)", "분기 (실적 발표 후)", "수동 트리거"],
-    ["투자 대가 13F 원천", "분기말 + 45일", "SEC 공시 제도 자체의 지연"],
+    ["원칙 순위표 · 국면 · 2026 적용 (results/regimes/apply2026)", "90일 텀 수동 재검증", "잦은 재검증 = 커브 피팅이라 의도적 제한", { u: "data/results.json", exp: 24 * 95 }],
+    ["기업 이해 보고서 (reports/)", "분기 (실적 발표 후)", "수동 트리거", { u: "data/reports/index.json", exp: 24 * 100 }],
+    ["투자 대가 13F 원천", "분기말 + 45일", "SEC 공시 제도 자체의 지연", null],
   ]],
 ];
 
+// 갱신표 상태 열 — 각 파일 머리 512B의 generated/asof를 읽어 주기 대비 신선도를 판정
+function dsAgeH(str) {
+  if (!str) return null;
+  const iso = str.length <= 10 ? `${str}T00:00:00+09:00` : `${str.replace(" ", "T")}:00+09:00`;
+  const t = new Date(iso);
+  return isNaN(t) ? null : (Date.now() - t.getTime()) / 3.6e6;
+}
+async function devSchedFill() {
+  const cells = [...document.querySelectorAll(".dev-sched td.dsc-st[data-u], .dev-sched td.dsc-st[data-ls]")];
+  await Promise.all(cells.map(async (td) => {
+    let text = null;
+    try {
+      if (td.dataset.ls) {
+        text = localStorage.getItem(td.dataset.ls) || "";
+        if (!text) { td.innerHTML = `<span class="sub-note">미연동</span>`; return; }
+      } else {
+        const r = await fetch(`${td.dataset.u}?nc=${Date.now()}`, { headers: { Range: "bytes=0-511" } });
+        text = (await r.text()).slice(0, 512); // 로컬 http.server는 Range 미지원(전문 응답) — 머리만 취함
+      }
+      const m = text.match(/"(?:generated|asof|us_updated|updated|ts)"\s*:\s*"([^"]+)"/);
+      const ts = m && m[1];
+      const age = dsAgeH(ts);
+      if (age == null) { td.innerHTML = `<span class="sub-note">시각 없음</span>`; return; }
+      const exp = parseFloat(td.dataset.exp) || 26;
+      const lv = age <= exp ? "ok" : age <= exp * 2 ? "warn" : "bad";
+      td.innerHTML = `<span class="dsc-dot ${lv}"></span>${ts}<span class="sub-note"> · ${relTime(ts.length <= 10 ? ts + " 00:00" : ts) || "-"}</span>`;
+      td.title = { ok: "정상(주기 이내)", warn: "지연(주기 1~2배)", bad: "이상(주기 2배 초과) — 배치·워크플로 확인 필요" }[lv];
+    } catch {
+      td.innerHTML = `<span class="sub-note">확인 불가</span>`;
+    }
+  }));
+}
+
 const DEV_HISTORY = [
+  ["v348", "2026-08-07", "갱신 기준표에 실시간 상태 표시",
+   "데이터 갱신 기준표에 **'현재 상태' 열**을 추가했습니다 — 표를 열 때마다 각 데이터 파일의 실제 생성 시각을 "
+   + "읽어 와 🟢정상(주기 이내) / 🟠지연 / 🔴이상으로 표시합니다. 어떤 데이터가 밀리고 있는지 이 표 한 장에서 "
+   + "바로 보입니다(파일 앞부분만 읽어 트래픽 부담 없음)."],
   ["v347", "2026-08-07", "데이터 갱신 기준표 · 갱신 파이프라인 안정화",
    "개발일지에 **📅 데이터 갱신 기준표**를 추가했습니다 — 어느 화면이 언제 기준의 데이터인지(30분/일1회/주1회/분기), "
    + "누가 갱신하는지(클라우드/노트북/수동)를 한 표로 정리했습니다.\n\n"
@@ -4148,12 +4187,19 @@ function bindBackupAll() {
 
 function renderDevlog() {
   bindBackupAll();
-  // 데이터 갱신 기준표(정적) — 1회만 생성
+  // 데이터 갱신 기준표 — 구조는 1회 생성, 상태 열은 진입할 때마다 재조회
   const sch = document.getElementById("dev-schedule");
-  if (sch && !sch.innerHTML) sch.innerHTML = `<table class="dev-sched">` + DATA_SCHEDULE.map(([g, rows]) =>
-    `<tbody><tr class="dsc-grp"><td colspan="3">${g}</td></tr>` + rows.map(([n, cyc, note]) =>
-      `<tr><td>${n}</td><td class="dsc-cyc">${cyc}</td><td class="sub-note">${note}</td></tr>`).join("") + `</tbody>`
-  ).join("") + `</table>`;
+  if (sch && !sch.innerHTML) {
+    sch.innerHTML = `<table class="dev-sched"><thead><tr>
+      <th>데이터 (화면)</th><th>갱신 주기</th><th>현재 상태</th><th>비고</th></tr></thead>` +
+      DATA_SCHEDULE.map(([g, rows]) =>
+        `<tbody><tr class="dsc-grp"><td colspan="4">${g}</td></tr>` + rows.map(([n, cyc, note, pr]) => {
+          const attr = pr ? (pr.u ? `data-u="${pr.u}" data-exp="${pr.exp}"` : `data-ls="${pr.ls}" data-exp="${pr.exp}"`) : "";
+          const init = pr ? `확인 중…` : `<span class="sub-note">종목별 증분 — 전역 시각 없음</span>`;
+          return `<tr><td>${n}</td><td class="dsc-cyc">${cyc}</td><td class="dsc-st" ${attr}>${init}</td><td class="sub-note">${note}</td></tr>`;
+        }).join("") + `</tbody>`).join("") + `</table>`;
+  }
+  devSchedFill();
   // 개발 내역(정적)
   const hist = document.getElementById("dev-history-list");
   if (hist) hist.innerHTML = DEV_HISTORY.map(([v, d, title, desc]) =>
