@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=350">
-<script src="firebase-config.js?v=350"></script>
-<script src="js/auth.js?v=350"></script>
+<link rel="stylesheet" href="css/style.css?v=351">
+<script src="firebase-config.js?v=351"></script>
+<script src="js/auth.js?v=351"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=350"></script>
+<script src="js/sync.js?v=351"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -396,8 +396,11 @@
       <div id="lookup-report" class="lk-report" style="display:none"></div>
       <div id="lookup-links" class="ext-links" style="display:none"></div>
     </div>
-    <!-- 기업개요(v350: 사용자 요청으로 차트 상단 복귀 — v285 원위치·그리드 밖 전폭. 요약 접기는 유지) -->
-    <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+    <!-- v351: 기업개요(좌) + 종목 메모(우) — 아래 .lk-grid와 같은 열 비율(1fr/400px)로 분할선을 맞춘다 -->
+    <div class="lk-toprow">
+      <div id="lookup-overview" class="card-flat lk-overview" style="display:none"></div>
+      <div id="lookup-memo" class="card-flat" style="display:none"></div>
+    </div>
     <!-- 아래부터 2단: 좌=차트·실적 / 우=레일(원칙·투자지표·호가·컨센·메모) -->
     <div class="lk-grid">
     <div class="lk-main">
@@ -514,10 +517,9 @@
     </div>
       <!-- ③ 투자지표 → ④ 컨센서스 (기업개요는 v275에서 본문 최상단으로 이동) -->
       <!-- v283: 투자지표를 우측 레일로(원칙 목록과 같은 열) -->
-      <!-- v349 순서: 지표 → 컨센 → 메모(위로) → 호가(요약 접기, 맨 아래) -->
+      <!-- v349 순서: 지표 → 컨센 → 호가(요약 접기). 메모는 v351에서 기업개요 옆(상단 우측)으로 이동 -->
       <div id="lookup-metrics" class="card-flat" style="display:none"></div>
       <div id="lookup-cons" class="card-flat" style="display:none"></div>
-      <div id="lookup-memo" class="card-flat" style="display:none"></div>
       <div id="lookup-micro" style="display:none"></div>
     </aside>
     </div><!-- /lk-grid -->
@@ -1251,7 +1253,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=350"></script>
+<script src="js/app.js?v=351"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

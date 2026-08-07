@@ -51,6 +51,10 @@
 .uf-chips { margin-left: 10px; }
 .uf-sec { margin-top: 10px; }
 .uf-sec-h { font-weight: 700; font-size: .88rem; margin-bottom: 4px; }
+/* 기업개요(좌)+종목 메모(우) 상단 분할(v351) — .lk-grid와 같은 열 비율로 분할선 정렬 */
+.lk-toprow { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: stretch; }
+.lk-toprow > .card-flat { min-width: 0; }
+@media (max-width: 1100px) { .lk-toprow { grid-template-columns: 1fr; } }
 /* 기업개요 접기 */
 .lk-overview { position: relative; }
 .lk-overview.collapsed { max-height: 240px; overflow: hidden; padding-bottom: 40px; }
