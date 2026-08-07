@@ -36,6 +36,7 @@ MACRO = {
     "^KQ11":    ("코스닥", "지수", "", "국내 성장주·개인 수급 심리"),
     "^GSPC":    ("S&P 500", "지수", "", "글로벌 위험자산의 기준점"),
     "^IXIC":    ("나스닥", "지수", "", "기술주·성장주 방향 — 반도체 보유 시 필수"),
+    "^DJI":     ("다우존스", "지수", "", "미국 대형 전통산업 — 성장주와 온도차를 보면 로테이션이 읽힌다"),
     "^SOX":     ("필라델피아 반도체", "지수", "", "삼성전자·하이닉스·NVDA의 선행 지표"),
     "^VIX":     ("VIX (공포지수)", "리스크", "", "20↑ 불안, 30↑ 공포 — 역발상 매수원칙의 사냥터"),
     "IPO":      ("IPO ETF (신규상장·미국)", "리스크", "$", "Renaissance IPO ETF — 위험선호·유동성의 척도. 상승=유동성 풀림·낙관(리스크온), 하락=신규자금 위축·비관(리스크오프)"),
@@ -114,8 +115,14 @@ def _macro_5y(tickers: list) -> dict:
         try:
             c = json.loads(MACRO5Y_CACHE.read_text(encoding="utf-8"))
             age_h = (datetime.now(KST) - datetime.fromisoformat(c["at"]).replace(tzinfo=KST)).total_seconds() / 3600
-            if age_h < 20:
+            # ⚠나이만 보면 **새로 추가한 티커가 20시간 동안 빈 채로 남는다**(v376 실측: ^DJI를 MACRO에
+            #   넣었는데 w5가 0이었다). 섹터맵에서 이미 겪은 것과 같은 패턴 —
+            #   캐시 유효성은 '언제 만들었나'가 아니라 **'요청한 티커를 다 갖고 있나'**로 판정한다.
+            missing = [t for t in tickers if t not in (c.get("weekly") or {})]
+            if age_h < 20 and not missing:
                 return c["weekly"]
+            if missing:
+                print(f"  macro 5y 캐시에 없는 티커 {missing} — 재생성")
         except Exception:
             pass
     import yfinance as yf

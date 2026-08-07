@@ -18,7 +18,10 @@ from common import APP_DATA, ROOT, dedupe_positions, load_ruleset
 from indicators import add_indicators
 
 OUT_DIR = APP_DATA / "stocks"
-CHART_BARS = 2520  # 최근 약 10년 (지표는 프런트 taEnrich()가 계산 — OHLCV만 저장해 용량 유지)
+# v376: '최대치로' 요청 → 보유 이력 **전부**를 방출한다(더 이상 잘라내지 않는다).
+#   ⚠단 실질 증가는 크지 않다 — 수집 시작이 2016-01-01(collect.START)이라 대부분 종목이 2,600봉 안팎이고
+#     기존 2,520봉이 이미 그 95%였다. 정말 더 긴 차트를 원하면 START를 앞으로 당겨 **전 종목 재수집**해야 한다.
+CHART_BARS = 10 ** 9  # 사실상 무제한(보유분 전체)
 # ⚠series는 **압축 배열** [t,o,h,l,c,v]로 저장한다. 구 dict 형식({"t":…,"o":…})은 봉당 ~113B라
 #   10년(2,520봉)이면 종목당 285KB·전체 380MB가 된다. 배열은 ~45B로 10년을 담고도 구 5년보다 작다.
 #   프런트는 로드 직후 normStock()이 객체로 되돌리므로 소비자 코드는 그대로다.
