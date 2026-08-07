@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=372">
-<script src="firebase-config.js?v=372"></script>
-<script src="js/auth.js?v=372"></script>
+<link rel="stylesheet" href="css/style.css?v=373">
+<script src="firebase-config.js?v=373"></script>
+<script src="js/auth.js?v=373"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=372"></script>
+<script src="js/sync.js?v=373"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -43,7 +43,7 @@
   <!-- v368: 매일 먼저 보는 화면이라 '오늘의 신호'를 맨 앞으로(사용자 요청).
        산업수익률은 '시장 보기'에서 이동(v210) — 산업을 좁혀 종목으로 가는 흐름 -->
   <button class="tab" data-tab="today">오늘의 신호</button>
-  <button class="tab" data-tab="rotation">산업수익률</button>
+  <button class="tab" data-tab="rotation">산업</button>
   <button class="tab" data-tab="screener">주식찾기</button>
   <button class="tab" data-tab="value">내재가치</button>
   <button class="tab" data-tab="gurus">투자 대가</button>
@@ -61,7 +61,6 @@
 </nav>
 <nav class="tabs" data-group-tabs="journal" style="display:none">
   <button class="tab" data-tab="holdings">포트폴리오</button>
-  <button class="tab" data-tab="journal">매매일지</button>
   <button class="tab" data-tab="diary">투자 다이어리</button>
   <button class="tab" data-tab="memo">종목 메모</button>
 </nav>
@@ -966,7 +965,6 @@
       (해외주식도 토스 화면 그대로 <b>원화 환산가</b>로 입력).</div>
     <div class="controls" style="align-items:center;gap:10px">
       <button class="jr-new" id="hld-add">＋ 종목 추가</button>
-      <button class="today-chart-btn" id="hld-import">📥 매매일지 진행중 불러오기</button>
       <button class="today-chart-btn" id="hld-file">📂 파일 가져오기 (토스/수기)</button>
       <input type="file" id="hld-file-input" accept=".json" style="display:none">
       <span style="flex:1"></span>
@@ -1051,60 +1049,6 @@
     <div id="pf-matrix" style="display:none;margin-top:14px"></div>
     <div id="pf-market" style="display:none;margin-top:14px"></div>
     <div id="pf-list" style="margin-top:14px"></div>
-  </section>
-  <section id="tab-journal" class="panel">
-    <div class="criteria">✍️ <b>매매일지</b> — 모든 데이터는 <b>이 브라우저에만</b> 저장됩니다(서버 전송 없음).
-      기기 변경·백업은 <b>내보내기/가져오기</b>(JSON) 사용. 손익 = (청산가−진입가)×수량, 공매도는 반대.</div>
-    <div class="idx-cards" id="jr-stats"></div>
-    <div class="home-topbar" style="margin:14px 0 10px">
-      <div class="chips" id="jr-filter">
-        <button class="chip active" data-f="all">전체</button>
-        <button class="chip" data-f="open">진행</button>
-        <button class="chip" data-f="closed">종료</button>
-      </div>
-      <span style="flex:1"></span>
-      <button class="today-chart-btn" id="jr-export">⬇ 내보내기</button>
-      <button class="today-chart-btn" id="jr-import">⬆ 가져오기</button>
-      <input type="file" id="jr-import-file" accept=".json" style="display:none">
-      <button class="jr-new" id="jr-new">＋ 새 거래</button>
-    </div>
-    <div id="jr-list"></div>
-
-    <dialog id="jr-modal">
-      <form method="dialog" class="jr-form" id="jr-form">
-        <div class="jr-head"><b id="jr-modal-title">새 거래 기록</b>
-          <button type="button" class="jr-x" id="jr-close">✕</button></div>
-        <div class="jr-grid3">
-          <label>종목 <input type="text" id="jr-ticker" placeholder="예: AAPL, 삼성전자" list="lookup-list" autocomplete="off" required></label>
-          <label>방향
-            <span class="mk-toggle" id="jr-side">
-              <button type="button" data-s="buy" class="active">매수</button>
-              <button type="button" data-s="short">공매도</button>
-            </span>
-            <span class="sub-note">보통 '매수'예요. 공매도는 빌려서 먼저 파는 고급 거래입니다.</span></label>
-          <label>수량 (주) <input type="number" id="jr-qty" min="0" step="any" placeholder="10" required></label>
-        </div>
-        <div class="jr-grid2">
-          <label>진입가 <input type="number" id="jr-entry" min="0" step="any" placeholder="150.00" required></label>
-          <label>청산가 <span class="sub-note">(비우면 진행중)</span> <input type="number" id="jr-exit" min="0" step="any" placeholder="-"></label>
-          <label>진입 시각 <input type="datetime-local" id="jr-etime"></label>
-          <label>청산 시각 <input type="datetime-local" id="jr-xtime"></label>
-        </div>
-        <label class="jr-full">매매 근거
-          <textarea id="jr-reason" rows="3" placeholder="왜 진입했는가? (차트 / 뉴스 / 패턴 / 전략)"></textarea></label>
-        <label class="jr-full">진입 당시 감정
-          <input type="text" id="jr-emotion" placeholder="차분 / 조급 / 공포 / 탐욕...">
-          <span class="badges" id="jr-emo-chips" style="margin-top:6px"></span></label>
-        <label class="jr-full">복기 노트
-          <textarea id="jr-note" rows="3" placeholder="잘한 점 · 실수 · 다음에 어떻게 할까?"></textarea></label>
-        <div class="jr-actions">
-          <button type="button" class="jr-del" id="jr-delete" style="display:none">삭제</button>
-          <span style="flex:1"></span>
-          <button type="button" class="today-chart-btn" id="jr-cancel">취소</button>
-          <button type="submit" class="jr-new" id="jr-save">＋ 기록</button>
-        </div>
-      </form>
-    </dialog>
   </section>
   <section id="tab-ownership" class="panel">
     <div class="criteria">🕸️ <b>소유지분도</b> — 그룹의 지배구조를 <b>DART 정기보고서</b>의 타법인 출자현황·최대주주
@@ -1307,7 +1251,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=372"></script>
+<script src="js/app.js?v=373"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

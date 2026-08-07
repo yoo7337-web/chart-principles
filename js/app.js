@@ -88,7 +88,7 @@ const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap",
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
   // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
-  rotation:  [["rotation", "산업수익률"], ["secmet", "🏭 산업 지표"]],
+  rotation:  [["rotation", "산업"], ["secmet", "🏭 산업 지표"]],
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
@@ -113,9 +113,9 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 }
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
-const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업수익률", news: "뉴스·딜",
+const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
-  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
+  holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", memo: "종목 메모", devlog: "개발일지",
   secmet: "산업 지표",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
   diary: "투자 다이어리", dealstruct: "딜 구조", ownership: "소유지분도" };
@@ -177,7 +177,6 @@ function activateTab(tabId) {
   if (tabId === "lookup" && !lookupRendered) initLookup();
   if (tabId === "screener" && !screenerRendered) initScreener();
   if (tabId === "value" && !valRendered) initValue();
-  if (tabId === "journal" && !journalRendered) initJournal();
   if (tabId === "diary" && !diaryRendered) initDiary();
   if (tabId === "dealstruct" && !dealsStructRendered) initDealsStruct();
   if (tabId === "ownership" && !ownRendered) initOwnership();
@@ -4027,6 +4026,12 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v373", "2026-08-08", "매매일지 탭 삭제 · '산업' 탭 이름 정리",
+   "내 투자에서 **매매일지 탭을 없앴습니다** — 이제 포트폴리오·투자 다이어리·종목 메모 세 탭입니다. "
+   + "토스 체결내역 가져올 때 매매일지에 기록하던 절차와 '매매일지 진행중 불러오기' 버튼도 함께 정리했습니다.\n\n"
+   + "⚠기록해 두신 매매일지 **데이터는 지우지 않았습니다** — 개발일지 탭의 '전체 백업'에 그대로 남아 있어 "
+   + "필요하면 JSON으로 내보낼 수 있습니다.\n\n"
+   + "'산업수익률' 탭 이름을 **산업**으로 줄였습니다."],
   ["v372", "2026-08-08", "🔮 순환성 기반 향후 6개월 방향 확률 · 산업 합산 실적 요약",
    "순환성을 활용해 **향후 6개월 방향을 확률로** 표시합니다. 개별 종목의 계절성은 표본이 10회뿐이어서 쓸 수 "
    + "없으므로, **전 종목 10년을 (순환성 등급 × 사이클 위치)로 묶어** 표본을 구간당 300~9,900회까지 확보했습니다. "
@@ -13674,22 +13679,6 @@ function initHoldings() {
     if (!pfHoldings().length || !confirm("보유 포트폴리오를 전부 삭제할까요?")) return;
     localStorage.removeItem(PF2_KEY); pfSave([]); hldRefresh();
   };
-  $("#hld-import").onclick = () => {
-    const open = (typeof jrLoad === "function" ? jrLoad() : []).filter((t) => t.exit == null && t.side === "buy");
-    if (!open.length) { alert("매매일지에 진행중(매수) 거래가 없습니다"); return; }
-    const d = pf2Load() || { krw: true, holdings: [] };
-    let added = 0;
-    open.forEach((t) => {
-      if (!d.holdings.some((x) => x.ticker === t.ticker)) {
-        d.holdings.push(pfDerive({ ticker: t.ticker, name: t.name, mk: /^\d{6}$/.test(t.ticker) ? "kr" : "us",
-          qty: t.qty, avg: t.entry, price: t.entry }));
-        added++;
-      }
-    });
-    d.krw = true; d.updated = pfToday(); pf2Save(d);
-    alert(added + "종목 불러옴 (중복 제외) — 현재가는 종목 편집에서 갱신하세요");
-    hldRefresh();
-  };
   $("#hld-file").onclick = () => $("#hld-file-input").click();
   $("#hld-file-input").onchange = (e) => {
     const f = e.target.files[0];
@@ -13716,11 +13705,6 @@ function initHoldings() {
           if (got.length) extraTxt = "\n확장 데이터: " + got.join(" · ");
         }
         alert(`가져오기 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (기준 ${d.synced})` : ""}${extraTxt}`);
-        if (d.ver >= 2 && Array.isArray(d.orders) && d.orders.length &&
-            confirm(`체결내역 ${d.orders.length}건을 매매일지에도 기록할까요? (이미 기록된 건은 건너뜁니다)`)) {
-          const r = jrImportToss(d.orders);
-          alert(`매매일지 기록 완료 — 신규 매수 ${r.added}건 · 청산 반영 ${r.closed}건 · 단독 매도 ${r.solo}건 · 중복 제외 ${r.dup}건`);
-        }
         hldRefresh();
       } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 {holdings:[...]} / [{ticker,qty,avg}] 배열)"); }
       e.target.value = "";
