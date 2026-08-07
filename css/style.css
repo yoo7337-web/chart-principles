@@ -61,6 +61,41 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 종목조회 산업 배지 — 산업 지표 링크는 색으로 구분(v366) */
+.lk-ind-badge.met { background: rgba(34,192,122,.14); border-color: rgba(34,192,122,.35); }
+
+/* 📊 최근 3개월 신호 비중 (종목조회 원칙 카드, v366) */
+.sig-mix { background: var(--card2); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px; }
+.sig-mix-h { display: flex; align-items: baseline; gap: 6px; font-size: .8rem; font-weight: 700; }
+.sig-mix-bar { display: flex; height: 9px; border-radius: 5px; overflow: hidden; margin: 7px 0 5px;
+  background: rgba(255,255,255,.06); }
+.sig-mix-bar .buy { background: var(--buy); }
+.sig-mix-bar .sell { background: var(--sell); }
+.sig-mix-n { display: flex; justify-content: space-between; font-size: .76rem; }
+
+/* 🕸️ 지분도 ★상장사 클릭 선택 팝오버 (v366) */
+.own-pick { position: fixed; z-index: 90; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 4px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.5); min-width: 178px; }
+.own-pick-h { font-size: .8rem; font-weight: 700; padding: 2px 6px 5px; border-bottom: 1px solid var(--line); }
+.own-pick button { background: none; border: none; color: var(--ink); text-align: left;
+  font-size: .84rem; padding: 7px 8px; border-radius: 7px; cursor: pointer; }
+.own-pick button:hover { background: var(--card2); }
+
+/* 💬 차트 메모 입력 모달 (v366) */
+#dw-memo-dialog { border: none; background: transparent; padding: 0; }
+#dw-memo-dialog::backdrop { background: rgba(0, 0, 0, .55); }
+.dwm-form { width: min(440px, 92vw); background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.dwm-form textarea { width: 100%; background: rgba(255,255,255,.05); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; color: inherit; font-family: inherit; font-size: .9rem;
+  line-height: 1.6; resize: vertical; }
+.dwm-form textarea:focus { border-color: var(--accent); outline: none; }
+.dwm-row { display: flex; align-items: center; gap: 8px; }
+.dwm-form .draw-swatches { display: flex; gap: 6px; }
+.dwm-form .draw-sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.dwm-form .draw-sw.active { border-color: var(--ink); }
+
 /* 🏭 산업 지표 탭 (v360) */
 #secmet-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 #secmet-table th, #secmet-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }

@@ -88,7 +88,7 @@ const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatma
 const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
   // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
-  rotation:  [["rotation", "산업 진단"], ["secmet", "🏭 산업 지표"]],
+  rotation:  [["rotation", "산업수익률"], ["secmet", "🏭 산업 지표"]],
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
@@ -113,7 +113,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 }
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
-const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업 진단", news: "뉴스·딜",
+const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업수익률", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
   secmet: "산업 지표",
@@ -1779,17 +1779,65 @@ function redrawDrawings() {
     // v363: 말풍선·텍스트는 더블클릭으로 내용 수정(지우고 다시 그리지 않게)
     sh.ondblclick = (ev) => {
       if (drawMode) return;
-      const it = (drawLoad()[drawKey()] || [])[+sh.dataset.i];
+      const idx = +sh.dataset.i;
+      const it = (drawLoad()[drawKey()] || [])[idx];
       if (!it || (it.type !== "callout" && it.type !== "text")) return;
       ev.stopPropagation(); ev.preventDefault();
-      const t = prompt("메모 수정", it.text || "");
-      if (t == null) return;
-      if (!t.trim()) { drawDelete(+sh.dataset.i); return; }   // 비우면 삭제
-      drawSel = +sh.dataset.i;
-      drawApplyToSel({ text: t.trim() });
+      dwMemoAsk({ text: it.text || "", color: it.color || drawColor, kind: it.type, canDelete: true })
+        .then((r) => {
+          if (!r) return;
+          if (r === "delete") { drawDelete(idx); return; }
+          drawSel = idx;
+          drawApplyToSel({ text: r.text, color: r.color });
+        });
     };
   });
   drawPaintSelection();
+}
+
+/* 💬 차트 메모 입력 모달 (v366) — 브라우저 prompt를 대체.
+   prompt는 한 줄만 받고 다크 테마와 어긋나며 색도 못 고른다 → 전용 dialog로.
+   반환: Promise<{text, color} | "delete" | null(취소)> */
+function dwMemoAsk({ text = "", color = drawColor, kind = "callout", canDelete = false } = {}) {
+  const dlg = document.getElementById("dw-memo-dialog");
+  if (!dlg) return Promise.resolve(text ? { text, color } : null);   // 마크업 없으면 조용히 통과
+  const ta = document.getElementById("dwm-text");
+  const cw = document.getElementById("dwm-colors");
+  const cnt = document.getElementById("dwm-count");
+  let cur = color;
+  document.getElementById("dwm-title").textContent = kind === "callout" ? "💬 말풍선 메모" : "🅣 텍스트 메모";
+  document.getElementById("dwm-sub").textContent = kind === "callout"
+    ? "클릭한 봉을 가리키는 말풍선" : "클릭한 자리에 글자만";
+  ta.value = text;
+  cnt.textContent = `${text.length}/200`;
+  document.getElementById("dwm-del").style.display = canDelete ? "" : "none";
+  cw.innerHTML = DRAW_COLORS.map((c) =>
+    `<button type="button" class="draw-sw${c === cur ? " active" : ""}" data-c="${c}" style="background:${c}"></button>`).join("");
+  cw.querySelectorAll(".draw-sw").forEach((b) => b.onclick = () => {
+    cur = b.dataset.c;
+    cw.querySelectorAll(".draw-sw").forEach((x) => x.classList.toggle("active", x === b));
+  });
+  return new Promise((resolve) => {
+    const done = (val) => {
+      ta.onkeydown = null;
+      dlg.close();
+      resolve(val);
+    };
+    document.getElementById("dwm-ok").onclick = () => {
+      const t = ta.value.trim();
+      done(t ? { text: t, color: cur } : null);
+    };
+    document.getElementById("dwm-cancel").onclick = () => done(null);
+    document.getElementById("dwm-x").onclick = () => done(null);
+    document.getElementById("dwm-del").onclick = () => done("delete");
+    ta.oninput = () => { cnt.textContent = `${ta.value.length}/200`; };
+    ta.onkeydown = (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); document.getElementById("dwm-ok").click(); }
+    };
+    dlg.onclose = () => resolve(null);          // Esc 등으로 닫힌 경우
+    dlg.showModal();
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 30);
+  });
 }
 
 // 말풍선 줄바꿈 — 공백 단위로 채우고, 한 낱말이 길면 그대로 한 줄(최대 4줄)
@@ -2095,17 +2143,24 @@ function bindDrawTools() {
     const c = toData(ev);
     if (DRAW_CLICK1.has(drawMode)) {          // 수평선·수직선·텍스트는 클릭 한 번으로 완성
       if (c.p == null || (c.t == null && c.fo == null)) return;
-      let text = null;
+      const put = (text, col) => {
+        drawPush();
+        const o = drawLoad(), k = drawKey();
+        (o[k] = o[k] || []).push({ type: drawMode, t1: c.t, fo1: c.fo, p1: c.p,
+          color: col || drawColor, style: drawStyle, ...(text ? { text } : {}) });
+        drawSaveAll(o);
+        redrawDrawings();
+      };
       if (drawMode === "text" || drawMode === "callout") {
-        text = prompt(drawMode === "callout" ? "말풍선 메모 (이 봉에 남길 내용)" : "메모 내용");
-        if (!text) return;
+        const mode = drawMode;   // 모달을 기다리는 동안 도구가 바뀔 수 있다
+        dwMemoAsk({ kind: mode }).then((r) => {
+          if (!r || r === "delete") return;
+          drawMode = mode;       // put이 drawMode로 type을 정하므로 복원
+          put(r.text, r.color);
+        });
+        return;
       }
-      drawPush();
-      const o = drawLoad(), k = drawKey();
-      (o[k] = o[k] || []).push({ type: drawMode, t1: c.t, fo1: c.fo, p1: c.p,
-        color: drawColor, style: drawStyle, ...(text ? { text } : {}) });
-      drawSaveAll(o);
-      redrawDrawings();
+      put(null, null);
       return;
     }
     start = c;
@@ -3491,6 +3546,28 @@ function initDealsStruct() {
    노드가 수십 개라 SVG 배선 대신 **계층 카드**로 그린다(읽기·클릭이 쉽다). */
 let OWN_IDX = null, OWN_G = null, ownSel = null, ownRendered = false;
 
+/* 클릭한 ★상장사로 '무엇을 볼지' 고르는 작은 팝오버(v366) — 지분도 있는 회사에만 뜬다. */
+function ownPickTarget(ev, key, goLookup) {
+  document.querySelectorAll(".own-pick").forEach((x) => x.remove());
+  const nm = (OWN_NAMES || []).find((x) => x.key === key)?.name || key.slice(3);
+  const box = document.createElement("div");
+  box.className = "own-pick";
+  box.innerHTML = `<div class="own-pick-h">${dsEsc(nm)}</div>
+    <button type="button" data-a="own">🕸️ 이 회사 지분도 보기</button>
+    <button type="button" data-a="look">📈 종목조회 열기</button>`;
+  document.body.appendChild(box);
+  // 화면 밖으로 나가지 않게 클램프(우측·하단)
+  const w = box.offsetWidth, h = box.offsetHeight;
+  box.style.left = Math.min(ev.clientX + 6, innerWidth - w - 10) + "px";
+  box.style.top = Math.min(ev.clientY + 6, innerHeight - h - 10) + "px";
+  box.querySelector('[data-a="own"]').onclick = () => { box.remove(); ownLoad(key); };
+  box.querySelector('[data-a="look"]').onclick = () => { box.remove(); goLookup(); };
+  setTimeout(() => {
+    const off = (e) => { if (!box.contains(e.target)) { box.remove(); document.removeEventListener("pointerdown", off); } };
+    document.addEventListener("pointerdown", off);
+  }, 0);
+}
+
 /* 출자 목적 분류 — 공정위 지분도는 '지배' 관계만 그린다. 보험·지주는 단순투자 지분이 수백 건이라
    섞으면 계열 1,300사처럼 보인다(현대해상 실측) → 기본은 지배관계만, 투자분은 토글. */
 function ownIsCtrl(n, rate) {
@@ -3800,10 +3877,18 @@ function ownRender() {
       <span class="og-lg"><i class="og-i unit"></i>계열사</span>
       <span class="og-lg"><i class="og-i sub"></i>하위 계열사</span>
       · 출처: DART 정기보고서 '타법인 출자현황'·'최대주주 현황'.
-      ★는 상장사(클릭하면 종목조회로 이동). 비상장 자회사는 사업보고서를 내지 않으면 하위가 비어 있을 수 있습니다.</p>`;
+      ★는 상장사 — 클릭하면 <b>종목조회</b>로 가고, 그 회사의 지분도가 따로 있으면 <b>어디로 갈지 고를 수 있습니다</b>.
+      비상장 자회사는 사업보고서를 내지 않으면 하위가 비어 있을 수 있습니다.</p>`;
 
-  host.querySelectorAll("[data-go]").forEach((el) => el.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.go);
+  /* ★상장사 클릭(v366) — 그 회사 **자체 지분도가 있는 경우에만** 갈 곳을 묻는다.
+     지분도 수록은 시총 상위 400 + 지주회사라, 같은 그래프의 상장사라도 자체 지분도가 없는 곳이 있다
+     (실측 코오롱 그래프: 코오롱·코오롱인더·코오롱티슈진은 있고 코오롱글로벌·코오롱생명과학은 없다). */
+  host.querySelectorAll("[data-go]").forEach((el) => el.onclick = (ev) => {
+    const key = el.dataset.go;
+    const goLookup = () => { gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(key); };
+    if (key === ownSel || !(OWN_IDX || []).includes(key)) return goLookup();   // 지분도 없음/현재 그래프 → 직행
+    ev.stopPropagation();
+    ownPickTarget(ev, key, goLookup);
   });
   const tg = document.getElementById("own-inv");
   if (tg) tg.onclick = () => { ownShowInv = !ownShowInv; ownRender(); };
@@ -3899,6 +3984,19 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v367", "2026-08-07", "최근 3개월 신호 비중 · 종목조회에서 산업 지표로 바로 이동",
+   "종목조회 원칙 카드 위에 **최근 3개월 매수/매도 신호 비중**을 한 줄 막대로 넣었습니다 — 개별 원칙 건수만 "
+   + "보면 이 종목이 어느 쪽으로 기울어 있는지 알기 어려웠습니다. 채택 원칙(10년 검증 통과)만 세어 "
+   + "'매수 우위 / 혼재 / 매도 우위'로 요약합니다.\n\n"
+   + "산업 배지 옆에 **📊 산업 지표 →** 버튼을 달았습니다 — 누르면 그 종목이 속한 산업의 수출·전방지표와 "
+   + "합산 펀더멘털로 바로 이동합니다(국내 종목만)."],
+  ["v366", "2026-08-07", "차트 메모 입력창 새 디자인 · 지분도 이동 선택 · 라벨 순서 · 이름 정리",
+   "차트 메모를 브라우저 기본 입력창에서 **전용 팝업**으로 바꿨습니다 — 여러 줄 입력, 색 선택, 글자 수 표시, "
+   + "Ctrl+Enter 저장·Esc 취소를 지원하고 기존 메모를 고칠 때는 삭제 버튼도 함께 나옵니다.\n\n"
+   + "소유지분도에서 **★상장사를 누르면 갈 곳을 고를 수 있습니다** — 그 회사의 지분도가 따로 있으면 "
+   + "'이 회사 지분도 보기 / 종목조회 열기'를 묻고, 지분도가 없으면 예전처럼 종목조회로 바로 갑니다.\n\n"
+   + "Snapshot 성장·이익률 차트에서 **값이 큰 쪽 숫자가 위에 오도록** 정리했습니다(예전엔 선 순서로 정해져 "
+   + "60.1%가 70.8% 위에 오는 역전이 있었습니다). '산업 진단' 탭 이름은 **산업수익률**로 바꿨습니다."],
   ["v364", "2026-08-07", "💬 차트 말풍선 메모 · 도형 색·선모양 즉시 변경 · 산업 지표 위치 이동",
    "차트에 **💬 말풍선 메모**를 추가했습니다 — 그리기 도구에서 💬를 고르고 봉을 클릭하면 그 지점을 "
    + "가리키는 말풍선이 붙습니다(\"여기서 실적 발표\" 같은 기록). 드래그로 옮기고, **더블클릭하면 내용을 수정**하며, "
@@ -5217,14 +5315,21 @@ function renderLookupIndustry(st) {
     const links = stockChainLinks("kr", st.ticker, sector);
     if (!links.length) { host.style.display = "none"; return; }
     host.style.display = "";
+    // v366: 배지=주식찾기(같은 산업 종목 찾기) + 별도 버튼=산업 지표(그 산업의 수출·전방지표·펀더멘털)
+    const grp = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.grp;
     host.innerHTML = `<span class="lk-ind-label">🏭 산업·밸류체인</span>` + links.map((l) =>
-      `<button class="lk-ind-badge" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.indIcon} ${l.indName}<span class="lk-ind-arrow">›</span>${l.stageIcon} ${l.stage}</button>`).join("");
-    host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => scrOpenFromChain(b.dataset.ind, b.dataset.stage));
+      `<button class="lk-ind-badge" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.indIcon} ${l.indName}<span class="lk-ind-arrow">›</span>${l.stageIcon} ${l.stage}</button>`).join("")
+      + (grp ? `<button class="lk-ind-badge met" data-met="${grp}" title="이 산업의 수출·전방지표·합산 펀더멘털 보기">📊 산업 지표 →</button>` : "");
+    host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => {
+      if (b.dataset.met) gotoSecmet(b.dataset.met);
+      else scrOpenFromChain(b.dataset.ind, b.dataset.stage);
+    });
   } else {
     let sector = tileSec || US_SECTOR_KO[st.profile?.sector] || st.profile?.sector || null;  // 한글 업종 우선
     const g = stockGroupLink(sector);
     if (!g) { host.style.display = "none"; return; }
     host.style.display = "";
+    // ⚠산업 지표(sector_metrics)는 국내 전용이라 미국 종목엔 그 버튼을 달지 않는다
     host.innerHTML = `<span class="lk-ind-label">🏭 업종</span><button class="lk-ind-badge" data-us="${g.key}">${g.icon} ${g.name}${sector ? ` <span class="sub-note">(${sector})</span>` : ""}</button>`;
     host.querySelector(".lk-ind-badge").onclick = () => scrOpenFromGroupUS(g.key, sector);
   }
@@ -10155,7 +10260,26 @@ function buildSigChips(st) {
       "검증 기준 미달 — 근거가 약하니 참고만", "unsel");
   const host = $("#lookup-chips");
   const allRids = items.map((x) => x.rid);
-  const bar = `<div class="rl-bar">
+  /* 📊 최근 3개월 매수/매도 신호 비중(v366) — 개별 원칙 건수만 보면 '지금 이 종목이 어느 쪽으로
+     기울어 있나'가 안 보인다. 채택 원칙 신호만 세어 한 줄 스택 바로 요약한다(참고 원칙은 제외). */
+  const cut90 = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+  const recent = (st.markers || []).filter((m) => m.t >= cut90 && SELECTED_RULES.has(m.rule_id));
+  const nBuy = recent.filter((m) => m.side === "buy").length;
+  const nSell = recent.length - nBuy;
+  const ratio = recent.length ? nBuy / recent.length * 100 : null;
+  const lean = ratio == null ? "" : ratio >= 65 ? "매수 우위" : ratio <= 35 ? "매도 우위" : "혼재";
+  const mix = `<div class="sig-mix">
+      <div class="sig-mix-h">최근 3개월 신호 비중
+        ${ratio == null ? `<span class="sub-note">신호 없음</span>`
+          : `<b class="${ratio >= 65 ? "pos" : ratio <= 35 ? "neg" : ""}">${lean}</b>
+             <span class="sub-note">채택 원칙 ${recent.length}회</span>`}</div>
+      ${ratio == null ? "" : `<div class="sig-mix-bar">
+        <span class="buy" style="width:${ratio.toFixed(1)}%"></span>
+        <span class="sell" style="width:${(100 - ratio).toFixed(1)}%"></span></div>
+      <div class="sig-mix-n"><span class="pos">▲ 매수 ${nBuy}회 (${ratio.toFixed(0)}%)</span>
+        <span class="neg">▼ 매도 ${nSell}회 (${(100 - ratio).toFixed(0)}%)</span></div>`}
+    </div>`;
+  const bar = mix + `<div class="rl-bar">
       <span class="rl-bar-n" id="rl-count"></span>
       <button class="rl-bar-btn" id="rl-all">전체 선택</button>
       <button class="rl-bar-btn" id="rl-none">전체 해제</button>
@@ -11840,14 +11964,22 @@ function renderFinTrends(st) {
     const pad2 = (maxV - minV) * 0.15 || 5;
     const yS = (v) => padT + (maxV + pad2 - v) / (maxV - minV + pad2 * 2 || 1) * plotH;
     let svg = "";
+    /* 라벨 위·아래 배치는 **그 시점에서 값이 큰 쪽이 위**로 간다(v366, 사용자 요청).
+       ⚠전에는 시리즈 순서(j % 2)로 정해서 60.1%가 70.8% 위에 오는 역전이 났다.
+       같은 x의 값들을 미리 순위 매겨, 1등은 위(dir -1)·나머지는 아래(dir +1)로 방향을 준다. */
+    const rankAt = rows.map((r) => {
+      const vs = keys.map((k) => r[k]).filter(Number.isFinite).sort((a, b) => b - a);
+      return (v) => vs.indexOf(v);          // 0 = 그 시점 최댓값
+    });
     keys.forEach((k, j) => {
-      const pts = rows.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
+      const pts = rows.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k], i] : null)).filter(Boolean);
       if (pts.length < 2) return;
       svg += `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
         fill="none" stroke="${colors[j]}" stroke-width="2"${dash[j] ? ` stroke-dasharray="${dash[j]}"` : ""}/>`
         + pts.map((p) => {
-          pushLbl(p[0], p[1] + (j % 2 ? 16 : -8),
-            p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1) + "%", colors[j], 10.5, j % 2 ? 1 : -1, 1);
+          const top = rankAt[p[3]](p[2]) === 0;      // 그 시점에서 가장 큰 값인가
+          pushLbl(p[0], p[1] + (top ? -8 : 16),
+            p[2].toFixed(Math.abs(p[2]) >= 100 ? 0 : 1) + "%", colors[j], 10.5, top ? -1 : 1, 1);
           return `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${colors[j]}"/>`;
         }).join("");
     });
