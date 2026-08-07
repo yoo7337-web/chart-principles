@@ -79,7 +79,7 @@ function logoUrl(mk, tk) {
 /* ---------- 중분류(그룹) + 탭 ---------- */
 // ⚠상위 그룹을 새로 만들면 **여기에 기본 탭을 반드시 등록**할 것.
 //   빠지면 그룹 버튼을 눌러도 activateTab(undefined)가 되어 화면이 비어 보인다(v245 딜 구조 실사고).
-const lastTabOfGroup = { research: "rank", discover: "screener", market: "heatmap", journal: "holdings",
+const lastTabOfGroup = { research: "rank", discover: "today", market: "heatmap", journal: "holdings",
                          watch: "watch",            // 관심종목은 탭 1개짜리 상위 그룹(v210)
                          dealstruct: "dealstruct", ownership: "ownership" };
 
@@ -3984,6 +3984,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v368", "2026-08-07", "오늘의 신호 첫 탭 · 다이어리 버튼 한 줄 정리",
+   "'종목 찾기'에서 **오늘의 신호를 맨 왼쪽 첫 탭**으로 옮기고, 그룹에 처음 들어갈 때도 이 화면이 열리게 했습니다.\n\n"
+   + "투자 다이어리 포스트잇에서 **삭제 버튼이 아래 줄로 떨어지던 문제**를 고쳤습니다 — 카드 폭이 좁아 헤더가 "
+   + "두 줄로 갈라졌던 것이라, 날짜·종목 배지를 줄임표로 처리해 수정·삭제가 항상 같은 줄에 오게 했습니다."],
   ["v367", "2026-08-07", "최근 3개월 신호 비중 · 종목조회에서 산업 지표로 바로 이동",
    "종목조회 원칙 카드 위에 **최근 3개월 매수/매도 신호 비중**을 한 줄 막대로 넣었습니다 — 개별 원칙 건수만 "
    + "보면 이 종목이 어느 쪽으로 기울어 있는지 알기 어려웠습니다. 채택 원칙(10년 검증 통과)만 세어 "

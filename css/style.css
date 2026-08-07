@@ -2167,10 +2167,18 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .di-card.k-regret { background: #2b1a1d; border-top-color: #f5445a; }
 .di-card.k-stock { background: #1c2233; border-top-color: #4391ff; }
 .di-card.di-flash { border-color: #e0a93f; box-shadow: 0 0 0 2px rgba(224,145,47,.35), 0 7px 18px rgba(0,0,0,.5); }
-.di-card .di-head { margin-bottom: 7px; }
+/* ⚠포스트잇은 폭이 좁아(3열 ≈ 450px) 헤더가 두 줄로 갈라지고 삭제 버튼만 아래로 떨어졌다(v368).
+   → 헤더는 **한 줄 고정**(nowrap)으로 두고, 종목 배지·날짜는 남는 폭에서 줄임표 처리한다.
+   버튼(수정·삭제)은 절대 줄바꿈되지 않게 flex-shrink를 막는다. */
+.di-card .di-head { margin-bottom: 7px; flex-wrap: nowrap; min-width: 0; }
+.di-card .di-head .sub-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.di-card .di-tk { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.di-card .di-mini { flex: 0 0 auto; }
 /* 편집·삭제 버튼은 평소 흐리게 — 메모 내용이 먼저 읽히게 */
 .di-card .di-mini { opacity: .45; transition: opacity .14s; }
 .di-card:hover .di-mini { opacity: 1; }
+/* 본문에 더 많은 줄을 담는다(요청) */
+.di-card .di-body { min-height: 2.6em; }
 .di-type.t-stock { background: rgba(67,145,255,.16); color: #7cb1ff; }
 .di-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .di-type { font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
