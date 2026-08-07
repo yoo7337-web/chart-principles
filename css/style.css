@@ -61,6 +61,16 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 📍 관심종목 추이 그래프의 고가·저가·현재가 표시 (v369) */
+.ws-px { position: absolute; transform: translate(6px, -50%); font-size: .68rem; font-weight: 700;
+  padding: 1px 5px; border-radius: 4px; white-space: nowrap; pointer-events: none;
+  background: rgba(23,23,28,.82); border: 1px solid var(--line); }
+.ws-px.flip { transform: translate(calc(-100% - 6px), -50%); }
+.ws-px.hi { color: var(--kup); border-color: rgba(245,68,90,.4); }
+.ws-px.lo { color: var(--kdn); border-color: rgba(67,145,255,.4); }
+.ws-px.cur { color: var(--ink); border-color: rgba(255,255,255,.28); }
+.ws-px-note { margin: 5px 0 0; font-size: .74rem; }
+
 /* 종목조회 산업 배지 — 산업 지표 링크는 색으로 구분(v366) */
 .lk-ind-badge.met { background: rgba(34,192,122,.14); border-color: rgba(34,192,122,.35); }
 
@@ -2410,7 +2420,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .ws-fin-tg i { margin-left: 6px; }
 .ws-fin-val { font-size: 7.4px; fill: var(--muted); }
 .ws-fin-val.kdn { fill: var(--kdn); }
-.ws-fin-spark { height: 50px; }
+.ws-fin-spark { height: 68px; }
 
 /* 종목조회 신호·원칙 — 우측 레일(v276). 차트 폭은 건드리지 않는다 */
 .lk-side #lookup-filter { display: block; margin: 0 0 10px; }

@@ -3150,14 +3150,19 @@ function dsDiagram(x) {
     if (x.target) nodes.push({ t: x.target, s: "대상", c: "tgt" });
     arrows = nodes.length === 3 ? ["매각", amtTxt || "취득"] : [amtTxt || "취득"];
   }
-  const W = 250, BH = 38, GAP = 34;
+  /* ⚠좌표계 폭을 **DS_W(420)로 통일**한다(v369). 예전엔 W=250이라, 소유구조가 붙어 420으로 다시
+     그려지는 지분 인수 도식과 스케일이 달라 **합병만 글자·박스가 1.7배 커 보였다**(사용자 지적).
+     SVG는 width:100%라 viewBox 폭이 좁을수록 그만큼 확대된다 — 같은 자리에 놓는 도식은 폭을 맞춰야 한다. */
+  const W = DS_W, BH = 46, GAP = 40, FS = 12;
   const H = nodes.length * BH + (nodes.length - 1) * GAP + 8;
   let svg = "";
   nodes.forEach((n, i) => {
     const y = 4 + i * (BH + GAP);
-    svg += `<rect x="4" y="${y}" width="${W - 8}" height="${BH}" rx="7" class="ds-box ds-box-${n.c}"/>
-      <text x="${W / 2}" y="${y + 16}" class="ds-box-t">${dsName(n.t).slice(0, 14)}</text>
-      <text x="${W / 2}" y="${y + 29}" class="ds-box-s">${dsEsc(n.s)}</text>`;
+    const lines = dsWrap(n.t, W - 8, FS);       // 넓어진 폭에 맞춰 2줄까지 자동 줄바꿈(잘라내지 않는다)
+    const ty = y + (lines.length > 1 ? 17 : 21);
+    svg += `<rect x="4" y="${y}" width="${W - 8}" height="${BH}" rx="7" class="ds-box ds-box-${n.c}"/>`
+      + lines.map((ln, li) => `<text x="${W / 2}" y="${ty + li * (FS + 2)}" class="ds-box-t">${dsEsc(ln)}</text>`).join("")
+      + `<text x="${W / 2}" y="${y + BH - 8}" class="ds-box-s">${dsEsc(n.s)}</text>`;
     if (i < nodes.length - 1) {
       const ay = y + BH, by = y + BH + GAP;
       svg += `<line x1="${W / 2}" y1="${ay + 3}" x2="${W / 2}" y2="${by - 5}" class="ds-arrow"/>
@@ -3984,6 +3989,12 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v369", "2026-08-07", "관심종목 그래프에 고가·저가·현재가 · 재무 Snapshot 확대 · 합병 도식 통일",
+   "관심종목 **추이·신호 그래프에 구간 고가·저가·현재가를 표시**했습니다 — 선만 보면 지금이 그 구간의 어디쯤인지 "
+   + "읽기 어려웠습니다. 그래프 아래에 '구간 내 몇 % 위치'도 함께 적습니다.\n\n"
+   + "**재무 Snapshot 높이를 키웠습니다**(각 줄 50→68px) — 값과 증감률이 답답하게 붙어 있던 것이 풀렸습니다.\n\n"
+   + "딜 구조에서 **합병 도식만 글자·박스가 크게 보이던 문제**를 고쳤습니다 — 합병은 좁은 좌표계(250)를 쓰고 "
+   + "지분 인수는 소유구조가 붙어 420으로 다시 그려져 확대 배율이 달랐습니다. 폭을 통일하니 두 도식의 글자 크기가 같아집니다."],
   ["v368", "2026-08-07", "오늘의 신호 첫 탭 · 다이어리 버튼 한 줄 정리",
    "'종목 찾기'에서 **오늘의 신호를 맨 왼쪽 첫 탭**으로 옮기고, 그룹에 처음 들어갈 때도 이 화면이 열리게 했습니다.\n\n"
    + "투자 다이어리 포스트잇에서 **삭제 버튼이 아래 줄로 떨어지던 문제**를 고쳤습니다 — 카드 폭이 좁아 헤더가 "
@@ -7998,7 +8009,9 @@ function wsFinDraw(key, mk, co, m) {
       let lo = Math.min(...vs), hi = Math.max(...vs);
       if (lo > 0) lo = Math.min(lo * 0.92, lo);
       if (hi === lo) { hi += 1; lo -= 1; }
-      const W = 300, H = 50, fs2 = 7;      // fs2 = 증감률 라벨 높이 기준
+      // v369: 행이 너무 낮아 값·증감률이 답답했다 → viewBox와 CSS 높이를 같은 비율(1.36배)로 키운다
+      //   ⚠preserveAspectRatio="none"이라 한쪽만 키우면 글자가 늘어난다(비율을 맞춰야 한다).
+      const W = 300, H = 68, fs2 = 7;      // fs2 = 증감률 라벨 높이 기준
       const X = (i) => 10 + (i / (rows.length - 1)) * (W - 20);
       const Y = (v) => 14 + (hi - v) / (hi - lo) * (H - 22);
       const line = pts.map((x) => `${X(x.i).toFixed(1)},${Y(x.v).toFixed(1)}`).join(" ");
@@ -8193,10 +8206,30 @@ function wsSpark(series, sigPts) {
       title="${dsEsc(g.name)} · ${String(g.t).slice(5)}${g.recent ? " (최근)" : ""}">
       <i>${buy ? "▲" : "▼"}</i><b>${dsEsc(abbr)}</b></span>`;
   }).join("");
+  /* 📍 고가·저가·현재가 표시(v369, 사용자 요청) — 선만 보면 "지금이 구간의 어디쯤인가"를 못 읽는다.
+     ⚠라벨도 신호 마커와 같은 이유로 **HTML 오버레이**(preserveAspectRatio="none"이면 글자가 늘어난다).
+     ⚠고·저가가 현재가와 x축에서 가까우면 라벨이 겹친다 → 현재가는 항상 우측 끝에 붙이고,
+       고·저 라벨은 그 x 위치에서 좌우 어느 쪽에 붙일지 화면 폭을 보고 정한다. */
+  const mkPos = (v, i) => ({ xp: (X(i) / W) * 100, yp: (Y(v) / H) * 100 });
+  const iHi = cs.indexOf(hi), iLo = cs.indexOf(lo), iCur = cs.length - 1;
+  const cur = cs[iCur];
+  const pxf = (v) => fmtPrice(v, LOOKUP_ST?.market === "us" || (wsSel || "").startsWith("us") ? "us" : "kr");
+  const tag = (v, i, cls, ico) => {
+    const p = mkPos(v, i);
+    const right = p.xp > 62;                     // 오른쪽 끝 근처면 라벨을 왼쪽으로 뺀다
+    return `<span class="ws-px ${cls}${right ? " flip" : ""}" style="left:${p.xp.toFixed(2)}%;top:${p.yp.toFixed(2)}%">
+      ${ico} ${pxf(v)}</span>`;
+  };
+  const pxTags = tag(hi, iHi, "hi", "▲")
+    + tag(lo, iLo, "lo", "▼")
+    + (iCur !== iHi && iCur !== iLo ? tag(cur, iCur, "cur", "●") : "");
+  const posPct = hi > lo ? ((cur - lo) / (hi - lo) * 100) : null;
   return `<div class="ws-spark-wrap">
     <svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
       <polyline points="${pts}" fill="none" stroke="#8e97a6" stroke-width="1.5"/>
-    </svg>${overlay}</div>`;
+    </svg>${overlay}${pxTags}</div>
+    <p class="ws-px-note sub-note">구간 고가 <b class="kup">${pxf(hi)}</b> · 저가 <b class="kdn">${pxf(lo)}</b>
+      · 현재 <b>${pxf(cur)}</b>${posPct != null ? ` <span>(구간 내 ${posPct.toFixed(0)}% 위치)</span>` : ""}</p>`;
 }
 
 function wsShow(key) {
