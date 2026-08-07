@@ -113,6 +113,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업 진단", news: "뉴스·딜",
   calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", journal: "매매일지", memo: "종목 메모", devlog: "개발일지",
+  secmet: "산업 지표",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
   diary: "투자 다이어리", dealstruct: "딜 구조", ownership: "소유지분도" };
 let navStack = [];
@@ -181,6 +182,7 @@ function activateTab(tabId) {
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
   if (tabId === "memo") renderMemo();
   if (tabId === "devlog") renderDevlog();
+  if (tabId === "secmet" && !secmetRendered) renderSecmetTab();
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "econcal" && !ecRendered) renderEconCal();
@@ -3828,6 +3830,13 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v360", "2026-08-07", "🏭 산업 지표 독립 탭 — 12산업군 한눈 비교 · 미국 유니버스 532종목",
+   "섹터 로테이션에서 산업군을 클릭해야만 보이던 **산업지표(수출지수·전방지표·펀더멘털 합산)를 독립 탭**으로 "
+   + "분리했습니다(시장 보기 › 🏭 산업 지표). 상단 **비교 보드**에서 12개 산업군의 시가총액·수익률(당일/1M/3M, "
+   + "시총가중)·매출/CAPEX 증가율·영업이익률·대표지표 3개월 변화를 한 표로 비교하고(열 클릭=정렬), "
+   + "행이나 칩을 누르면 아래에서 그 산업군의 상세 지표·펀더멘털 차트를 봅니다. 섹터 로테이션 펼침에는 이동 버튼만 남겼습니다.\n\n"
+   + "**미국 유니버스를 136 → 532종목**(S&P500+나스닥100)으로 넓혔습니다 — 주식찾기·종목조회·히트맵에서 "
+   + "미국 대형주 전체를 다룹니다. 분봉·사업 심층 같은 무거운 수집은 기존 138종목 코어를 유지합니다."],
   ["v359", "2026-08-07", "동종업계 상대주가 5년 · 글씨 크기 정리",
    "관심종목의 **동종업계 상대주가를 6개월 → 5년**으로 늘렸습니다. 짧은 구간에서는 보이지 않던 "
    + "장기 격차(같은 업종 안에서 누가 계속 이겨왔나)가 드러납니다.\n\n"
@@ -9544,6 +9553,11 @@ function secMetricsHtml(sector) {
   if (!SECMET) return "";
   const gk = SECMET.map?.[sector];
   if (!gk) return `<p class="mini-note" style="margin-top:8px">이 업종은 산업군 매핑이 없어 지표를 표시하지 않습니다.</p>`;
+  return secMetricsHtmlByGk(gk);
+}
+// v360: 산업 지표 탭은 산업군 키(gk)로 직접 부른다 — 업종명 경유 래퍼(secMetricsHtml)와 본문 분리
+function secMetricsHtmlByGk(gk) {
+  if (!SECMET || !SECMET.groups?.[gk]) return "";
   const gname = SECMET.groups[gk], spec = SECMET.spec[gk] || { yf: [], ecos: [] };
   const cards = [...spec.ecos, ...spec.yf].map((k) => {
     const s = SECMET.series[k], m = SECMET.meta[k];
@@ -9559,6 +9573,138 @@ function secMetricsHtml(sector) {
       ${secFundChart(SECMET.fund?.[gk])}
     </div>
   </div>`;
+}
+
+/* ---------- 🏭 산업 지표 탭 (v360) — 12산업군 비교 보드 + 산업군 상세 ---------- */
+let secmetRendered = false, secmetSel = null, SECMET_ROWS = null;
+let secmetSort = { k: "mcap", d: -1 };
+
+// 지표 시계열의 '3개월 전 대비' — 관심종목 산업맥락 카드와 같은 규약(월간=3스텝, 주간=13스텝)
+function secmetChg3m(ser) {
+  if (!ser?.length) return null;
+  const last = ser[ser.length - 1][1];
+  const monthly = String(ser[0][0]).length === 7;
+  const ago = ser[Math.max(0, ser.length - 1 - (monthly ? 3 : 13))][1];
+  return ago ? (last / ago - 1) * 100 : null;
+}
+
+function buildSecmetRows() {
+  const rows = [];
+  for (const [gk, gname] of Object.entries(SECMET.groups || {})) {
+    const r = { gk, name: gname };
+    // ── 시장(heatmap KR 타일, grp별) — 시총가중. mcap_est(거래대금 대용)는 가중치로 못 쓴다 → 제외
+    const tiles = (MARKET?.heatmap || []).filter((t) => t.m === "kr" && t.grp === gk && t.mcap && !t.mcap_est);
+    r.n_mkt = tiles.length;
+    r.mcap = tiles.reduce((s, t) => s + t.mcap, 0) || null;
+    const wavg = (f) => {
+      const seg = tiles.filter((t) => f(t) != null);
+      const w = seg.reduce((s, t) => s + t.mcap, 0);
+      return w ? seg.reduce((s, t) => s + f(t) * t.mcap, 0) / w * 100 : null;
+    };
+    r.chg = wavg((t) => t.chg);
+    r.r1m = wavg((t) => t.r1m);
+    r.r3m = wavg((t) => t.r3m);
+    // ── 재무(DART 연간 합산) — 최근 연도 vs 직전 연도
+    const f = SECMET.fund?.[gk];
+    if (f?.length >= 2) {
+      const a = f[f.length - 1], b = f[f.length - 2];
+      r.revY = b.rev ? (a.rev / b.rev - 1) * 100 : null;
+      r.capexY = b.capex ? (a.capex / b.capex - 1) * 100 : null;
+      r.opm = a.opm ?? null;
+      r.opmD = a.opm != null && b.opm != null ? a.opm - b.opm : null;
+      r.n_fund = a.n;
+    }
+    // ── 대표지표(spec 첫 ECOS 우선, 없으면 첫 YF) 3개월 변화
+    const spec = SECMET.spec?.[gk] || {};
+    const repKey = (spec.ecos || [])[0] || (spec.yf || [])[0];
+    if (repKey && SECMET.series?.[repKey]) {
+      r.repName = SECMET.meta?.[repKey]?.name || repKey;
+      r.rep3m = secmetChg3m(SECMET.series[repKey]);
+    }
+    rows.push(r);
+  }
+  SECMET_ROWS = rows;
+}
+
+const SECMET_COLS = [
+  ["name", "산업군", 0], ["mcap", "시가총액", -1], ["chg", "당일", -1], ["r1m", "1개월", -1],
+  ["r3m", "3개월", -1], ["revY", "매출 YoY", -1], ["capexY", "CAPEX YoY", -1],
+  ["opm", "영업이익률", -1], ["rep3m", "대표지표(3개월)", -1],
+];
+
+function drawSecmetTable() {
+  const tb = document.getElementById("secmet-table");
+  if (!tb || !SECMET_ROWS) return;
+  const { k, d } = secmetSort;
+  const rows = [...SECMET_ROWS].sort((a, b) => {
+    if (k === "name") return d * String(a.name).localeCompare(b.name, "ko");
+    const av = a[k], bv = b[k];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;                 // 값 없는 행은 방향 무관 항상 뒤로
+    if (bv == null) return -1;
+    return d * (av - bv);
+  });
+  const pctc = (v, dgt = 1) => v == null ? "-"
+    : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(dgt)}%</span>`;
+  tb.innerHTML = `<thead><tr>${SECMET_COLS.map(([ck, lab]) =>
+      `<th data-k="${ck}" class="sortable${ck === k ? " on" : ""}">${lab}${ck === k ? (d < 0 ? " ▾" : " ▴") : ""}</th>`).join("")}</tr></thead>
+    <tbody>` + rows.map((r) => `<tr class="secmet-row${r.gk === secmetSel ? " sel" : ""}" data-gk="${r.gk}">
+      <td class="secmet-name">${r.name} <span class="sub-note">${r.n_mkt ? r.n_mkt + "종목" : ""}</span></td>
+      <td>${r.mcap ? fmtMcap(r.mcap, "kr") : "-"}</td>
+      <td>${pctc(r.chg)}</td><td>${pctc(r.r1m)}</td><td>${pctc(r.r3m)}</td>
+      <td>${pctc(r.revY)}</td><td>${pctc(r.capexY)}</td>
+      <td>${r.opm == null ? "-" : `${r.opm.toFixed(1)}%${r.opmD != null ? ` <span class="sub-note ${r.opmD >= 0 ? "pos" : "neg"}">(${r.opmD >= 0 ? "+" : ""}${r.opmD.toFixed(1)}%p)</span>` : ""}`}</td>
+      <td class="secmet-rep">${r.rep3m == null ? "-" : `${pctc(r.rep3m)} <span class="sub-note">${r.repName || ""}</span>`}</td>
+    </tr>`).join("") + `</tbody>`;
+  tb.querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
+    const ck = th.dataset.k;
+    secmetSort = { k: ck, d: secmetSort.k === ck ? -secmetSort.d : (ck === "name" ? 1 : -1) };
+    drawSecmetTable();
+  });
+  tb.querySelectorAll(".secmet-row").forEach((tr) => tr.onclick = () => {
+    secmetSel = tr.dataset.gk;
+    drawSecmetTable(); drawSecmetChips(); drawSecmetDetail();
+  });
+}
+
+function drawSecmetChips() {
+  const host = document.getElementById("secmet-chips");
+  if (!host || !SECMET) return;
+  host.innerHTML = Object.entries(SECMET.groups || {}).map(([gk, nm]) =>
+    `<button class="secmet-chip${gk === secmetSel ? " active" : ""}" data-gk="${gk}">${nm}</button>`).join("");
+  host.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    secmetSel = b.dataset.gk;
+    drawSecmetTable(); drawSecmetChips(); drawSecmetDetail();
+  });
+}
+
+function drawSecmetDetail() {
+  const host = document.getElementById("secmet-detail");
+  if (!host || !secmetSel) return;
+  host.innerHTML = secMetricsHtmlByGk(secmetSel) || `<p class="mini-note">데이터 없음</p>`;
+  host.querySelectorAll(".sm-card.clickable").forEach((c) =>
+    c.onclick = () => openSecMetDialog(c.dataset.k));
+}
+
+async function renderSecmetTab() {
+  secmetRendered = true;
+  await loadSecMet();
+  const ctx = document.getElementById("secmet-context");
+  if (!SECMET) { if (ctx) ctx.textContent = "sector_metrics.json 없음 — python analysis\\sector_metrics.py 실행 필요"; return; }
+  if (ctx) ctx.innerHTML = `<b>산업 지표</b> — 12개 산업군의 시장 성과(시총가중)·합산 재무(DART)·실물 지표(ECOS 수출지수·야후 프록시)를
+    한 표에서 비교하고, 아래에서 산업군별 상세를 봅니다. ${SECMET.generated} 갱신(하루 1회) · 국내 전용
+    · 시장 성과는 30분 갱신 시세 기준`;
+  buildSecmetRows();
+  if (!secmetSel) secmetSel = Object.keys(SECMET.groups || {})[0] || null;
+  drawSecmetTable(); drawSecmetChips(); drawSecmetDetail();
+}
+
+// 섹터 로테이션 펼침 → 산업 지표 탭으로(해당 산업군 선택 상태 유지)
+function gotoSecmet(gk) {
+  gotoTabFull("secmet");
+  if (gk) secmetSel = gk;
+  if (!secmetRendered) renderSecmetTab();
+  else { drawSecmetTable(); drawSecmetChips(); drawSecmetDetail(); }
 }
 
 // 섹터 행 클릭 → 소속 종목(히트맵 유니버스, 시총순) 펼침
@@ -9595,14 +9741,14 @@ function toggleRotMembers(tr, sector, mk) {
   <div class="sm-host"></div>
   <p class="sub-note" style="margin:6px 0 2px">시총순 · 등락=당일 · 클릭 = 종목 조회로 이동 (분석 유니버스 내 종목만 표시)</p></td>`;
   tr.after(row);
-  // 산업지표(ECOS·프록시·재무집계) — lazy 로드 후 삽입
+  // 산업지표는 v360에서 🏭 산업 지표 탭으로 분리 — 펼침에는 이동 버튼만(중복 렌더 제거)
   if (mk === "kr") {
     const host = row.querySelector(".sm-host");
-    host.innerHTML = `<p class="mini-note" style="margin-top:8px">산업지표 불러오는 중…</p>`;
     loadSecMet().then(() => {
-      host.innerHTML = secMetricsHtml(sector);
-      host.querySelectorAll(".sm-card.clickable").forEach((c) =>
-        c.onclick = () => openSecMetDialog(c.dataset.k));   // 클릭 = 큰 차트+의미 팝업
+      const gk = SECMET?.map?.[sector];
+      if (!gk) return;
+      host.innerHTML = `<button class="today-chart-btn" style="margin-top:8px">🏭 ${SECMET.groups[gk]} 산업 지표 자세히 보기 →</button>`;
+      host.querySelector("button").onclick = () => gotoSecmet(gk);
     });
   }
   row.querySelectorAll(".rot-mem").forEach((a) => a.addEventListener("click", (e) => {

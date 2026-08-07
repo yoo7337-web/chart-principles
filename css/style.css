@@ -61,6 +61,23 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 🏭 산업 지표 탭 (v360) */
+#secmet-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+#secmet-table th, #secmet-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+#secmet-table th:first-child, #secmet-table td:first-child { text-align: left; }
+#secmet-table th.sortable { cursor: pointer; color: var(--muted); font-weight: 600; }
+#secmet-table th.sortable.on { color: var(--accent); }
+#secmet-table .secmet-row { cursor: pointer; }
+#secmet-table .secmet-row:hover { background: var(--card2); }
+#secmet-table .secmet-row.sel { background: rgba(67,145,255,.10); }
+#secmet-table .secmet-name { font-weight: 700; }
+#secmet-table .secmet-rep .sub-note { display: block; font-size: .7rem; }
+.secmet-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.secmet-chip { background: var(--card); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 999px; font-size: .82rem; padding: 5px 13px; cursor: pointer; }
+.secmet-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+#secmet-detail .sm-wrap { margin-top: 4px; }
+
 /* 🏢 관심종목 기업 개요·산업 카드 (v357) */
 .ws-indrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .ws-ind-badge { background: rgba(67,145,255,.12); border: 1px solid var(--line); color: var(--ink);
