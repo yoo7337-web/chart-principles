@@ -61,6 +61,17 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 🚀 기간별 급등 검색어 (트렌드 탭, v356) */
+.tr-rlist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; }
+@media (max-width: 1100px) { .tr-rlist { grid-template-columns: 1fr; } }
+.tr-rrow { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.tr-rbody { flex: 1; min-width: 0; }
+.tr-rq { font-weight: 700; font-size: .92rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tr-rsrc { font-size: .7rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; font-weight: 400; }
+.tr-rspark { width: 110px; height: 30px; flex: 0 0 auto; opacity: .85; }
+.tr-rx { font-size: 1rem; min-width: 74px; text-align: right; }
+.tr-rx.hot { color: var(--kup); }
+
 /* Snapshot 배당 뷰: 미적용 컨트롤은 자리만 유지(메뉴바 흔들림 방지, v352) */
 .ft-dis { opacity: .35; pointer-events: none; }
 /* 컨트롤 4종을 한 묶음으로 — 부제 길이·뷰 구성이 달라도 줄바꿈이 통째로 일어나 위치가 고정된다 */

@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=355">
-<script src="firebase-config.js?v=355"></script>
-<script src="js/auth.js?v=355"></script>
+<link rel="stylesheet" href="css/style.css?v=356">
+<script src="firebase-config.js?v=356"></script>
+<script src="js/auth.js?v=356"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=355"></script>
+<script src="js/sync.js?v=356"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -296,6 +296,18 @@
         <button data-g="us">🇺🇸 미국</button>
       </span></h2>
     <div id="tr-google" class="card-flat"></div>
+    <!-- 🚀 기간별 급등 검색어(v356): 발굴=구글 급상승 누적 풀 / 배율=네이버 데이터랩 1년 시계열
+         (구글 트렌드 시계열 API는 429 차단 지속 — 2026-08-07 재실측) -->
+    <h2 style="margin-top:24px">🚀 기간별 급등 검색어
+      <span class="sub-note">(최근 30일 검색지수 ÷ 그 시점 30일 — 발굴은 구글 급상승 누적, 배율은 네이버 지수)</span>
+      <span class="tr-ts" id="tr-ts-risers"></span>
+      <span class="mk-toggle" style="margin-left:12px" id="tr-riser-p">
+        <button data-p="m1" class="active">전월 대비</button>
+        <button data-p="m3">3개월 전 대비</button>
+        <button data-p="m6">6개월 전 대비</button>
+        <button data-p="m12">1년 전 대비</button>
+      </span></h2>
+    <div id="tr-risers" class="card-flat"></div>
     <h2 style="margin-top:24px">📌 내 워치리스트 <span class="sub-note" id="tr-wl-note">(1년 추이 · 급등=최근 7일 ÷ 이전 8주)</span>
       <span class="tr-ts" id="tr-ts-wl"></span>
       <span class="mk-toggle" style="margin-left:12px" id="tr-src">
@@ -1253,7 +1265,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=355"></script>
+<script src="js/app.js?v=356"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

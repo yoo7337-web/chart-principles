@@ -3828,6 +3828,12 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v356", "2026-08-07", "트렌드에 '기간별 급등 검색어' — 전월·3·6·12개월 전 대비",
+   "트렌드 탭에 **🚀 기간별 급등 검색어** 섹션을 추가했습니다 — 전월/3개월/6개월/1년 전 대비 검색량이 "
+   + "몇 배가 됐는지 기간 토글로 봅니다. 검색어 발굴은 **구글 일간 급상승을 매일 누적**한 풀에서, 배율 계산은 "
+   + "**네이버 데이터랩 1년 시계열**로 합니다(구글 트렌드 시계열 API는 차단이 확인돼 순위 데이터만 사용). "
+   + "비교 시점에 검색이 거의 없던 검색어는 수천 배 같은 무의미한 배율 대신 **🆕 신규 부상**으로 표시합니다. "
+   + "각 검색어에 1년 추이 스파크라인과 관련주 버튼(있는 경우)이 붙습니다."],
   ["v355", "2026-08-07", "성장·이익률 분기에 '전년 동분기(YoY)' 비교 토글",
    "성장·이익률 뷰의 분기 모드에 **[직전분기 대비(QoQ) | 전년 동분기 대비(YoY)] 토글**을 추가했습니다 — "
    + "26년 2분기가 25년 2분기 대비 몇 % 성장했는지를 바로 봅니다. 계절성이 있는 업종(유통·게임·조선 등)은 "
@@ -8712,7 +8718,7 @@ function asBond() {
 }
 
 /* ---------- 트렌드 레이더 (trends.json — 네이버 데이터랩+구글 급상승) ---------- */
-let trendsRendered = false, TRENDS = null, trGeo = "kr";
+let trendsRendered = false, TRENDS = null, trGeo = "kr", trRiserP = "m1";
 
 function trGoto(code) {
   gotoTabFull("lookup");
@@ -8857,6 +8863,50 @@ function renderTrends() {
       trGeo = b.dataset.g;
       $("#tr-geo").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
       drawGoogle();
+    });
+
+    // 🚀 기간별 급등 검색어(v356) — 전월/3·6·12개월 전 대비 배율, 신규 부상은 배율 대신 badge
+    setTs("tr-ts-risers", "risers");
+    const rSpark = (w) => {
+      if (!w || w.length < 8) return "";
+      const vs = w.map((x) => x[1]);
+      const mx = Math.max(...vs, 1);
+      const pts = vs.map((v, i) => `${(i / (vs.length - 1) * 100).toFixed(1)},${(28 - v / mx * 26).toFixed(1)}`).join(" ");
+      return `<svg viewBox="0 0 100 30" preserveAspectRatio="none" class="tr-rspark"><polyline points="${pts}" fill="none" stroke="#4391ff" stroke-width="1.6"/></svg>`;
+    };
+    const drawRisers = () => {
+      const host = $("#tr-risers");
+      const R = t.risers?.items || [];
+      const pk = trRiserP;
+      const val = (i) => (i[pk] === "new" ? 999 : typeof i[pk] === "number" ? i[pk] : -1);
+      const rows = R.filter((i) => i[pk] === "new" || (typeof i[pk] === "number" && i[pk] >= 1.2))
+        .sort((a, b) => val(b) - val(a)).slice(0, 20);
+      if (!rows.length) {
+        host.innerHTML = `<p class="mini-note">이 기간 기준 급등 검색어가 없습니다 —
+          구글 급상승어 누적이 ${t.risers?.pool_days || 0}일치라 풀이 아직 작습니다(매일 자동으로 쌓입니다).</p>`;
+        return;
+      }
+      host.innerHTML = `<div class="tr-rlist">` + rows.map((i, n) => `
+        <div class="tr-rrow">
+          <span class="tr-rank">${n + 1}</span>
+          <div class="tr-rbody">
+            <div class="tr-rq">${esc(i.kw)}
+              <span class="tr-rsrc">${i.src === "watch" ? "워치리스트" : "구글 급상승발"}</span>
+              ${(i.stocks || []).map((s) => `<button class="tr-stock" data-c="${s.code}">📈 ${esc(s.name)}</button>`).join("")}</div>
+            <div class="sub-note">최근 30일 지수 ${i.cur}</div>
+          </div>
+          ${rSpark(i.w)}
+          <b class="tr-rx ${i[pk] === "new" || i[pk] >= 2 ? "hot" : ""}">${i[pk] === "new" ? "🆕 신규 부상" : "×" + i[pk].toFixed(1)}</b>
+        </div>`).join("") + `</div>
+        <p class="sub-note" style="margin:6px 0 0">🆕 신규 부상 = 비교 시점엔 검색이 거의 없던 검색어(배율 계산 불가) ·
+          지수는 네이버 상대값(1년 내 최대=100) · 후보 = 구글 일간 급상승 누적(${t.risers?.pool_days || 0}일) + 워치리스트</p>`;
+      host.querySelectorAll(".tr-stock").forEach((b) => b.onclick = () => trGoto(b.dataset.c));
+    };
+    drawRisers();
+    $("#tr-riser-p").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      trRiserP = b.dataset.p;
+      $("#tr-riser-p").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      drawRisers();
     });
 
     // ② 워치리스트 — 소스 토글(네이버/글로벌 위키) + 급등 구간 필터 + r7 내림차순
