@@ -140,6 +140,7 @@ def _extract(rows: list) -> dict:
 
 _CALLS = {"n": 0, "max": 18000}  # DART 일일 한도(20,000) 보호 — 도달 시 중단, 다음 실행이 이어받음
 _PARTIAL = set()  # 이번 수집에서 네트워크 실패가 섞인 (corp/fs) — 기존 데이터를 지우지 않게 표시
+_CUR = {}         # corp_code → 공시 통화(KRW/USD) — 외국주권은 USD로 신고한다
 
 
 def _dart_call(url: str):
@@ -180,13 +181,94 @@ def _fetch_report(corp: str, key: str, year: int, rc: str, fs: str) -> dict | No
     except Exception:
         return False
     if d.get("status") == "000" and d.get("list"):
-        return _extract_full(d["list"])
+        rows = d["list"]
+        c = next((r.get("currency") for r in rows if r.get("currency")), None)
+        if c:
+            _CUR[corp] = c.strip().upper()   # 환산은 fetch_kr_fs가 연도별 환율로 수행
+        return _extract_full(rows)
     return None
 
 
-def _eok(d: dict) -> dict:
-    """{k:{v,add}} → 억원 단순값."""
-    return {k: round(x["v"] / 1e8, 1) for k, x in d.items()}
+def _eok(d: dict, fx: float = 1.0) -> dict:
+    """{k:{v,add}} → 억원 단순값. fx=통화 환산율(USD 공시면 원/달러, KRW면 1)."""
+    return {k: round(x["v"] * fx / 1e8, 1) for k, x in d.items()}
+
+
+# ⚠**외국주권은 USD로 공시한다**(2026-08-07 실사고): 코오롱티슈진(950160) 등 21개 종목의 DART 응답은
+#   currency=USD인데 원화로 간주해 ÷1e8 하고 있었다 → 매출 362만USD가 '0억원', 순손실 1.35억USD가
+#   '-1.4억원'으로 약 1,400배 축소돼 화면에 나갔다(사용자 제보).
+#   → currency를 읽어 **그 연도 기말 원/달러**로 환산한다(연도별로 환율이 30% 넘게 달라 최신 환율
+#     일괄 적용은 과거를 왜곡한다). 환율을 못 구하면 **저장을 건너뛴다**(틀린 값보다 없는 게 낫다).
+#   ⚠외국주권은 USD만이 아니다 — **CNY 9사·JPY·HKD**도 있다(실측 21사: 중국계가 가장 많다).
+#     yfinance 직행 티커는 JPYKRW=X·HKDKRW=X만 이력이 있고 **CNYKRW=X는 최근 1점뿐** →
+#     CNY는 `KRW=X ÷ CNY=X`(원/달러 ÷ 위안/달러)로 도출한다(검산: 2025년 205.5원/위안).
+_FX_CACHE = {}                         # {통화: {연도: 기말 원화환율}}
+_FX_FILE = None                        # 연도별 환율 캐시 파일(재실행 시 네트워크 재조회 회피)
+_FX_DIRECT = {"JPY": "JPYKRW=X", "HKD": "HKDKRW=X", "EUR": "EURKRW=X", "GBP": "GBPKRW=X"}
+
+
+def _yearly_last(series) -> dict:
+    return {int(y): round(float(v), 4) for y, v in series.groupby(series.index.year).last().items()}
+
+
+def _fx_table(cur: str) -> dict:
+    """{연도: 기말 '원/해당통화'} — USD는 macro.parquet, 그 외는 yfinance(캐시)."""
+    cur = cur.upper()
+    if cur in _FX_CACHE:
+        return _FX_CACHE[cur]
+    global _FX_FILE
+    root = APP_DATA.parent.parent
+    if _FX_FILE is None:
+        _FX_FILE = root / "data" / "fx_by_year.json"
+        if _FX_FILE.exists():
+            try:
+                _FX_CACHE.update({k: {int(y): v for y, v in t.items()}
+                                  for k, t in json.loads(_FX_FILE.read_text(encoding="utf-8")).items()})
+            except Exception:
+                pass
+        if cur in _FX_CACHE:
+            return _FX_CACHE[cur]
+    tbl = {}
+    try:
+        import pandas as pd
+        krw = _yearly_last(pd.read_parquet(root / "data" / "macro.parquet")["KRW=X"].dropna())
+        if cur == "USD":
+            tbl = krw
+        else:
+            import yfinance as yf
+
+            def _dl(t):
+                s = yf.download(t, start="2014-01-01", progress=False, auto_adjust=True)["Close"].dropna()
+                return _yearly_last(s.iloc[:, 0] if getattr(s, "ndim", 1) > 1 else s)
+
+            if cur in _FX_DIRECT:
+                tbl = _dl(_FX_DIRECT[cur])
+            else:                                   # CNY 등 — 원/달러 ÷ (해당통화/달러)
+                per_usd = _dl(f"{cur}=X")
+                tbl = {y: round(krw[y] / per_usd[y], 4) for y in per_usd if y in krw and per_usd[y]}
+            if len(tbl) < 3:                        # 이력이 사실상 없으면 신뢰 불가 → 미지원 처리
+                tbl = {}
+    except Exception as e:
+        print(f"  환율({cur}) 로드 실패({e})", file=sys.stderr)
+    _FX_CACHE[cur] = tbl
+    if tbl and _FX_FILE:
+        try:
+            _FX_FILE.write_text(json.dumps(_FX_CACHE, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+    return tbl
+
+
+def _fx_for(year, cur: str) -> float | None:
+    """원화 외 공시면 그 연도 기말환율(이력 밖이면 최근접 연도), KRW면 1.0. 못 구하면 None."""
+    cur = (cur or "KRW").upper()
+    if cur == "KRW":
+        return 1.0
+    tbl = _fx_table(cur)
+    if not tbl:
+        return None
+    y = int(str(year)[:4])
+    return tbl.get(y) or tbl[min(tbl, key=lambda k: abs(k - y))]
 
 
 def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
@@ -210,7 +292,12 @@ def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
         return None
     if errs:   # 실패가 섞였으면 이력이 잘렸을 수 있다 → 호출자가 덮어쓰기를 보류하도록 표시
         _PARTIAL.add(f"{corp}/{fs}")
-    annual = {str(y): _eok(d) for y, d in annual_raw.items()}
+    # 공시 통화 확인 — USD(외국주권)면 연도별 기말환율로 원화 환산해 억원 스케일을 맞춘다
+    cur_code = _CUR.get(corp, "KRW")
+    if cur_code != "KRW" and _fx_for(this_year, cur_code) is None:
+        print(f"  {corp}: {cur_code} 공시인데 환율을 못 구해 건너뜀", file=sys.stderr)
+        return None
+    annual = {str(y): _eok(d, _fx_for(y, cur_code)) for y, d in annual_raw.items()}
 
     # ---- 분기: 최근 2년치(~9분기). 금년+전년만 받으면 연초엔 5분기밖에 안 나와 그래프가 1년치로 보인다 ----
     QRC = [("11013", 1), ("11012", 2), ("11014", 3), ("11011", 4)]
@@ -246,10 +333,14 @@ def fetch_kr_fs(corp: str, key: str, fs: str) -> dict | None:
                     q[k] = x["v"] - p["v"] if p else None
             else:  # 재무상태: 시점값
                 q[k] = x["v"]
-        q = {k: round(v / 1e8, 1) for k, v in q.items() if v is not None}
+        qfx = _fx_for(yr, cur_code)
+        q = {k: round(v * qfx / 1e8, 1) for k, v in q.items() if v is not None}
         if q:
             quarter[f"{str(yr)[2:]}Q{qn}"] = q
-    return {"annual": annual, "quarter": quarter}
+    out = {"annual": annual, "quarter": quarter}
+    if cur_code != "KRW":
+        out["cur_src"] = cur_code   # 프런트가 "USD 공시 → 원화 환산" 각주를 띄우게
+    return out
 
 
 def fetch_kr(code: str, corp: str, key: str) -> dict | None:
@@ -258,7 +349,10 @@ def fetch_kr(code: str, corp: str, key: str) -> dict | None:
     for fs, name in (("CFS", "cfs"), ("OFS", "ofs")):
         d = fetch_kr_fs(corp, key, fs)
         if d:
+            cur = d.pop("cur_src", None)
             out[name] = d
+            if cur:
+                out["cur_src"] = cur    # 최상위로 올린다 — 프런트가 각주를 띄우는 자리
     return out or None
 
 
