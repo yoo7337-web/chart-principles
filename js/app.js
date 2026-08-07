@@ -3828,6 +3828,10 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v357", "2026-08-07", "관심종목 첫 카드에 기업 개요 · 산업",
+   "관심종목 상세의 **첫 번째 카드로 '🏢 기업 개요 · 산업'**을 추가했습니다 — 무슨 회사인지 한눈에 읽히는 "
+   + "개요와 사업 구조 요약, 그리고 **산업군·밸류체인 단계 배지**(클릭하면 주식찾기에서 같은 산업 종목으로 이동)를 "
+   + "함께 보여줍니다. 업종·설립·직원·시가총액도 한 줄로 붙였습니다."],
   ["v356", "2026-08-07", "트렌드에 '기간별 급등 검색어' — 전월·3·6·12개월 전 대비",
    "트렌드 탭에 **🚀 기간별 급등 검색어** 섹션을 추가했습니다 — 전월/3개월/6개월/1년 전 대비 검색량이 "
    + "몇 배가 됐는지 기간 토글로 봅니다. 검색어 발굴은 **구글 일간 급상승을 매일 누적**한 풀에서, 배율 계산은 "
@@ -8007,6 +8011,7 @@ function wsShow(key) {
       <button class="today-chart-btn" id="ws-unstar" title="관심종목에서 빼기">★ 해제</button>
     </div>
     <div class="ws-grid" id="ws-grid">
+      ${wsCard("🏢", "기업 개요 · 산업", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-about")}
       ${wsCard("📖", "심층 보고서", null, `<p class="mini-note">확인 중…</p>`, "ws-report")}
       ${wsCard("📈", "추이 · 신호 (6개월)", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-trend")}
       ${wsCard("📊", "재무 Snapshot", "lookup", `<p class="mini-note">불러오는 중…</p>`, "ws-fin")}
@@ -8025,6 +8030,49 @@ function wsShow(key) {
     if (act === "lookup") { gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(key); }
     else gotoTabFull(act);
   });
+
+  /* ⓪ 기업 개요·산업(v357) — "이 회사가 뭘 하는 회사이고 어느 산업에 속하나"를 카드 첫 자리에.
+     ⚠company.json은 loadExtras()로 lazy 로드된다 → 반드시 await(첫 진입에 비는 사고를 이미 겪었다). */
+  (async () => {
+    await loadExtras();
+    if (wsSel !== key) return;
+    const co = EXTRAS.company?.map?.[key] || {};
+    const sector = mk === "kr" ? (tile?.sector || null)
+      : (tile?.sector || US_SECTOR_KO[co.profile?.sector] || co.profile?.sector || null);
+    // 산업 배지: 그룹(12산업군) › 업종 + 국내는 밸류체인 단계까지(클릭 시 주식찾기 연동)
+    const badges = [];
+    if (gmeta) badges.push(`<button class="ws-ind-badge" data-g="${gmeta.key}">${gmeta.icon} ${gmeta.name}</button>`);
+    if (mk === "kr") {
+      stockChainLinks("kr", tk, sector).slice(0, 3).forEach((l) =>
+        badges.push(`<button class="ws-ind-badge chain" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.stageIcon} ${l.stage}</button>`));
+    } else if (!gmeta) {
+      // ⚠gmeta(12산업군)와 stockGroupLink(주식찾기 그룹)는 이름이 겹친다("반도체" vs "반도체·IT·전자")
+      //   → gmeta가 있으면 추가 배지를 만들지 않는다(실측 중복 노출).
+      const g = stockGroupLink(sector);
+      if (g) badges.push(`<button class="ws-ind-badge" data-us="${g.key}">${g.icon} ${g.name}</button>`);
+    }
+    const intro = co.biz_lines?.length ? co.biz_lines[0] : co.overview;
+    const biz = co.biz_lines?.length > 1 ? co.biz_lines.slice(1, 3) : null;
+    const pr = co.profile || {};
+    const facts = [
+      sector && ["업종", dsEsc(sector)],
+      pr.est && ["설립", String(pr.est).slice(0, 7)],
+      pr.emp && ["직원", pr.emp.toLocaleString() + "명"],
+      tile?.mcap && !tile.mcap_est && ["시가총액", fmtMcap(tile.mcap, mk)],
+    ].filter(Boolean);
+    fill("ws-about", `${badges.length ? `<div class="ws-indrow">${badges.join("")}</div>` : ""}
+      ${intro ? `<p class="ws-about-txt">${dsEsc(intro)}</p>`
+        : `<p class="mini-note">기업 개요가 아직 수집되지 않았습니다(주 1회 갱신).</p>`}
+      ${biz ? `<ul class="ws-about-biz">${biz.map((x) => `<li>${dsEsc(x)}</li>`).join("")}</ul>` : ""}
+      ${facts.length ? `<div class="ws-about-facts">${facts.map(([k, v]) =>
+        `<span><i>${k}</i> ${v}</span>`).join("")}</div>` : ""}`);
+    const card = main.querySelector(".ws-about .ws-card-b");
+    card?.querySelectorAll(".ws-ind-badge").forEach((b) => b.onclick = () => {
+      if (b.dataset.ind) scrOpenFromChain(b.dataset.ind, b.dataset.stage);
+      else if (b.dataset.us) scrOpenFromGroupUS(b.dataset.us, sector);
+      else { gotoTabFull("screener"); if (!screenerRendered) initScreener(); }
+    });
+  })();
 
   // ① 심층 보고서 — 있으면 메타+열기, 없으면 요청 안내(T1 수동 작성 체제)
   loadReportsIdx().then((idx) => {

@@ -61,6 +61,18 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+/* 🏢 관심종목 기업 개요·산업 카드 (v357) */
+.ws-indrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ws-ind-badge { background: rgba(67,145,255,.12); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 999px; font-size: .78rem; padding: 3px 10px; cursor: pointer; }
+.ws-ind-badge.chain { background: rgba(34,192,122,.12); }
+.ws-ind-badge:hover { border-color: var(--accent); }
+.ws-about-txt { font-size: .86rem; line-height: 1.55; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.ws-about-biz { margin: 6px 0 0 16px; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+.ws-about-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: .8rem; }
+.ws-about-facts i { color: var(--muted); font-style: normal; margin-right: 4px; }
+
 /* 🚀 기간별 급등 검색어 (트렌드 탭, v356) */
 .tr-rlist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; }
 @media (max-width: 1100px) { .tr-rlist { grid-template-columns: 1fr; } }
