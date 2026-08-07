@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=346">
-<script src="firebase-config.js?v=346"></script>
-<script src="js/auth.js?v=346"></script>
+<link rel="stylesheet" href="css/style.css?v=347">
+<script src="firebase-config.js?v=347"></script>
+<script src="js/auth.js?v=347"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=346"></script>
+<script src="js/sync.js?v=347"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -1181,6 +1181,14 @@
         <div id="dev-history-list"></div>
       </div>
     </div>
+    <!-- 데이터 갱신 기준표 — 화면별 데이터가 언제 기준인지 (2026-08-07, v347) -->
+    <div class="card-flat" style="margin-top:14px">
+      <h3 class="lk-h3">📅 데이터 갱신 기준표
+        <span class="sub-note">(각 화면의 데이터가 언제 기준인지 — 갱신 주체·주기)</span></h3>
+      <div id="dev-schedule"></div>
+      <p class="mini-note">각 탭·카드의 "N분 전" 표기가 실제 생성 시각입니다. ☁️클라우드는 노트북이 꺼져 있어도 24시간 돌고,
+        💻노트북 배치는 꺼져 있으면 그 회차를 건너뜁니다(켜지면 최근 1회 따라잡기). 초 단위 실시간은 전광판 티커(TradingView)만 해당합니다.</p>
+    </div>
     <!-- 기기 이전용 통합 백업 — 개별 탭 내보내기를 매번 반복하지 않도록 한 파일로 묶는다 -->
     <div class="card-flat" style="margin-top:14px">
       <h3 class="lk-h3">☁️ 기기 간 동기화
@@ -1225,7 +1233,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=346"></script>
+<script src="js/app.js?v=347"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

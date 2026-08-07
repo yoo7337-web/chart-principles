@@ -12,6 +12,12 @@
   --kdn: #4391ff;           /* 주가 하락 */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* 📅 데이터 갱신 기준표 (개발일지, v347) */
+.dev-sched { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+.dev-sched td { padding: 5px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.dev-sched .dsc-grp td { background: var(--card2); font-weight: 700; padding: 7px 10px; }
+.dev-sched .dsc-cyc { white-space: nowrap; color: var(--accent); font-weight: 600; }
 html { color-scheme: dark; }
 body {
   font-family: "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic", sans-serif;
