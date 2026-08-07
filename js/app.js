@@ -1247,6 +1247,8 @@ function loadLookup(key) {
         lookupOscs = [...document.querySelectorAll("#lookup-osc input:checked")].map((x) => x.value);
         drawLookupChart();
       });
+      const cb2 = document.getElementById("cyc-toggle");   // 🔄 순환성 경로 토글(v370)
+      if (cb2) cb2.onclick = () => { cycPathOn = !cycPathOn; drawLookupChart(); };
     }
     const oscRail = $("#lookup-osc");
     if (oscRail) oscRail.style.display = "flex";
@@ -1528,6 +1530,7 @@ function drawLookupChart() {
   candles.setData(s.map((x) => ({ time: x.t, open: x.o, high: x.h, low: x.l, close: x.c })));
   lookupChart._syncSeries = candles;  // 십자선 동기화용
   lookupCandles = candles;            // 그리기 좌표 변환용
+  drawCycPath(s);                     // 🔄 순환성 경로 오버레이(토글 ON일 때만, v370)
   _barIdxByTime = new Map(s.map((x, i) => [x.t, i]));
   _barTimeByIdx = s.map((x) => x.t);
 
@@ -1838,6 +1841,41 @@ function dwMemoAsk({ text = "", color = drawColor, kind = "callout", canDelete =
     dlg.showModal();
     setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 30);
   });
+}
+
+/* 📈 ROE 추이 차트(v370) — 밸류에이션 밴드에서 Snapshot 성장·이익률로 옮겼다.
+   ⚠성장률(±90%)과 ROE(10~30%)는 스케일이 달라 **한 축에 겹쳐 그리면 ROE가 납작해진다**(v315 교훈)
+     → 성장률 차트 아래에 자기 축을 가진 별도 미니 차트로 붙인다. rows = [{y, v}] */
+function roeTrendSvg(rows) {
+  if (!rows || rows.length < 3) return "";
+  const RW = 940, RH = 150, RP = { l: 46, r: 24, t: 16, b: 20 };
+  const rv = rows.map((r) => r.v);
+  const rlo = Math.min(0, ...rv), rhi = Math.max(...rv), rpad = (rhi - rlo) * 0.15 || 1;
+  const RX = (i) => RP.l + (RW - RP.l - RP.r) * (i / Math.max(1, rows.length - 1));
+  const RY = (v) => RP.t + (RH - RP.t - RP.b) * (1 - (v - (rlo - rpad)) / ((rhi + rpad) - (rlo - rpad)));
+  const zero = rlo < 0 ? `<line x1="${RP.l}" y1="${RY(0)}" x2="${RW - RP.r}" y2="${RY(0)}"
+    stroke="#8b8b93" stroke-dasharray="3 3"/>` : "";
+  return `<div class="roe-wrap"><div class="lk-h3" style="font-size:.9rem;margin:12px 0 2px">
+      📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계 · 연간)</span></div>
+    <svg viewBox="0 0 ${RW} ${RH}" class="fin-svg">${zero}
+      <polyline points="${rows.map((r, i) => `${RX(i).toFixed(1)},${RY(r.v).toFixed(1)}`).join(" ")}"
+        fill="none" stroke="#b79bff" stroke-width="2.2"/>
+      ${rows.map((r, i) => `<circle cx="${RX(i).toFixed(1)}" cy="${RY(r.v).toFixed(1)}" r="3" fill="#b79bff"/>
+        <text x="${RX(i).toFixed(1)}" y="${RY(r.v) - 8}" text-anchor="middle" class="cr-end"
+          fill="${r.v >= 0 ? "#b79bff" : "#ff7c8c"}">${r.v.toFixed(1)}%</text>
+        <text x="${RX(i).toFixed(1)}" y="${RH - 5}" text-anchor="middle" class="cr-ax">${r.y}</text>`).join("")}
+    </svg></div>`;
+}
+
+// 연간 재무에서 ROE 시계열 추출 — financials의 annual(순이익·자본총계)
+function roeRowsOf(st) {
+  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
+  const src = fin?.[ftFs] || fin?.cfs || fin?.ofs || fin;
+  const annual = src?.annual || {};
+  return Object.keys(annual).sort().map((y) => {
+    const d = annual[y];
+    return d?.equity && d?.np != null ? { y: String(y).slice(0, 4), v: (d.np / d.equity) * 100 } : null;
+  }).filter((r) => r && isFinite(r.v)).slice(-10);
 }
 
 // 말풍선 줄바꿈 — 공백 단위로 채우고, 한 낱말이 길면 그대로 한 줄(최대 4줄)
@@ -3989,6 +4027,16 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v370", "2026-08-07", "🔄 순환성 분석 — 종목별 사이클 강도와 '과거 같은 시기' 경로",
+   "종목이 **경기 사이클에 얼마나 민감한가**를 10년 데이터로 점수화해 프로파일에 넣었습니다(0~100). "
+   + "연간 수익률 변동·매출/영업이익 증감 변동·적자 연도·시장 베타를 전 종목 백분위로 환산해 평균한 값입니다. "
+   + "실측: SK하이닉스 88(매우 강함) ↔ 오뚜기 4·J&J 5(약함) — 방어주와 순환주가 뚜렷이 갈립니다.\n\n"
+   + "차트에 **🔄 순환성 경로** 토글을 추가했습니다 — 지난 10년 동안 '이 달에 진입했다면' 이후 3개월이 "
+   + "어땠는지를 중앙값(주황)과 25~75% 범위(점선)로 겹쳐 봅니다. "
+   + "⚠**예측선이 아닙니다.** 표본이 10회뿐이어서 옆에 표본 수·상승 적중률·p값을 함께 적고, "
+   + "통계적으로 유의하지 않으면 '근거 약함 — 참고용'이라고 명시합니다.\n\n"
+   + "밸류에이션 밴드에 있던 **ROE 추이는 Snapshot 성장·이익률로 옮겼습니다**(성장 지표끼리 모아 보도록). "
+   + "관심종목 그래프의 가격 라벨이 신호 마커와 겹치던 것도 차트 밖 띠로 분리해 해결했습니다(겹침 0건)."],
   ["v369", "2026-08-07", "관심종목 그래프에 고가·저가·현재가 · 재무 Snapshot 확대 · 합병 도식 통일",
    "관심종목 **추이·신호 그래프에 구간 고가·저가·현재가를 표시**했습니다 — 선만 보면 지금이 그 구간의 어디쯤인지 "
    + "읽기 어려웠습니다. 그래프 아래에 '구간 내 몇 % 위치'도 함께 적습니다.\n\n"
@@ -8214,15 +8262,26 @@ function wsSpark(series, sigPts) {
   const iHi = cs.indexOf(hi), iLo = cs.indexOf(lo), iCur = cs.length - 1;
   const cur = cs[iCur];
   const pxf = (v) => fmtPrice(v, LOOKUP_ST?.market === "us" || (wsSel || "").startsWith("us") ? "us" : "kr");
-  const tag = (v, i, cls, ico) => {
+  /* ⚠가격 라벨을 데이터 점에 붙이자 신호 마커(▲▼)와 겹쳤다(v370, 사용자 지적).
+     좌표를 서로 밀어내는 방식은 마커가 %(x)+px(y) 혼합 좌표라 예측이 어렵다(실측 9건 잔존).
+     → **구조적으로 분리**한다: 라벨은 차트 위·아래 **여백 띠**에 놓고 x만 그 지점에 맞춘다.
+       신호 마커는 차트 내부에만 있으니 겹칠 수 없다. 점(●)으로 실제 위치를 함께 표시한다. */
+  const clampX = (xp) => Math.max(6, Math.min(94, xp));
+  const dot = (v, i, cls) => {
     const p = mkPos(v, i);
-    const right = p.xp > 62;                     // 오른쪽 끝 근처면 라벨을 왼쪽으로 뺀다
-    return `<span class="ws-px ${cls}${right ? " flip" : ""}" style="left:${p.xp.toFixed(2)}%;top:${p.yp.toFixed(2)}%">
-      ${ico} ${pxf(v)}</span>`;
+    return `<span class="ws-pxdot ${cls}" style="left:${p.xp.toFixed(2)}%;top:${p.yp.toFixed(2)}%"></span>`;
   };
-  const pxTags = tag(hi, iHi, "hi", "▲")
-    + tag(lo, iLo, "lo", "▼")
-    + (iCur !== iHi && iCur !== iLo ? tag(cur, iCur, "cur", "●") : "");
+  const tag = (v, i, cls, ico, where) => {
+    const xp = clampX(mkPos(v, i).xp);
+    const right = xp > 62;
+    return `<span class="ws-px ${cls} ${where}${right ? " flip" : ""}" style="left:${xp.toFixed(2)}%">
+      ${ico} ${pxf(v)}</span>` + dot(v, i, cls);
+  };
+  // 고가는 위 띠, 저가는 아래 띠 · 현재가는 항상 우측 끝(고가와 x가 가까우면 아래 띠로)
+  const curWhere = Math.abs(mkPos(cur, iCur).xp - mkPos(hi, iHi).xp) < 14 ? "bot" : "top";
+  const pxTags = tag(hi, iHi, "hi", "▲", "top")
+    + tag(lo, iLo, "lo", "▼", "bot")
+    + (iCur !== iHi && iCur !== iLo ? tag(cur, iCur, "cur", "●", curWhere) : "");
   const posPct = hi > lo ? ((cur - lo) / (hi - lo) * 100) : null;
   return `<div class="ws-spark-wrap">
     <svg viewBox="0 0 ${W} ${H}" class="ws-spark" preserveAspectRatio="none">
@@ -10024,6 +10083,85 @@ function renderLookupLinks(st) {
     links.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener" class="ext-link">${t} ↗</a>`).join("");
 }
 
+/* 🔄 순환성(cyclical) — cyclical.json lazy 로드(v370). 프로파일 배지 + 차트 과거 경로 오버레이가 쓴다. */
+let CYC = null, cycLoading = null;
+function loadCyclical() {
+  if (CYC) return Promise.resolve(CYC);
+  if (cycLoading) return cycLoading;
+  cycLoading = fetch("data/cyclical.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (CYC = j)).catch(() => null);
+  return cycLoading;
+}
+const cycOf = (st) => CYC?.map?.[`${st.market}_${st.ticker}`] || null;
+let cycPathOn = false;              // 차트 오버레이 토글 상태(종목 전환 시에도 유지)
+
+/* 🔄 순환성 경로 오버레이(v370) — 지난 10년 **이 달에 진입했다면** 이후 3개월이 어땠는지.
+   ⚠**예측선이 아니다.** 표본이 10개뿐이라 예측으로 쓰면 허상이다 → 중앙값·사분위 범위를 그리고
+     표본 수·상승 적중률·부호검정 p값을 옆에 적어 근거의 세기를 사용자가 판단하게 한다.
+   ⚠미래 구간에 점을 찍으려면 마지막 봉 이후 날짜가 필요하다 → 월 단위로 30·60·90일 뒤를 만든다. */
+function drawCycPath(bars) {
+  const btn = document.getElementById("cyc-toggle");
+  const note = document.getElementById("cyc-note");
+  const st = LOOKUP_ST;
+  const c = st ? cycOf(st) : null;
+  const fwd = c?.fwd;
+  const usable = !!fwd && !TF_INTRA.has(lookupTf);     // 분봉에선 의미 없다(일봉·주봉·월봉만)
+  if (btn) {
+    btn.style.display = usable ? "" : "none";
+    btn.classList.toggle("on", usable && cycPathOn);
+  }
+  if (note) {
+    note.style.display = usable && cycPathOn ? "" : "none";
+    if (usable) note.innerHTML = `지난 <b>${fwd.n}회</b>의 ${fwd.month}월 진입 · 3개월 후 상승 <b>${fwd.win}%</b>
+      · p=${fwd.p} ${fwd.p < 0.05 ? "" : "<b>(통계적 근거 약함 — 참고용)</b>"}`;
+  }
+  if (!usable || !cycPathOn || !lookupChart) return;
+  const last = bars[bars.length - 1];
+  if (!last) return;
+  const base = last.c;
+  const dstr = (d) => {
+    const t = new Date(String(last.t).length > 7 ? last.t : last.t);
+    const nd = new Date(t.getTime() + d * 864e5);
+    return nd.toISOString().slice(0, 10);
+  };
+  const mk = (arr, color, width, dashed) => {
+    const ser = lookupChart.addLineSeries({ color, lineWidth: width, lineStyle: dashed ? 2 : 0,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    ser.setData([{ time: last.t, value: base }].concat(
+      arr.map((r, k) => ({ time: dstr((k + 1) * 30), value: base * (1 + r / 100) }))));
+    return ser;
+  };
+  mk(fwd.q3, "rgba(34,192,122,.45)", 1, true);
+  mk(fwd.q1, "rgba(245,68,90,.45)", 1, true);
+  mk(fwd.med, "#f0b34c", 2, false);
+}
+const CYC_BANDS = [[75, "매우 강함", "vhigh"], [55, "강함", "high"], [35, "보통", "mid"], [0, "약함", "low"]];
+const cycBand = (s) => CYC_BANDS.find(([lo]) => s >= lo) || CYC_BANDS[3];
+
+// 프로파일 안 순환성 블록 — 점수 게이지 + 근거(연수익 변동·실적 변동·베타·주기)
+function cycProfileHtml(st) {
+  const c = cycOf(st);
+  if (!c) return "";
+  const [, lab, cls] = cycBand(c.score);
+  const rows = [
+    c.yr_vol != null && ["연간 수익률 변동", `±${c.yr_vol}%`, "사이클 진폭 — 클수록 오르내림이 크다"],
+    c.rev_vol != null && ["매출 증감 변동", `±${c.rev_vol}%p`, "수요 사이클에 매출이 얼마나 흔들리나"],
+    c.op_vol != null && ["영업이익 증감 변동", `±${c.op_vol}%p`, "이익 레버리지 — 순환주는 이익이 더 크게 흔들린다"],
+    c.op_loss_years ? ["적자 연도", `10년 중 ${c.op_loss_years}년`, "사이클 저점에서 적자를 내는가"] : null,
+    c.beta != null && ["시장 베타", c.beta.toFixed(2), "시장이 1% 움직일 때 이 종목의 반응"],
+    c.cycle_m ? ["관찰된 주기", `약 ${c.cycle_m}개월`, `월수익 자기상관 ρ=${c.cycle_rho}`] : null,
+  ].filter(Boolean);
+  return `<div class="cyc-wrap">
+    <div class="perf-h" style="margin:10px 0 4px">🔄 순환성 <span class="sub-note">(경기 사이클에 얼마나 민감한가)</span></div>
+    <div class="cyc-head"><b class="cyc-badge ${cls}">${lab}</b>
+      <span class="cyc-track"><span class="cyc-fill ${cls}" style="width:${c.score}%"></span></span>
+      <b>${c.score.toFixed(0)}</b><span class="sub-note">/100</span></div>
+    ${rows.map(([k, v, tip]) => `<div class="ws-kv-row" title="${tip}"><span>${k}</span><b>${v}</b></div>`).join("")}
+    <p class="sub-note" style="margin-top:4px">10년 시계열 + DART 연간 실적으로 산출한 **상대 순위**(전 종목 백분위 평균)
+      ${c.partial ? " · ⚠실적 데이터가 없어 가격 지표만 사용" : ""}</p>
+  </div>`;
+}
+
 function renderLookupProfile(st) {
   const host = $("#lookup-profile");
   const p = st.profile || {};
@@ -10128,7 +10266,15 @@ function renderLookupProfile(st) {
   host.innerHTML = `<div class="fund-head">종목 프로파일 <span class="sub-note">(자체 계산)</span></div>
     ${perfViz}${riskViz}${supViz}
     <div class="prof-grid wide">${rows.map(([k, v]) => `<div class="prof-row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
-    ${valLine}`;
+    ${valLine}<div id="prof-cyc"></div>`;
+  // 🔄 순환성(v370) — cyclical.json은 lazy 로드라 도착 후 채운다(첫 진입에 비지 않게)
+  loadCyclical().then((got) => {
+    if (LOOKUP_ST !== st) return;
+    const el = document.getElementById("prof-cyc");
+    if (el) el.innerHTML = cycProfileHtml(st);
+    // ⚠차트의 토글 버튼도 이 데이터가 있어야 나타난다 → 도착 시 1회 재그림(캐시되므로 반복 없음)
+    if (got && !st._cycDrawn) { st._cycDrawn = true; drawLookupChart(); }
+  });
   const gv = document.getElementById("goto-value");
   if (gv) gv.addEventListener("click", (e) => {
     e.preventDefault();
@@ -11638,30 +11784,8 @@ function renderValueBand(st) {
   const fwdHtml = fwdPer && isFinite(fwdPer) && fwdPer > 0
     ? `<span class="band-fwd">선행 PER <b>${fwdPer.toFixed(fwdPer < 10 ? 2 : 1)}배</b>
         <span class="sub-note">(${String(estRow.y).slice(0, 4)} 추정 · 컨센서스)</span></span>` : "";
-  const roeRows = Object.keys(annual).sort().map((y) => {
-    const d0 = annual[y];
-    return d0?.equity ? { y: String(y).slice(0, 4), v: (d0.np / d0.equity) * 100 } : null;
-  }).filter((r) => r && isFinite(r.v)).slice(-10);
-  let roeHtml = "";
-  if (roeRows.length >= 3) {
-    const RW = 940, RH = 150, RP = { l: 46, r: 24, t: 16, b: 20 };
-    const rv = roeRows.map((r) => r.v);
-    const rlo = Math.min(0, ...rv), rhi = Math.max(...rv), rpad = (rhi - rlo) * 0.15 || 1;
-    const RX = (i) => RP.l + (RW - RP.l - RP.r) * (i / Math.max(1, roeRows.length - 1));
-    const RY = (v) => RP.t + (RH - RP.t - RP.b) * (1 - (v - (rlo - rpad)) / ((rhi + rpad) - (rlo - rpad)));
-    const zero = rlo < 0 ? `<line x1="${RP.l}" y1="${RY(0)}" x2="${RW - RP.r}" y2="${RY(0)}"
-      stroke="#8b8b93" stroke-dasharray="3 3"/>` : "";
-    roeHtml = `<div class="roe-wrap"><div class="lk-h3" style="font-size:.9rem;margin:10px 0 2px">
-        📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계)</span></div>
-      <svg viewBox="0 0 ${RW} ${RH}" class="fin-svg">${zero}
-        <polyline points="${roeRows.map((r, i) => `${RX(i).toFixed(1)},${RY(r.v).toFixed(1)}`).join(" ")}"
-          fill="none" stroke="#b79bff" stroke-width="2.2"/>
-        ${roeRows.map((r, i) => `<circle cx="${RX(i).toFixed(1)}" cy="${RY(r.v).toFixed(1)}" r="3" fill="#b79bff"/>
-          <text x="${RX(i).toFixed(1)}" y="${RY(r.v) - 8}" text-anchor="middle" class="cr-end"
-            fill="${r.v >= 0 ? "#b79bff" : "#ff7c8c"}">${r.v.toFixed(1)}%</text>
-          <text x="${RX(i).toFixed(1)}" y="${RH - 5}" text-anchor="middle" class="cr-ax">${r.y}</text>`).join("")}
-      </svg></div>`;
-  }
+  // v370: ROE 추이는 **Snapshot 성장·이익률**로 이동(사용자 요청) — 밴드는 밸류에이션에 집중
+  const roeHtml = "";
   const qn = qk.length;
   host.innerHTML = `<h3 class="lk-h3">📐 밸류에이션 밴드
       <span class="sub-note">(밴드 = 그 시점 ${cur[3]} × 배수 · 공시일마다 계단식)</span>
@@ -12075,9 +12199,11 @@ function renderFinTrends(st) {
     ? `<div class="mk-toggle ft-cmp" style="margin:2px 0 6px">
         <button data-c="qoq" class="${ftGrowCmp === "qoq" ? "active" : ""}">직전분기 대비(QoQ)</button>
         <button data-c="yoy" class="${ftGrowCmp === "yoy" ? "active" : ""}">전년 동분기 대비(YoY)</button></div>` : "";
+  // v370: 성장·이익률 뷰에만 ROE 추이를 함께(밴드에서 이동) — 자기 축을 가진 별도 미니 차트
+  const roeExtra = ftView === "growth" ? roeTrendSvg(roeRowsOf(st)) : "";
   $("#ft-chart").innerHTML = ftCmpBar + (chartSvg
     ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}${placeLabels()}</svg><p class="legend">${legend}</p>`
-    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`);
+    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`) + roeExtra;
   host.querySelectorAll(".ft-cmp button").forEach((b) => b.onclick = () => { ftGrowCmp = b.dataset.c; renderFinTrends(st); });
 
   // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----

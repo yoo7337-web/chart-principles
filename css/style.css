@@ -61,11 +61,36 @@
 .lk-overview .ov-expand { position: absolute; right: 12px; bottom: 8px; z-index: 2; }
 .lk-overview.collapsed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
   height: 56px; background: linear-gradient(transparent, var(--card)); pointer-events: none; }
-/* 📍 관심종목 추이 그래프의 고가·저가·현재가 표시 (v369) */
-.ws-px { position: absolute; transform: translate(6px, -50%); font-size: .68rem; font-weight: 700;
+/* 🔄 순환성 경로 토글 (차트 컨트롤, v370) */
+#cyc-toggle.on { background: rgba(240,179,76,.18); border-color: rgba(240,179,76,.5); color: #f0b34c; }
+#cyc-note { font-size: .76rem; }
+
+/* 🔄 순환성 블록 (종목 프로파일, v370) */
+.cyc-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
+.cyc-badge { font-size: .76rem; padding: 2px 8px; border-radius: 999px; }
+.cyc-badge.vhigh { background: rgba(245,68,90,.18); color: #ff8f9c; }
+.cyc-badge.high { background: rgba(240,179,76,.18); color: #f0b34c; }
+.cyc-badge.mid { background: rgba(255,255,255,.08); color: var(--muted); }
+.cyc-badge.low { background: rgba(67,145,255,.16); color: #7cb1ff; }
+.cyc-track { flex: 1; height: 6px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; }
+.cyc-fill { display: block; height: 100%; }
+.cyc-fill.vhigh { background: var(--sell); } .cyc-fill.high { background: #f0b34c; }
+.cyc-fill.mid { background: var(--muted); } .cyc-fill.low { background: var(--accent); }
+
+/* 📍 관심종목 추이 그래프의 고가·저가·현재가 (v369 · v370에서 차트 밖 띠로 분리) */
+.ws-spark-wrap { padding: 17px 0; }              /* 위·아래 라벨 띠 — 신호 마커와 구조적으로 분리 */
+.ws-px { position: absolute; transform: translateX(-50%); font-size: .68rem; font-weight: 700;
   padding: 1px 5px; border-radius: 4px; white-space: nowrap; pointer-events: none;
   background: rgba(23,23,28,.82); border: 1px solid var(--line); }
-.ws-px.flip { transform: translate(calc(-100% - 6px), -50%); }
+.ws-px.top { top: 0; }
+.ws-px.bot { bottom: 0; }
+.ws-px.flip { transform: translateX(-50%); }
+/* 실제 지점은 점으로 표시(값은 띠 라벨에) */
+.ws-pxdot { position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px rgba(23,23,28,.9); }
+.ws-pxdot.hi { background: var(--kup); }
+.ws-pxdot.lo { background: var(--kdn); }
+.ws-pxdot.cur { background: #fff; }
 .ws-px.hi { color: var(--kup); border-color: rgba(245,68,90,.4); }
 .ws-px.lo { color: var(--kdn); border-color: rgba(67,145,255,.4); }
 .ws-px.cur { color: var(--ink); border-color: rgba(255,255,255,.28); }
@@ -2181,6 +2206,8 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
    → 헤더는 **한 줄 고정**(nowrap)으로 두고, 종목 배지·날짜는 남는 폭에서 줄임표 처리한다.
    버튼(수정·삭제)은 절대 줄바꿈되지 않게 flex-shrink를 막는다. */
 .di-card .di-head { margin-bottom: 7px; flex-wrap: nowrap; min-width: 0; }
+/* 카테고리 배지도 줄바꿈 금지 — '생 각'처럼 두 줄로 갈라졌다(v370) */
+.di-card .di-type { white-space: nowrap; flex: 0 0 auto; }
 .di-card .di-head .sub-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .di-card .di-tk { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
 .di-card .di-mini { flex: 0 0 auto; }
