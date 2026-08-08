@@ -3599,12 +3599,30 @@ function ownPickTarget(ev, key, goLookup) {
   const w = box.offsetWidth, h = box.offsetHeight;
   box.style.left = Math.min(ev.clientX + 6, innerWidth - w - 10) + "px";
   box.style.top = Math.min(ev.clientY + 6, innerHeight - h - 10) + "px";
-  box.querySelector('[data-a="own"]').onclick = () => { box.remove(); ownLoad(key); };
-  box.querySelector('[data-a="look"]').onclick = () => { box.remove(); goLookup(); };
-  setTimeout(() => {
-    const off = (e) => { if (!box.contains(e.target)) { box.remove(); document.removeEventListener("pointerdown", off); } };
-    document.addEventListener("pointerdown", off);
-  }, 0);
+  /* 닫기 처리(v385) — **한 번 클릭으로 열고, 고를 때까지 떠 있어야 한다**(사용자 제보: 꾹 눌러야 보인다).
+     ⚠기존 구현은 `setTimeout(0)` 직후 `pointerdown` 해제 리스너를 걸어, **메뉴를 연 그 제스처의
+       잔여 이벤트가 곧바로 메뉴를 닫을 수 있었다**(짧게 누를수록 잘 걸린다 — 그래서 길게 누를 때만
+       남아 있는 것처럼 보인다). 또 버튼으로 닫을 때 리스너를 떼지 않아 죽은 리스너가 쌓였다.
+     → ①**열림 유예 250ms**(그 안의 입력은 무시) ②pointerdown·click 양쪽 감시(capture)
+       ③Esc로 닫기 ④어떤 경로로 닫혀도 리스너를 반드시 정리(close 한 곳). */
+  const openedAt = performance.now();
+  const close = () => {
+    box.remove();
+    document.removeEventListener("pointerdown", onOut, true);
+    document.removeEventListener("click", onOut, true);
+    document.removeEventListener("keydown", onKey, true);
+  };
+  const onOut = (e) => {
+    if (box.contains(e.target)) return;                  // 메뉴 안 클릭은 버튼 핸들러가 처리
+    if (performance.now() - openedAt < 250) return;      // 여는 제스처의 잔여 이벤트 무시
+    close();
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  box.querySelector('[data-a="own"]').onclick = () => { close(); ownLoad(key); };
+  box.querySelector('[data-a="look"]').onclick = () => { close(); goLookup(); };
+  document.addEventListener("pointerdown", onOut, true);
+  document.addEventListener("click", onOut, true);
+  document.addEventListener("keydown", onKey, true);
 }
 
 /* 출자 목적 분류 — 공정위 지분도는 '지배' 관계만 그린다. 보험·지주는 단순투자 지분이 수백 건이라
@@ -3926,6 +3944,7 @@ function ownRender() {
     const key = el.dataset.go;
     const goLookup = () => { gotoLookup(key); };
     if (key === ownSel || !(OWN_IDX || []).includes(key)) return goLookup();   // 지분도 없음/현재 그래프 → 직행
+    ev.preventDefault();          // 기본 동작(앵커 이동 등)이 뒤따라 화면을 바꾸지 않게
     ev.stopPropagation();
     ownPickTarget(ev, key, goLookup);
   });
@@ -4023,6 +4042,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v385", "2026-08-08", "🐞 소유지분도 선택 메뉴가 '꾹 눌러야' 보이던 문제",
+   "제보: 지분도에서 ★상장사를 눌렀을 때 나오는 '이 회사 지분도 보기 / 종목조회 열기' 메뉴가 "
+   + "**한 번 클릭으로는 안 뜨고 계속 누르고 있어야** 보인다.\n\n"
+   + "메뉴는 원래 클릭에 걸려 있었지만, **여는 즉시 바깥 클릭 감지를 등록**하는 구조여서 "
+   + "메뉴를 연 그 클릭의 잔여 입력이 곧바로 메뉴를 닫을 수 있었습니다(짧게 누를수록 잘 걸립니다). "
+   + "또 버튼으로 닫을 때 감지기를 떼지 않아 죽은 감지기가 쌓였습니다.\n\n"
+   + "→ **여는 순간 250ms 유예**를 둬 자기 클릭에는 닫히지 않게 하고, 그 뒤 바깥을 클릭하거나 "
+   + "**Esc**를 누르면 닫히도록 했습니다. 어떤 경로로 닫혀도 감지기를 정리합니다."],
   ["v384", "2026-08-08", "🐞 종목조회 이동 링크 4곳이 죽어 있던 문제",
    "제보: \"오늘의 신호에서 종목을 눌러도 종목조회로 안 넘어간다\". 확인해 보니 **원인은 링크가 아니라 "
    + "이동 방식**이었습니다 — 이동 코드가 상단 메뉴의 '종목 조회' 버튼을 대신 클릭하는 방식이었는데, "
