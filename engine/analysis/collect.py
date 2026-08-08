@@ -120,12 +120,25 @@ US_CORE = US_CURATED                                    # 무거운 소비자용
 
 
 def norm_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
-    """컬럼을 open/high/low/close/volume 소문자로 표준화, date 인덱스."""
+    """컬럼을 open/high/low/close/volume 소문자로 표준화, date 인덱스.
+
+    🐞💀**거래정지·무거래일 보정(2026-08-08)**: 국내 소스(pykrx·FDR 모두 네이버 기반)는 거래가 없는 날을
+      `시가=고가=저가=0 · 거래량=0 · 종가=전일 종가`로 준다. 이걸 그대로 두면 캔들이 **0에서 종가까지
+      그려져 화면을 가로지르는 긴 막대**가 된다(사용자 제보 — 실측 749종목·최다 1,433행).
+      더 나쁜 것은 **지표 오염**이다: 저가 0이 스토캐스틱·고저 기반 계산에 그대로 들어간다.
+    → 종가는 살아 있으므로 **시가·고가·저가를 종가로 맞춘다**(거래가 없었으니 가격 변동도 없다).
+      결과는 위아래 꼬리가 없는 평평한 봉 = 화면에서 점처럼 보인다.
+    ⚠종가까지 0인 행은 기존처럼 버린다(가격을 만들어낼 근거가 없다).
+    """
     df = df.copy()
     df.index = pd.to_datetime(df.index).tz_localize(None)
     df.index.name = "date"
     df = df[["open", "high", "low", "close", "volume"]].astype("float64")
     df = df[(df["close"] > 0) & (df["volume"] >= 0)].sort_index()
+    flat = df[["open", "high", "low"]].le(0).any(axis=1) | df[["open", "high", "low"]].isna().any(axis=1)
+    if flat.any():
+        for c in ("open", "high", "low"):
+            df.loc[flat, c] = df.loc[flat, "close"]
     return df[~df.index.duplicated(keep="last")]
 
 
@@ -295,6 +308,25 @@ def collect_us(quick: bool, force: bool) -> int:
     return ok
 
 
+def _fix_flat_bars(df: pd.DataFrame) -> pd.DataFrame:
+    """거래정지·무거래일의 `시가=고가=저가=0`을 종가로 맞춘다(norm_ohlcv와 같은 규칙).
+
+    ⚠**로드 시점에도 거는 안전망**이다: 이미 쌓인 캐시나 옛 코드로 갱신된 행이 남아 있으면
+      ①차트에 0에서 종가까지 뻗는 긴 막대가 생기고 ②저가 0이 고저 기반 지표·백테스트를 오염시킨다.
+      수집 단계(norm_ohlcv)에서 막고 있지만, **모든 소비자가 지나는 이 문에서 한 번 더** 막는다.
+    """
+    if df is None or df.empty or not {"open", "high", "low", "close"}.issubset(df.columns):
+        return df
+    cols = ["open", "high", "low"]
+    bad = (df[cols].le(0).any(axis=1) | df[cols].isna().any(axis=1)) & (df["close"] > 0)
+    if not bad.any():
+        return df
+    df = df.copy()
+    for c in cols:
+        df.loc[bad, c] = df.loc[bad, "close"]
+    return df
+
+
 def load_all() -> dict:
     """캐시된 전 종목 로드 → {(market, ticker): DataFrame}. 다른 모듈에서 사용.
     (macro.parquet 등 비종목 캐시는 제외 — kr_/us_ 접두사만)"""
@@ -302,7 +334,7 @@ def load_all() -> dict:
     for p in sorted(DATA_DIR.glob("kr_*.parquet")) + sorted(DATA_DIR.glob("us_*.parquet")):
         market, ticker = p.stem.split("_", 1)
         try:
-            out[(market, ticker)] = pd.read_parquet(p)
+            out[(market, ticker)] = _fix_flat_bars(pd.read_parquet(p))
         except Exception as e:
             # ⚠손상 캐시 하나가 전체를 죽이면 안 된다(2026-08-07: 잘린 parquet 5개 →
             #   market_dash 24시간 정지). 건너뛰고 경고만 — 파일 삭제 후 재수집으로 복구.
