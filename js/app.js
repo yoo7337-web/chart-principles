@@ -1858,40 +1858,10 @@ function dwMemoAsk({ text = "", color = drawColor, kind = "callout", canDelete =
   });
 }
 
-/* 📈 ROE 추이 차트(v370) — 밸류에이션 밴드에서 Snapshot 성장·이익률로 옮겼다.
-   ⚠성장률(±90%)과 ROE(10~30%)는 스케일이 달라 **한 축에 겹쳐 그리면 ROE가 납작해진다**(v315 교훈)
-     → 성장률 차트 아래에 자기 축을 가진 별도 미니 차트로 붙인다. rows = [{y, v}] */
-function roeTrendSvg(rows) {
-  if (!rows || rows.length < 3) return "";
-  const RW = 940, RH = 150, RP = { l: 46, r: 24, t: 16, b: 20 };
-  const rv = rows.map((r) => r.v);
-  const rlo = Math.min(0, ...rv), rhi = Math.max(...rv), rpad = (rhi - rlo) * 0.15 || 1;
-  const RX = (i) => RP.l + (RW - RP.l - RP.r) * (i / Math.max(1, rows.length - 1));
-  const RY = (v) => RP.t + (RH - RP.t - RP.b) * (1 - (v - (rlo - rpad)) / ((rhi + rpad) - (rlo - rpad)));
-  const zero = rlo < 0 ? `<line x1="${RP.l}" y1="${RY(0)}" x2="${RW - RP.r}" y2="${RY(0)}"
-    stroke="#8b8b93" stroke-dasharray="3 3"/>` : "";
-  return `<div class="roe-wrap"><div class="lk-h3" style="font-size:.9rem;margin:12px 0 2px">
-      📈 ROE 추이 <span class="sub-note">(순이익 ÷ 자본총계 · 연간)</span></div>
-    <svg viewBox="0 0 ${RW} ${RH}" class="fin-svg">${zero}
-      <polyline points="${rows.map((r, i) => `${RX(i).toFixed(1)},${RY(r.v).toFixed(1)}`).join(" ")}"
-        fill="none" stroke="#b79bff" stroke-width="2.2"/>
-      ${rows.map((r, i) => `<circle cx="${RX(i).toFixed(1)}" cy="${RY(r.v).toFixed(1)}" r="3" fill="#b79bff"/>
-        <text x="${RX(i).toFixed(1)}" y="${RY(r.v) - 8}" text-anchor="middle" class="cr-end"
-          fill="${r.v >= 0 ? "#b79bff" : "#ff7c8c"}">${r.v.toFixed(1)}%</text>
-        <text x="${RX(i).toFixed(1)}" y="${RH - 5}" text-anchor="middle" class="cr-ax">${r.y}</text>`).join("")}
-    </svg></div>`;
-}
-
-// 연간 재무에서 ROE 시계열 추출 — financials의 annual(순이익·자본총계)
-function roeRowsOf(st) {
-  const fin = FIN_CACHE[`${st.market}_${st.ticker}`];
-  const src = fin?.[ftFs] || fin?.cfs || fin?.ofs || fin;
-  const annual = src?.annual || {};
-  return Object.keys(annual).sort().map((y) => {
-    const d = annual[y];
-    return d?.equity && d?.np != null ? { y: String(y).slice(0, 4), v: (d.np / d.equity) * 100 } : null;
-  }).filter((r) => r && isFinite(r.v)).slice(-10);
-}
+/* v383: ROE 추이 미니 차트(roeTrendSvg)·연간 ROE 추출(roeRowsOf) **삭제** —
+   ROE를 성장률 차트의 우축 라인으로 합쳤다(사용자 요청). 미니 차트는 별도 연간 시계열이라
+   x축이 표(분기)와 어긋나 같은 화면에서 서로 다른 기간을 가리키는 문제도 있었다.
+   지금은 renderFinTrends의 `line2nd("roe", …)`가 **표와 같은 rows.roe**를 그린다. */
 
 // 말풍선 줄바꿈 — 공백 단위로 채우고, 한 낱말이 길면 그대로 한 줄(최대 4줄)
 function calloutLines(text, per = 12) {
@@ -4042,6 +4012,13 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v383", "2026-08-08", "📈 ROE를 성장률 차트에 합침 — 표와 같은 기준으로",
+   "**ROE 추이를 아래 별도 미니 차트에서 위 성장률 차트로 합쳤습니다**(사용자 요청). 동시에 **표에 적힌 "
+   + "값과 같은 데이터**를 쓰도록 바꿨습니다 — 예전 미니 차트는 별도 연간 시계열(2016~2025)이라 표가 "
+   + "분기(24Q1~26Q2)를 보여줄 때 **같은 화면에서 서로 다른 기간**을 가리키고 있었습니다. "
+   + "이제 연간 뷰는 ROE, 분기 뷰는 ROE(연환산)로 표와 정확히 일치합니다.\n\n"
+   + "⚠성장률은 ±184%까지 가는데 ROE는 ±20% 수준이어서 같은 축에 얹으면 ROE가 납작해집니다 → "
+   + "**우축(자기 스케일)**에 점선으로 그리고 우측에 눈금 3개를 표시해 축이 다르다는 걸 밝혔습니다."],
   ["v382", "2026-08-08", "🔄 순환성을 투자 지표 카드로 · Snapshot에 매출액 금액 행",
    "**순환성 블록(강도 점수·연간 변동·베타·주기·향후 6개월 방향)을 종목 프로파일에서 오른쪽 레일의 "
    + "투자 지표 카드로 옮겼습니다**(사용자 요청). 밸류에이션·수익성과 같은 자리에서 함께 읽는 게 맞는 성격입니다.\n\n"
@@ -12378,6 +12355,30 @@ function renderFinTrends(st) {
     const legend = keys.map((k, j) => `<span style="color:${colors[j]}">■</span> ${labels[j]}`).join("  ");
     return { svg, legend, yS };
   };
+  /* 보조축(우축) 단일 라인 — v383: ROE를 성장률 차트에 합치면서 필요해졌다(사용자 요청).
+     ⚠**같은 축에 얹으면 안 된다**: 성장률은 ±184%까지 가는데 ROE는 ±20% 수준이라 ROE가 납작해져
+       변화를 못 읽는다(v313 배수 추이에서 PER 20배·PBR 0.3배로 이미 겪은 함정).
+     → 자기 min~max로 스케일을 잡고 **우측에 눈금 3개**를 그려 축이 다르다는 걸 화면에 밝힌다. */
+  const line2nd = (k, color, label) => {
+    const vals = rows.map((r) => r[k]).filter(Number.isFinite);
+    if (vals.length < 2) return { svg: "", legend: "" };
+    const maxV = Math.max(...vals), minV = Math.min(...vals, 0);
+    const pad2 = (maxV - minV) * 0.18 || 5;
+    const lo = minV - pad2, hi = maxV + pad2;
+    const yS = (v) => padT + (hi - v) / (hi - lo || 1) * plotH;
+    const pts = rows.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
+    if (pts.length < 2) return { svg: "", legend: "" };
+    let svg = `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
+      fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="2 2"/>`
+      + pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${color}"/>`).join("");
+    pts.forEach((p) => pushLbl(p[0], p[1] - 7, p[2].toFixed(1) + "%", color, 9.5, -1, 0));
+    // 우축 눈금(최소·중간·최대) — 성장률 좌축과 스케일이 다름을 드러낸다
+    [hi - pad2, (maxV + minV) / 2, lo + pad2].forEach((tv) => {
+      const y = yS(tv);
+      svg += `<text x="${W - padR + 4}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${color}" fill-opacity=".85">${tv.toFixed(0)}%</text>`;
+    });
+    return { svg, legend: `  <span style="color:${color}">●┄</span> ${label} <span class="sub-note">(우축 — 좌축과 스케일 다름)</span>` };
+  };
   const lineOn = (keys, colors, labels, dash = []) => {
     // ⚠`!= null`만으로는 NaN이 통과해 max/min이 NaN이 되고 전 좌표가 깨진다 → 유한값만 남긴다
     const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => Number.isFinite(v));
@@ -12438,7 +12439,11 @@ function renderFinTrends(st) {
     const gl2 = ftMode === "annual" ? "영업이익 증가율(YoY)"
       : useYoY ? "영업이익 증가율(전년 동분기比)" : "영업이익 증가율(QoQ)";
     const r1 = lineOn(useYoY ? ["revGY", "opGY"] : ["revG", "opG"], ["#4391ff", "#22c07a"], [gl, gl2], ["", "5 3"]);
-    chartSvg = r1.svg; legend = r1.legend;
+    /* v383: **ROE를 이 차트에 합친다**(사용자 요청 — 별도 미니 차트 폐지).
+       ⚠데이터도 **표와 같은 `rows.roe`**를 쓴다: 연간=ROE · 분기=연환산. 예전 roeTrendSvg는 별도
+         연간 시계열(2016~)이라 x축이 표(24Q1~26Q2)와 어긋나 같은 화면에서 서로 다른 기간을 가리켰다. */
+    const r2 = line2nd("roe", "#9d7bff", roeLab);
+    chartSvg = r1.svg + r2.svg; legend = r1.legend + r2.legend;
   } else if (ftView === "stability") {
     const r1 = lineOn(["debt", "cur"], ["#e0912f", "#3f6fb5"], ["부채비율", "유동비율"]);
     chartSvg = r1.svg; legend = r1.legend;
@@ -12460,11 +12465,10 @@ function renderFinTrends(st) {
     ? `<div class="mk-toggle ft-cmp" style="margin:2px 0 6px">
         <button data-c="qoq" class="${ftGrowCmp === "qoq" ? "active" : ""}">직전분기 대비(QoQ)</button>
         <button data-c="yoy" class="${ftGrowCmp === "yoy" ? "active" : ""}">전년 동분기 대비(YoY)</button></div>` : "";
-  // v370: 성장·이익률 뷰에만 ROE 추이를 함께(밴드에서 이동) — 자기 축을 가진 별도 미니 차트
-  const roeExtra = ftView === "growth" ? roeTrendSvg(roeRowsOf(st)) : "";
+  // v383: 별도 ROE 미니 차트(roeTrendSvg) 폐지 — 위 성장률 차트의 우축 라인으로 합쳤다(사용자 요청)
   $("#ft-chart").innerHTML = ftCmpBar + (chartSvg
     ? `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${chartSvg}${placeLabels()}</svg><p class="legend">${legend}</p>`
-    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`) + roeExtra;
+    : `<p class="mini-note">이 분류의 데이터가 없습니다.</p>`);
   host.querySelectorAll(".ft-cmp button").forEach((b) => b.onclick = () => { ftGrowCmp = b.dataset.c; renderFinTrends(st); });
 
   // ---- 뷰별 표(그래프 아래) — 각 분류의 데이터를 그대로 수치로 ----

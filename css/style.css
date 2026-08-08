@@ -1945,7 +1945,6 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 .dsc-vr.hot { background: rgba(245,68,90,.20); color: #ff7c8c; }
 .band-fwd { font-size: .84rem; white-space: nowrap; }
 .band-fwd b { color: var(--accent); }
-.roe-wrap { margin-top: 4px; }
 /* 시장 심리(공포·탐욕·풋콜) */
 .sent-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
 .sent-now > b { font-size: 2rem; line-height: 1; font-variant-numeric: tabular-nums; }
