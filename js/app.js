@@ -5931,7 +5931,7 @@ function renderScrMetrics() {
 function updateScrCatCounts() {
   document.querySelectorAll(".scr-cat-n").forEach((el) => {
     const n = SCR_METRICS.filter((m) => m.cat === el.dataset.cat && scrMetricSel[m.id]).length;
-    el.textContent = n ? `· ${n}개 적용` : "";
+    el.textContent = n ? `${n}개 적용` : "";   // v386: 알약 배지가 되어 앞의 '·'는 군더더기
   });
 }
 

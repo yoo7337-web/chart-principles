@@ -1195,21 +1195,51 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 세부 지표 필터 */
 .scr-detail { margin-top: 12px; padding: 12px 16px; }
 .scr-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.scr-cat { border-top: 1px solid var(--line); padding: 4px 0; }
-.scr-cat > summary { cursor: pointer; font-weight: 700; font-size: .9rem; padding: 6px 0; list-style: revert; }
-.scr-metric-row { display: flex; align-items: center; gap: 10px; padding: 4px 0 4px 6px; flex-wrap: wrap; }
-.scr-mlabel { flex: 0 0 178px; font-size: .86rem; display: flex; flex-direction: column; }
-.scr-mnote { color: var(--muted); font-size: .72rem; }
-.scr-bks { display: flex; flex-wrap: wrap; gap: 5px; }
-.scr-bk { font-size: .8rem; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--bg); cursor: pointer; color: var(--ink); }
-.scr-bk.active { background: #4391ff; border-color: #4391ff; color: #fff; }
+/* ── 재무 필터 카드(v386 디자인 정리) — 기능·마크업은 그대로, 보기만 손봤다 ──
+   고친 것: ①`PER` / `(배)`가 두 줄로 갈라져 행이 커 보였다 → 한 줄로
+   ②`<details>` 기본 삼각형(▼)을 커스텀 셰브론으로 ③분류 제목에 색 악센트 + '적용 N' 알약
+   ④칩 크기·간격을 줄이고 활성 상태를 또렷하게 ⑤행 사이 얇은 구분선으로 훑기 쉽게 */
+/* ⚠`min-width: 0` 필수 — 수급 카드 안의 검증표(6열)가 최소 콘텐츠 폭을 요구해 그리드 트랙을 밀어
+   **가로 스크롤이 생겼다**. 0으로 풀어 주면 표는 자기 `.tablewrap` 안에서 스크롤한다. */
+.scr-cat { border: 1px solid var(--line); border-radius: 10px; padding: 2px 12px 8px;
+  background: rgba(255,255,255,.02); align-self: start; min-width: 0; }
+.scr-cat .tablewrap { overflow-x: auto; }
+.scr-cat > summary { cursor: pointer; font-weight: 700; font-size: .82rem; padding: 8px 0 6px;
+  list-style: none; display: flex; align-items: center; gap: 6px; color: #cdd3de;
+  letter-spacing: .01em; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.scr-cat > summary::-webkit-details-marker { display: none; }
+.scr-cat > summary::before {                 /* 커스텀 셰브론 — 열리면 아래를 향한다 */
+  content: ""; width: 5px; height: 5px; flex: 0 0 auto; margin-right: 1px;
+  border-right: 1.5px solid #7f8796; border-bottom: 1.5px solid #7f8796;
+  transform: rotate(-45deg); transition: transform .15s; }
+.scr-cat[open] > summary::before { transform: rotate(45deg); }
+.scr-cat > summary::after {                   /* 분류 색 악센트 */
+  content: ""; width: 3px; height: 11px; border-radius: 2px; background: #4391ff;
+  order: -1; margin-right: 3px; }
+.scr-cat:nth-of-type(2) > summary::after { background: #22c07a; }
+.scr-cat:nth-of-type(3) > summary::after { background: #f0b34c; }
+.scr-cat:nth-of-type(4) > summary::after { background: #b79bff; }
+.scr-cat-n:not(:empty) { margin-left: auto; font-size: .68rem; color: #8ab8ff; font-weight: 600;
+  background: rgba(67,145,255,.14); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.scr-metric-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap;
+  border-bottom: 1px dashed rgba(218,223,233,.06); }
+.scr-metric-row:last-of-type { border-bottom: none; }
+/* ⚠라벨은 **블록**이라야 "PER (배)"가 한 줄에 오고 설명만 아래로 내려간다(전엔 column flex라 다 갈라졌다) */
+.scr-mlabel { flex: 1 1 100%; display: block; font-size: .8rem; font-weight: 600; line-height: 1.35; }
+.scr-mlabel .sub-note { font-weight: 400; font-size: .72rem; }
+.scr-mnote { display: block; color: var(--muted); font-size: .7rem; font-weight: 400; line-height: 1.4; }
+.scr-bks { display: flex; flex-wrap: wrap; gap: 4px; }
+.scr-bk { font-size: .74rem; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); cursor: pointer; color: #b9c0cc; transition: background .12s, border-color .12s, color .12s; }
+.scr-bk:hover { border-color: rgba(255,255,255,.3); color: var(--ink); }
+.scr-bk.active { background: #4391ff; border-color: #4391ff; color: #fff; font-weight: 600; }
+.scr-eviden { margin-top: 8px; font-size: .74rem; }
 .scr-unavail { margin-top: 8px; }
 .scr-unavail summary { cursor: pointer; }
 .scr-unavail ul { margin: 8px 0 2px; padding-left: 18px; font-size: .82rem; color: var(--muted); line-height: 1.7; }
 @media (max-width: 640px) {
   .scr-label { flex-basis: 48px; }
-  .scr-mlabel { flex-basis: 120px; }
+  /* v386: 라벨은 이제 한 줄 전체를 쓰고 칩이 아래로 간다 → 모바일에서도 같은 규칙 유지 */
   #scr-table td:nth-child(3), #scr-table th:nth-child(3) { display: none; }
 }
 /* 보조지표 체크박스 + 지표 패널 */
@@ -1614,6 +1644,21 @@ dialog { background: var(--card); color: var(--ink); }
 .lk-side .lk-cap b { font-size: .9rem; }        /* 좁은 레일: 값이 카드 제목(.95rem)보다 크지 않게 */
 .lk-side .lk-cap > div { min-width: 108px; padding: 6px 10px; }
 .lk-side .card-flat { padding-left: 14px; padding-right: 14px; }
+/* 🔄 순환성(v386) — 관심종목의 **넓은 카드용 스타일**(.ws-kv-row)을 쓰는데 v382에서 좁은 레일로
+   옮겨와 글자가 커 보이고 라벨이 줄바꿈됐다("영업이익 증감 변/동"). 위 .lk-mrow 축소와 같은 기준으로 맞춘다.
+   ⚠라벨 칸(기본 88px)이 좁아 줄바꿈이 났다 → 폰트를 줄이면서 칸은 **넓혀야** 한 줄에 들어간다. */
+.lk-side .cyc-wrap .perf-h { font-size: .74rem; }
+.lk-side .cyc-wrap .ws-kv-row { padding: 1px 0; gap: 6px; }
+.lk-side .cyc-wrap .ws-kv-row > span { flex: 0 0 106px; font-size: .72rem; }
+.lk-side .cyc-wrap .ws-kv-row > b { font-size: .8rem; min-width: 0; white-space: nowrap; }
+.lk-side .cyc-wrap .cyc-head { gap: 6px; margin: 3px 0 5px; }
+.lk-side .cyc-wrap .cyc-head > b { font-size: .85rem; }      /* 점수(53) */
+/* ⚠배지도 `.cyc-head > b`라 위 규칙이 더 구체적이어서 이긴다 → 클래스를 함께 붙여 명시(실측 13.6→11.2px) */
+.lk-side .cyc-wrap .cyc-head > b.cyc-badge { font-size: .7rem; padding: 1px 7px; }
+.lk-side .cyc-wrap .cyc-fwd { padding: 7px 9px; margin-top: 8px; }
+.lk-side .cyc-wrap .cyc-fwd-h { font-size: .76rem; }
+.lk-side .cyc-wrap .cyc-fwd-n { font-size: .74rem; }
+.lk-side .cyc-wrap .sub-note { font-size: .69rem; }
 /* 주가 헤더 — 스크롤 시 고정(v213: 위 sticky 바의 중복 종목정보를 없애고 이 영역을 고정 헤더로 씀).
    ⚠검색 바(.lk-sticky)가 top:0을 이미 쓰므로 그 높이만큼 내려서 겹치지 않게 한다(--lk-bar). */
 .lk-main .lookup-head { position: sticky; top: var(--lk-bar, 48px); z-index: 6; background: var(--bg);
