@@ -4042,6 +4042,12 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v382", "2026-08-08", "🔄 순환성을 투자 지표 카드로 · Snapshot에 매출액 금액 행",
+   "**순환성 블록(강도 점수·연간 변동·베타·주기·향후 6개월 방향)을 종목 프로파일에서 오른쪽 레일의 "
+   + "투자 지표 카드로 옮겼습니다**(사용자 요청). 밸류에이션·수익성과 같은 자리에서 함께 읽는 게 맞는 성격입니다.\n\n"
+   + "재무 Snapshot의 **성장·이익률 표에 매출액 금액 행을 추가**했습니다 — 성장률만 있으면 \"+28%\"가 "
+   + "얼마에서 얼마로 늘어난 것인지 알 수 없었습니다. 영업이익과 같은 순서(금액 → 증가율)로 맞췄고, "
+   + "차트는 그대로 성장률 2선만 그립니다."],
   ["v381", "2026-08-08", "📈 차트 안내줄에 실제 보유 구간 표시",
    "v380에서 차트 기간이 종목마다 달라졌는데 안내줄이 봉 수만 보여주고 **시작 연도와 주봉 경계가 "
    + "빠져 있었습니다**(series가 객체로 변환된 걸 배열로 읽어 각주가 조용히 사라졌습니다). "
@@ -10338,6 +10344,18 @@ const CYC_BANDS = [[75, "매우 강함", "vhigh"], [55, "강함", "high"], [35, 
 const cycBand = (s) => CYC_BANDS.find(([lo]) => s >= lo) || CYC_BANDS[3];
 
 // 프로파일 안 순환성 블록 — 점수 게이지 + 근거(연수익 변동·실적 변동·베타·주기)
+/* 순환성 블록을 지금 있는 자리(#prof-cyc)에 채운다 — v382에서 자리가 프로파일 → 투자 지표 카드로 옮겼다.
+   ⚠컨테이너가 아직 없으면 아무 것도 하지 않는다: 두 렌더러(프로파일·투자지표)와 lazy 로드(cyclical.json)가
+     서로 다른 시점에 도착하므로 **양쪽에서 호출해도 안전**해야 한다(v349 finhub에서 배운 패턴). */
+function fillCycBlock(st) {
+  const el = document.getElementById("prof-cyc");
+  if (!el || LOOKUP_ST !== st) return;
+  el.innerHTML = cycProfileHtml(st);
+  // 지표가 없어 '순환성만' 표시하는 카드였는데 순환성도 없으면 카드를 숨긴다(빈 카드 방지)
+  const host = document.getElementById("lookup-metrics");
+  if (host && host.dataset.cycOnly === "1" && !el.innerHTML) host.style.display = "none";
+}
+
 function cycProfileHtml(st) {
   const c = cycOf(st);
   if (!c) return "";
@@ -10494,12 +10512,14 @@ function renderLookupProfile(st) {
   host.innerHTML = `<div class="fund-head">종목 프로파일 <span class="sub-note">(자체 계산)</span></div>
     ${perfViz}${riskViz}${supViz}
     <div class="prof-grid wide">${rows.map(([k, v]) => `<div class="prof-row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
-    ${valLine}<div id="prof-cyc"></div>`;
-  // 🔄 순환성(v370) — cyclical.json은 lazy 로드라 도착 후 채운다(첫 진입에 비지 않게)
+    ${valLine}`;
+  /* 🔄 순환성(v370) — v382에서 **우측 레일의 투자 지표 카드로 이동**(사용자 요청).
+     여기서 계속 loadCyclical을 호출하는 이유: ①차트의 순환성 토글이 이 데이터에 달려 있다
+     ②프로파일·투자지표 중 어느 쪽이 먼저 렌더될지 보장되지 않으므로 **양쪽에서 채운다**
+     (fillCycBlock은 컨테이너가 없으면 조용히 넘어가므로 중복 호출이 안전하다). */
   loadCyclical().then((got) => {
     if (LOOKUP_ST !== st) return;
-    const el = document.getElementById("prof-cyc");
-    if (el) el.innerHTML = cycProfileHtml(st);
+    fillCycBlock(st);
     // ⚠차트의 토글 버튼도 이 데이터가 있어야 나타난다 → 도착 시 1회 재그림(캐시되므로 반복 없음)
     if (got && !st._cycDrawn) { st._cycDrawn = true; drawLookupChart(); }
   });
@@ -11041,7 +11061,16 @@ function renderLookupMetrics(st) {
   const co = EXTRAS.company?.map?.[key] || {};
   const m = co.metrics || {};
   const f = FUND?.map?.[key] || {};
-  if (!co.metrics && !Object.keys(f).length) { host.style.display = "none"; return; }
+  if (!co.metrics && !Object.keys(f).length) {
+    /* 지표가 없어도 **순환성은 별도 데이터**(cyclical.json)라 있을 수 있다 → 그것만이라도 보여준다.
+       둘 다 없으면 fillCycBlock이 이 카드를 숨긴다(cycOnly 플래그). */
+    host.dataset.cycOnly = "1";
+    host.style.display = "";
+    host.innerHTML = `<div id="prof-cyc"></div>`;
+    fillCycBlock(st);
+    return;
+  }
+  host.dataset.cycOnly = "0";
   host.style.display = "";
   const kr = st.market === "kr";
   const { cur } = freshQuote(st);
@@ -11119,7 +11148,11 @@ function renderLookupMetrics(st) {
           <b>적자 기업의 음수 PER은 어느 기준이든 의미가 없습니다</b> — 순이익이 0에 가까울수록 배수가 무한대로 발산합니다.
           <br>※ 집계값은 내부 정합이 어긋나 있을 수 있습니다(실측: 한 종목에서 PER×EPS와 PBR×BPS가
           서로 다른 주가를 가리킴). <b>계산 과정을 확인할 수 있는 아래 배수 추이를 기준으로 보시길 권합니다.</b></p>
-      </div></details>`;
+      </div></details>
+    <div id="prof-cyc"></div>`;
+  // 🔄 순환성 — v382에서 프로파일 카드에서 이 카드(우측 레일)로 이동(사용자 요청)
+  if (CYC) fillCycBlock(st);                          // 이미 로드됐으면 즉시
+  else loadCyclical().then(() => fillCycBlock(st));   // 아직이면 도착 후(캐시라 중복 요청 없음)
 }
 
 // 연간 재무 차트: 매출·영업이익 막대 + 영업이익률 라인 (SVG)
@@ -12438,10 +12471,13 @@ function renderFinTrends(st) {
   const PCT = new Set(["opm", "npm", "revG", "opG", "revGY", "opGY", "roe", "debt", "cur"]);
   const SPECS = {
     perf: [["rev", "매출액"], ["op", "영업이익"], ["np", "순이익"], ["opm", "영업이익률"], ["npm", "순이익률"], ["revG", gLab], ["roe", roeLab]],
+    /* v382: **매출액 금액 행 추가**(사용자 요청) — 성장률만 있으면 "몇 %"의 모집단 크기를 알 수 없다.
+       영업이익과 같은 순서(금액 → 증가율)로 맞춘다. 차트는 그대로 성장률 2선만 그린다(선이 겹치지 않게). */
     growth: (ftMode === "quarter" && ftGrowCmp === "yoy")
-      ? [["revGY", "매출성장률(전년 동분기比)"], ["op", "영업이익"], ["opGY", "영업이익 증가율(전년 동분기比)"],
-         ["np", "순이익"], ["roe", roeLab]]
-      : [["revG", gLab], ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
+      ? [["rev", "매출액"], ["revGY", "매출성장률(전년 동분기比)"],
+         ["op", "영업이익"], ["opGY", "영업이익 증가율(전년 동분기比)"], ["np", "순이익"], ["roe", roeLab]]
+      : [["rev", "매출액"], ["revG", gLab],
+         ["op", "영업이익"], ["opG", ftMode === "quarter" ? "영업이익 증가율(QoQ)" : "영업이익 증가율(YoY)"],
          ["np", "순이익"], ["roe", roeLab]],
     stability: [["asset", "총자산"], ["liab", "총부채"], ["equity", "자본총계"], ["debt", "부채비율"], ["cur", "유동비율"], ["cash", "현금성자산"]],
     cash: [["cfo", "영업활동"], ["cfi", "투자활동"], ["cff", "재무활동"], ["fcf", "잉여현금흐름(FCF)"]],
