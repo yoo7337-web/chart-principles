@@ -144,6 +144,19 @@ function gotoTabFull(tabId) {
   activateTab(tabId);
 }
 
+/* 🔗 종목조회로 이동 — **모든 크로스링크는 이 함수를 쓴다**(v384).
+   🐞💀왜 필요한가: 여러 곳이 `document.querySelector('[data-tab="lookup"]').click()`으로 이동했는데,
+     v277에서 종목조회를 그룹 nav에서 빼고 헤더 검색창으로 옮기면서 **그 버튼이 사라졌다**.
+     querySelector가 null을 주고 `.click()`이 TypeError로 터져 **핸들러가 loadLookup 전에 죽었다**
+     → 오늘의 신호 표·타일, 보유 매매이력, 투자 대가 편입/처분 링크 **4곳이 조용히 무반응**(사용자 제보).
+   🔑UI에서 진입점(nav 버튼)을 없앨 때는 **그 버튼을 클릭해 이동하던 코드를 전수 grep**할 것.
+     이동 경로를 이 함수 하나로 모아 두면 다음에 자리가 또 바뀌어도 한 곳만 고치면 된다. */
+function gotoLookup(key) {
+  gotoTabFull("lookup");
+  if (!lookupRendered) initLookup();
+  if (key) loadLookup(key);
+}
+
 function updateBackBtn() {
   const b = document.getElementById("nav-back");
   if (!b) return;
@@ -1004,8 +1017,7 @@ function renderTodayDash() {
     ${rules.length ? `<div class="td-rules"><b>📐 원칙별 <span class="sub-note">(오늘 어떤 원칙이 몇 종목에서 켜졌나 · 많이 터진 순)</span></b>
       ${rules.map(ruleRow).join("")}</div>` : ""}`;
   host.querySelectorAll(".td-tile, .td-mini").forEach((b) => b.onclick = () => {
-    document.querySelector('[data-tab="lookup"]').click();
-    loadLookup(b.dataset.key);
+    gotoLookup(b.dataset.key);
   });
 }
 
@@ -1037,8 +1049,7 @@ function fillTodayTable() {
   document.querySelectorAll(".goto-lookup").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      document.querySelector('[data-tab="lookup"]').click();
-      loadLookup(a.dataset.key);
+      gotoLookup(a.dataset.key);
     }));
   document.querySelectorAll(".today-chart-btn").forEach((b) =>
     b.addEventListener("click", () => toggleTodayChart(b, rows[+b.dataset.i])));
@@ -2802,7 +2813,7 @@ function diRender() {
     </div>`;
   }).join("");
   host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
+    gotoLookup(b.dataset.go);
   });
   host.querySelectorAll("[data-res]").forEach((b) => b.onclick = () => {
     const all2 = diLoad(), it = all2.find((x) => x.id === b.dataset.res);
@@ -2929,7 +2940,7 @@ function dsRender() {
   if (dsView === "list") { dsRenderTable(host, rows); return; }
   host.innerHTML = rows.map(dsCard).join("");
   host.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(b.dataset.go);
+    gotoLookup(b.dataset.go);
   });
   dsFillNews();
   dsEnrich(host);          // 지분도 데이터로 구조도 보강(있는 딜만 교체)
@@ -3142,7 +3153,7 @@ async function dsEnrich(host) {
     if (!ctx && !acq && !x.target) continue;
     el.innerHTML = dsDiagramOwn(x, ctx, acq, "인수자");
     el.querySelectorAll("[data-go]").forEach((g) => g.onclick = () => {
-      gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(g.dataset.go);
+      gotoLookup(g.dataset.go);
     });
   }
 }
@@ -3913,7 +3924,7 @@ function ownRender() {
      (실측 코오롱 그래프: 코오롱·코오롱인더·코오롱티슈진은 있고 코오롱글로벌·코오롱생명과학은 없다). */
   host.querySelectorAll("[data-go]").forEach((el) => el.onclick = (ev) => {
     const key = el.dataset.go;
-    const goLookup = () => { gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(key); };
+    const goLookup = () => { gotoLookup(key); };
     if (key === ownSel || !(OWN_IDX || []).includes(key)) return goLookup();   // 지분도 없음/현재 그래프 → 직행
     ev.stopPropagation();
     ownPickTarget(ev, key, goLookup);
@@ -6428,7 +6439,7 @@ function renderHomeSchedule() {
       <span class="sch-info sub-note">${e.mk === "kr" ? esc((e.event || "").slice(0, 16)) : (e.eps_est != null ? "EPS $" + e.eps_est : "")}</span>
     </div>`).join("") : `<p class="mini-note">이번 주 예정된 ${schEarnMk === "all" ? "" : schEarnMk === "kr" ? "국내 " : "미국 "}실적발표가 없습니다.</p>`;
   eHost.querySelectorAll(".sch-row.clickable").forEach((el) => el.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(el.dataset.t);
+    gotoLookup(el.dataset.t);
   });
   $("#sch-earn-mk").querySelectorAll("button").forEach((b) => {
     b.classList.toggle("active", b.dataset.m === schEarnMk);
@@ -8381,7 +8392,7 @@ function wsShow(key) {
   $("#ws-unstar").onclick = () => { watchToggle(key); };
   main.querySelectorAll(".ws-go").forEach((b) => b.onclick = () => {
     const act = b.dataset.act;
-    if (act === "lookup") { gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(key); }
+    if (act === "lookup") { gotoLookup(key); }
     else gotoTabFull(act);
   });
 
@@ -14167,8 +14178,7 @@ function renderHldTrades(host) {
     <p class="mini-note">⚠ ${start} 이전 매매는 토스가 체결내역을 90일까지만 제공해 복원할 수 없습니다.
       점에 마우스를 올리면 수량·단가가 나오고, 행을 누르면 종목조회로 이동합니다.</p>`;
   host.querySelectorAll(".hld-tr").forEach((b) => b.onclick = () => {
-    document.querySelector('[data-tab="lookup"]').click();
-    loadLookup(b.dataset.key);
+    gotoLookup(b.dataset.key);
   });
 }
 
@@ -14440,7 +14450,7 @@ function renderHldAnalytics(all) {
     <div class="sub-note" style="margin:8px 0 4px">아픈 손가락 TOP3</div>
     <div class="hld-chips">${losers.length ? losers.map(chip).join("") : `<span class="mini-note">손실 종목 없음 🎉</span>`}</div>`;
   $("#hld-contrib").querySelectorAll(".hld-chip").forEach((c) => c.onclick = () => {
-    gotoTabFull("lookup"); if (!lookupRendered) initLookup(); loadLookup(c.dataset.tk);
+    gotoLookup(c.dataset.tk);
   });
 }
 
@@ -15172,8 +15182,7 @@ function renderGurus() {
   }).join("");
   // 편입·처분 카드 → 종목조회 이동(유니버스에 있는 종목만 버튼으로 렌더됨)
   $("#gurus-list").querySelectorAll(".gf-item[data-key]").forEach((b) => b.onclick = () => {
-    document.querySelector('[data-tab="lookup"]').click();
-    loadLookup(b.dataset.key);
+    gotoLookup(b.dataset.key);
   });
 }
 
