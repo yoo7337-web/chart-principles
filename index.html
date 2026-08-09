@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=387">
-<script src="firebase-config.js?v=387"></script>
-<script src="js/auth.js?v=387"></script>
+<link rel="stylesheet" href="css/style.css?v=389">
+<script src="firebase-config.js?v=389"></script>
+<script src="js/auth.js?v=389"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=387"></script>
+<script src="js/sync.js?v=389"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -1110,35 +1110,56 @@
       <br>📥 <b>Notion 동기화</b> — Claude에게 <b>"다이어리 노션에 올려줘"</b>라고 하면 Notion 데이터베이스로 보냅니다
       (기록 ID 기준 갱신이라 중복이 생기지 않습니다).</div>
     <div id="di-open-q" class="di-openq" style="display:none"></div>
-    <div class="card-flat di-write">
-      <div class="chips" id="di-types"></div>
-      <input type="text" id="di-title" class="di-title-in" placeholder="제목 (선택 — 비우면 본문 앞부분이 제목이 됩니다)" maxlength="80">
-      <textarea id="di-body" rows="4" placeholder="오늘 무슨 생각을 했나요? (Ctrl+Enter로 저장)&#10;예) 반도체 비중이 너무 커진 것 같다. 조정 오면 버틸 수 있을까?"></textarea>
-      <div class="di-meta">
-        <input type="text" id="di-ticker" list="lookup-list" placeholder="관련 종목(선택)">
-        <input type="text" id="di-tags" placeholder="태그(선택) — 예: 반도체, 비중조절">
-        <span style="flex:1"></span>
-        <button class="today-chart-btn" id="di-cancel" style="display:none">취소</button>
-        <button class="jr-new" id="di-save">＋ 기록</button>
+    <!-- v388: 상단을 차지했던 입력 폼을 **오른쪽 분할 패널**로 옮겼다(사용자 요청).
+         `＋ 기록`이면 빈 폼, 포스트잇을 클릭하면 그 기록이 열려 바로 수정된다.
+         ⚠폼 안의 id(di-types·di-title·di-body·di-ticker·di-tags·di-save·di-cancel)는 **그대로 옮겼다**
+           — 저장·수정 로직이 이 id들을 쓰므로 이름을 바꾸면 조용히 깨진다(탭 흡수 규칙과 같은 원칙). -->
+    <div class="di-grid">
+      <div class="di-main">
+        <div class="home-topbar" style="margin:0 0 10px">
+          <button class="jr-new" id="di-new">＋ 기록</button>
+          <div class="chips" id="di-filter">
+            <button class="chip active" data-f="all">전체</button>
+            <button class="chip" data-f="ask-open">❓ 미해결</button>
+            <button class="chip" data-f="think">💭 생각</button>
+            <button class="chip" data-f="learn">📌 배움</button>
+            <button class="chip" data-f="regret">⚠️ 반성</button>
+            <button class="chip" data-f="stock">📈 종목</button>
+          </div>
+          <span class="sub-note" id="di-count"></span>
+          <span style="flex:1"></span>
+          <input type="text" id="di-search" class="di-search" placeholder="🔍 검색">
+          <button class="today-chart-btn" id="di-export">⬇ 내보내기</button>
+          <button class="today-chart-btn" id="di-import">⬆ 가져오기</button>
+          <input type="file" id="di-import-file" accept=".json" style="display:none">
+        </div>
+        <div id="di-list"></div>
       </div>
+      <aside class="di-side" id="di-side">
+        <div class="card-flat di-write" id="di-write" style="display:none">
+          <div class="di-write-h"><b id="di-write-t">새 기록</b>
+            <span style="flex:1"></span>
+            <button class="di-mini" id="di-close" title="닫기">✕</button></div>
+          <div class="chips" id="di-types"></div>
+          <input type="text" id="di-title" class="di-title-in" placeholder="제목 (선택 — 비우면 본문 앞부분이 제목이 됩니다)" maxlength="80">
+          <textarea id="di-body" rows="10" placeholder="오늘 무슨 생각을 했나요? (Ctrl+Enter로 저장)&#10;예) 반도체 비중이 너무 커진 것 같다. 조정 오면 버틸 수 있을까?"></textarea>
+          <div class="di-meta">
+            <input type="text" id="di-ticker" list="lookup-list" placeholder="관련 종목(선택)">
+            <input type="text" id="di-tags" placeholder="태그(선택) — 예: 반도체, 비중조절">
+          </div>
+          <div class="di-meta di-actions">
+            <button class="today-chart-btn di-del-btn" id="di-delete" style="display:none">🗑 삭제</button>
+            <span style="flex:1"></span>
+            <button class="today-chart-btn" id="di-cancel" style="display:none">취소</button>
+            <button class="jr-new" id="di-save">＋ 기록</button>
+          </div>
+        </div>
+        <div class="di-side-empty" id="di-side-empty">
+          <div class="di-side-ico">📔</div>
+          <p><b>＋ 기록</b>을 누르면 여기에서 새 기록을 쓰고,<br>왼쪽 포스트잇을 클릭하면 그 기록을 바로 수정할 수 있습니다.</p>
+        </div>
+      </aside>
     </div>
-    <div class="home-topbar" style="margin:14px 0 10px">
-      <div class="chips" id="di-filter">
-        <button class="chip active" data-f="all">전체</button>
-        <button class="chip" data-f="ask-open">❓ 미해결</button>
-        <button class="chip" data-f="think">💭 생각</button>
-        <button class="chip" data-f="learn">📌 배움</button>
-        <button class="chip" data-f="regret">⚠️ 반성</button>
-        <button class="chip" data-f="stock">📈 종목</button>
-      </div>
-      <span class="sub-note" id="di-count"></span>
-      <span style="flex:1"></span>
-      <input type="text" id="di-search" class="di-search" placeholder="🔍 검색">
-      <button class="today-chart-btn" id="di-export">⬇ 내보내기</button>
-      <button class="today-chart-btn" id="di-import">⬆ 가져오기</button>
-      <input type="file" id="di-import-file" accept=".json" style="display:none">
-    </div>
-    <div id="di-list"></div>
   </section>
 
   <section id="tab-memo" class="panel">
@@ -1261,7 +1282,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=387"></script>
+<script src="js/app.js?v=389"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

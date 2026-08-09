@@ -2692,7 +2692,15 @@ function initDiary() {
     diRender();
   });
   $("#di-save").onclick = diSubmit;
-  $("#di-cancel").onclick = () => diReset();
+  $("#di-cancel").onclick = () => diPanel(false);
+  $("#di-new").onclick = diOpenNew;
+  $("#di-close").onclick = () => diPanel(false);
+  $("#di-delete").onclick = () => {
+    if (!diEditId || !confirm("이 기록을 삭제할까요?")) return;
+    diSave(diLoad().filter((x) => x.id !== diEditId));
+    diPanel(false);
+    diRender();
+  };
   // Ctrl+Enter 저장 — 길게 쓰다 마우스로 옮기지 않게
   $("#di-body").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); diSubmit(); }
@@ -2739,6 +2747,45 @@ function diReset() {
   $("#di-types").querySelectorAll(".chip").forEach((x, i) => x.classList.toggle("active", i === 0));
   $("#di-save").textContent = "＋ 기록";
   $("#di-cancel").style.display = "none";
+  const d = $("#di-delete"); if (d) d.style.display = "none";
+  const t = $("#di-write-t"); if (t) t.textContent = "새 기록";
+}
+
+/* 오른쪽 분할 패널 열기/닫기(v388) — 폼은 평소 숨겨 두고 안내문을 보여준다.
+   ⚠`display:none` 상태에서 focus()는 무시되므로 **보이게 만든 다음** 포커스를 준다. */
+function diPanel(open) {
+  const w = $("#di-write"), e = $("#di-side-empty");
+  if (!w) return;
+  w.style.display = open ? "" : "none";
+  if (e) e.style.display = open ? "none" : "";
+  document.querySelectorAll("#di-list .di-card.on").forEach((c) => c.classList.remove("on"));
+  if (!open) diReset();
+}
+
+function diOpenNew() {
+  diReset();
+  diPanel(true);
+  $("#di-body").focus();
+}
+
+function diOpenEdit(id) {
+  const it = diLoad().find((x) => x.id === id);
+  if (!it) return;
+  diEditId = it.id;
+  $("#di-title").value = it.title || "";
+  $("#di-body").value = it.body;
+  $("#di-tags").value = (it.tags || []).join(", ");
+  $("#di-ticker").value = it.tk?.name || "";
+  $("#di-types").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.t === it.type));
+  $("#di-save").textContent = "저장";
+  $("#di-cancel").style.display = "";
+  const d = $("#di-delete"); if (d) d.style.display = "";
+  const t = $("#di-write-t"); if (t) t.textContent = `수정 · ${it.d}`;
+  diPanel(true);
+  // 어떤 카드를 고쳤는지 왼쪽에서 보이게 표시(패널을 여는 diPanel 다음이라야 지워지지 않는다)
+  const card = document.querySelector(`#di-list [data-card="${id}"]`);
+  if (card) card.classList.add("on");
+  $("#di-body").focus();
 }
 
 function diSubmit() {
@@ -2762,7 +2809,7 @@ function diSubmit() {
     all.unshift({ id: "d" + Date.now().toString(36), d: kstDay(), title, type, body, tags, tk, resolved: false });
   }
   diSave(all);
-  diReset();
+  diPanel(false);          // v388: 저장하면 오른쪽 패널을 닫는다(목록이 넓게 보이도록)
   diRender();
 }
 
@@ -2793,7 +2840,7 @@ function diRender() {
   $("#di-count").textContent = `${all.length}건`;
   if (!all.length) {
     host.innerHTML = `<p class="mini-note">${q || diFilter !== "all" ? "조건에 맞는 기록이 없습니다." :
-      "아직 기록이 없습니다. 위에 오늘의 생각을 적어보세요 — 종목·수익률과 무관해도 됩니다."}</p>`;
+      "아직 기록이 없습니다. <b>＋ 기록</b>을 눌러 오늘의 생각을 적어보세요 — 종목·수익률과 무관해도 됩니다."}</p>`;
     return;
   }
   host.innerHTML = all.map((x) => {
@@ -2824,20 +2871,14 @@ function diRender() {
     diSave(diLoad().filter((x) => x.id !== b.dataset.del));
     diRender();
   });
-  host.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
-    const it = diLoad().find((x) => x.id === b.dataset.edit);
-    if (!it) return;
-    diEditId = it.id;
-    $("#di-title").value = it.title || "";
-    $("#di-body").value = it.body;
-    $("#di-tags").value = (it.tags || []).join(", ");
-    $("#di-ticker").value = it.tk?.name || "";
-    $("#di-types").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.t === it.type));
-    $("#di-save").textContent = "저장";
-    $("#di-cancel").style.display = "";
-    $("#di-body").focus();
-    window.scrollTo({ top: $("#di-body").getBoundingClientRect().top + scrollY - 120, behavior: "smooth" });
-  });
+  host.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => diOpenEdit(b.dataset.edit));
+  /* v388: **포스트잇을 클릭하면** 오른쪽 패널에서 수정(사용자 요청).
+     ⚠카드 안의 버튼·배지(종목 이동·해결 표시·삭제·태그)는 자기 동작이 있으므로 제외한다 —
+       안 걸러내면 태그를 눌러도 수정 패널이 열려 두 동작이 겹친다. */
+  host.querySelectorAll(".di-card").forEach((c) => c.addEventListener("click", (ev) => {
+    if (ev.target.closest("button, [data-tag]")) return;
+    diOpenEdit(c.dataset.card);
+  }));
   host.querySelectorAll("[data-tag]").forEach((b) => b.onclick = () => {
     $("#di-search").value = b.dataset.tag; diRender();
   });
@@ -3695,9 +3736,14 @@ function ownDiagram(g, byId, out, root, kids) {
        · 자회사 없는 계열사 = STACK개씩 묶어 한 열에 세로로 */
   const COL = 138, GAP = 10, BOX = 34, SUB = 26, SGAP = 4;
   const LIMIT = 48;          // 도식에 그릴 계열사 상한 — 초과분은 목록 보기로 안내(삼성전자 341사)
-  // ⚠계열이 많은 그룹(삼성전자 373사)은 '자회사 있는 계열사'만도 수십 개라 폭이 5,000px까지 간다
-  //   → 열은 MAXCOL개로 제한하고(지분율·자회사수 순), 나머지는 세로 스택으로 보낸다.
-  const MAXCOL = 10;
+  /* ⚠계열이 많은 그룹(삼성전자 373사)은 '자회사 있는 계열사'만도 수십 개라 폭이 5,000px까지 간다
+     → 열은 MAXCOL개로 제한하고(지분율·자회사수 순), 나머지는 세로 스택으로 보낸다.
+     ⚠v388: 10열 + 스택 5열 = **15열 · 자연 폭 2,274px**이었다. 1,345px 화면에 맞추면 0.59배로 줄어
+       글자를 읽을 수 없고, 그래서 '맞추기'를 끄면 좌우가 잘려 보인다(사용자 제보: 삼성전자).
+       → 열을 8개로, 스택 열을 3개로 줄여 **자연 폭을 1,682px**까지 낮춘다(맞추기 0.80배 = 읽을 수 있는 크기).
+       세로로 길어지는 편이 읽기 낫다는 기존 방침과 같은 방향이고, LIMIT(48사)은 그대로라 **빠지는 회사는 없다**
+       (열에서 밀린 계열사는 스택으로 가고 자회사 수는 `+N` 배지로 표시된다). */
+  const MAXCOL = 8;
   const nSub = (e) => (out[byId[e.t].id] || []).filter((x) => ownIsCtrl(byId[x.t], x.rate)).length;
   /* 열 선정 기준(v269): 자회사 '수'만 보면 **상장 계열사가 밀려난다**
      (실측: SK스퀘어는 자회사가 1개뿐이라 상위 10열에 못 들어 SK하이닉스가 도식에서 통째로 빠졌다)
@@ -3711,8 +3757,8 @@ function ownDiagram(g, byId, out, root, kids) {
     .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || (b.rate - a.rate));
   const kidsNone = kidsNoneAll.slice(0, Math.max(0, LIMIT - kidsWith.length));
   const omitted = kidsNoneAll.length - kidsNone.length;
-  // 스택 열 수를 제한해 폭이 무한정 늘어나지 않게(세로로 길어지는 편이 읽기 낫다)
-  const stackCols = Math.max(1, Math.min(6, Math.ceil(kidsNone.length / 8)));
+  // 스택 열 수를 제한해 폭이 무한정 늘어나지 않게(세로로 길어지는 편이 읽기 낫다 — v388: 6 → 3)
+  const stackCols = Math.max(1, Math.min(3, Math.ceil(kidsNone.length / 8)));
   const per = Math.ceil(kidsNone.length / stackCols) || 1;
   const stacks = [];
   for (let i = 0; i < kidsNone.length; i += per) stacks.push(kidsNone.slice(i, i + per));
@@ -3960,10 +4006,23 @@ function ownRender() {
     // ⚠폭 압축 후 viewBox가 작아졌는데 width:100%로 두면 **확대**돼 글자가 커진다(898→1552, 1.7배).
     //   맞춤 모드는 '넘칠 때만 축소' — 원래 크기보다 키우지 않는다.
     const w = +svg.dataset.w || 900;
-    const avail = (host.querySelector(".og-wrap") || host).clientWidth || w;
-    svg.style.width = (ownFit ? Math.min(w, avail) : w) + "px";
+    const wrap = host.querySelector(".og-wrap") || host;
+    /* ⚠**패널이 아직 안 보이면 clientWidth가 0**이라 `|| w` 폴백이 걸려 축소가 안 된다 →
+       도식이 원래 크기로 남아 좌우가 잘려 보인다(v388 사용자 제보). 폭이 잡히는 순간 다시 맞춘다. */
+    const fit = () => {
+      const avail = wrap.clientWidth;
+      if (!avail) return false;                       // 아직 레이아웃 전 — 다음 기회에
+      svg.style.width = (ownFit ? Math.min(w, avail) : w) + "px";
+      return true;
+    };
     svg.style.maxWidth = "none";
-    // 검색으로 들어온 회사는 큰 도식(삼성전자 2,230px)에서 화면 밖일 수 있다 → 그 자리로 스크롤
+    if (!fit()) {
+      svg.style.width = "100%";                       // 임시로 컨테이너에 맞춰 두고(넘침 방지)
+      const ro = new ResizeObserver(() => { if (fit()) ro.disconnect(); });
+      ro.observe(wrap);
+      setTimeout(() => { fit(); ro.disconnect(); }, 1200);   // 옵저버가 안 불려도 한 번은 맞춘다
+    }
+    // 검색으로 들어온 회사는 큰 도식(삼성전자 1,682px)에서 화면 밖일 수 있다 → 그 자리로 스크롤
     const hl = svg.querySelector(".og-hl");
     if (hl) setTimeout(() => hl.scrollIntoView({ block: "center", inline: "center" }), 60);
   }
@@ -4042,6 +4101,20 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v389", "2026-08-09", "📔 투자 다이어리 좌우 분할 — 포스트잇 클릭해서 수정",
+   "화면 위쪽을 크게 차지했던 입력 폼을 **오른쪽 분할 패널로 옮겼습니다**(사용자 요청). "
+   + "`＋ 기록`을 누르면 오른쪽에 빈 폼이 열리고, **왼쪽 포스트잇을 클릭하면 그 기록이 열려 바로 수정**됩니다. "
+   + "수정 중인 포스트잇은 파란 테두리로 표시되고, 저장하면 패널이 닫혀 목록이 넓게 보입니다.\n\n"
+   + "패널 안에 삭제 버튼도 넣었고, 본문 칸은 4줄 → 10줄로 키웠습니다. 태그·종목 이동·해결 표시 버튼은 "
+   + "예전처럼 각자 동작합니다(카드를 눌러 수정 패널이 열리는 것과 겹치지 않게 구분했습니다). "
+   + "저장 형식은 그대로라 기존 기록과 Notion 동기화에 영향이 없습니다."],
+  ["v388", "2026-08-09", "🏛 소유지분도 큰 그룹이 좌우로 잘리던 문제",
+   "삼성전자처럼 계열사가 많은 그룹은 도식이 **15열·2,274px**까지 벌어져, 화면에 맞추면 0.59배로 줄어 "
+   + "글자를 읽을 수 없고 맞추기를 끄면 좌우가 잘려 보였습니다.\n\n"
+   + "열을 8개로, 세로 스택 열을 3개로 줄여 **자연 폭을 1,682px**까지 낮췄습니다 — 이제 맞추기 0.80배로 "
+   + "**전체가 한 화면에 들어오고 글자도 읽힙니다**. 도식에 그리는 회사 수(48사)는 그대로라 빠지는 회사는 "
+   + "없습니다(열에서 밀린 계열사는 세로 묶음으로 가고 자회사 수는 `+N` 배지로 표시됩니다).\n\n"
+   + "탭이 아직 화면에 나타나지 않은 상태에서 폭을 재면 0으로 잡혀 축소가 걸리지 않는 문제도 함께 고쳤습니다."],
   ["v387", "2026-08-08", "🎨 재무 필터 디자인 정리 · 순환성 글자 크기 축소",
    "**주식찾기 ③재무 필터**를 기능은 그대로 두고 보기만 손봤습니다 — ①`PER` / `(배)`가 두 줄로 "
    + "갈라져 행이 커 보였던 것을 **한 줄로** ②`▼` 기본 삼각형을 다듬은 셰브론으로 바꾸고 분류마다 "

@@ -2217,6 +2217,25 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 @media (max-width: 700px) { .div-tiles { grid-template-columns: 1fr; } }
 
 /* 📔 투자 다이어리 (v242) */
+/* v388 좌우 분할 — 왼쪽 포스트잇 목록 / 오른쪽 작성·수정 패널(종목조회 .lk-grid와 같은 비율).
+   ⚠`min-width: 0` 필수 — 왼쪽이 CSS columns라 이게 없으면 콘텐츠 최소폭이 트랙을 밀어 가로 스크롤이 생긴다. */
+.di-grid { display: grid; grid-template-columns: 1fr 400px; gap: 16px; align-items: start; }
+.di-main, .di-side { min-width: 0; }
+.di-side { position: sticky; top: 8px; }
+@media (max-width: 1100px) {
+  .di-grid { grid-template-columns: 1fr; }
+  .di-side { position: static; }
+}
+.di-write-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  padding-bottom: 7px; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.di-actions { border-top: 1px solid var(--line); padding-top: 9px; margin-top: 10px; }
+.di-del-btn { color: #ff8f9c; border-color: rgba(245,68,90,.35); }
+.di-side-empty { border: 1px dashed var(--line); border-radius: 10px; padding: 26px 18px;
+  text-align: center; color: var(--muted); font-size: .82rem; line-height: 1.7; }
+.di-side-ico { font-size: 1.7rem; margin-bottom: 6px; opacity: .75; }
+/* 수정 중인 포스트잇 표시 — 어느 카드를 고치는지 왼쪽에서 바로 보이게 */
+#di-list .di-card.on { transform: rotate(0) translateY(-2px);
+  border-color: rgba(67,145,255,.65); box-shadow: 0 0 0 2px rgba(67,145,255,.28), 0 7px 18px rgba(0,0,0,.5); }
 .di-write { padding: 12px 14px; }
 .di-write textarea { width: 100%; margin-top: 8px; background: rgba(255,255,255,.05);
   border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; color: inherit;
@@ -2233,7 +2252,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
 /* 📌 포스트잇 배치 (v361) — 세로 목록 → 벽에 붙인 메모판.
    ⚠masonry는 CSS columns로 구현한다(grid는 높이가 다른 카드에서 빈칸이 생긴다).
      columns를 쓰면 카드가 열 사이에서 쪼개지므로 break-inside: avoid 필수. */
-#di-list { columns: 3 280px; column-gap: 14px; }
+#di-list { columns: 260px; column-gap: 14px; }   /* v388: 좌우 분할로 폭이 줄어 열수는 폭에 맡긴다 */
 @media (max-width: 900px) { #di-list { columns: 1; } }
 .di-card { break-inside: avoid; -webkit-column-break-inside: avoid;
   background: var(--card); border: 1px solid var(--line); border-radius: 3px;
