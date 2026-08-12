@@ -92,11 +92,11 @@ const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
-  // v392: 공시 스캐너 아래에 자본 이벤트(환원/희석) — 둘 다 DART 공시가 원천이라 한 지붕이 자연스럽다
-  disc:      [["disc", "공시 스캐너"], ["capev", "💰 자본 이벤트"]],
+  // v392~393: 공시 스캐너 아래에 자본 이벤트(환원/희석)·내부자 매매 — 셋 다 DART 공시가 원천
+  disc:      [["disc", "공시 스캐너"], ["capev", "💰 자본 이벤트"], ["insider", "👔 내부자 매매"]],
 };
 const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings",
-  secmet: "rotation", capev: "disc" };
+  secmet: "rotation", capev: "disc", insider: "disc" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
 function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
@@ -116,7 +116,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", capev: "자본 이벤트", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", capev: "자본 이벤트", insider: "내부자 매매", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", memo: "종목 메모", devlog: "개발일지",
   secmet: "산업 지표",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
@@ -209,6 +209,7 @@ function activateTab(tabId) {
   if (tabId === "watch") renderWatch();
   if (tabId === "disc" && !discRendered) initDisc();
   if (tabId === "capev" && !capevRendered) initCapev();
+  if (tabId === "insider" && !insiderRendered) initInsider();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -1293,6 +1294,7 @@ function loadLookup(key) {
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     lkCapevBadge(st);           // 최근 90일 자본 이벤트(자사주·유증·CB) 배지 — lazy, 없으면 숨김
+    lkInsiderBadge(st);         // 최근 90일 내부자 매매 요약 배지 — lazy, 없으면 숨김
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
     finhubUser = false; finhubSel = "snap";   // 종목이 바뀌면 기본 탭(Snapshot) 우선으로 복귀
@@ -4105,6 +4107,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v393", "2026-08-13", "👔 내부자 매매 신설 — 임원·대주주가 사면 신호",
+   "임원·주요주주가 자기 회사 주식을 사고 판 보고(DART 특정증권등 소유상황보고)를 수집해 "
+   + "공시 스캐너의 세 번째 소탭으로 추가했습니다 — 최근 400일 689종목 1.2만 건. "
+   + "**90일 순매수·순매도 랭킹**과 **종목조회 헤더 요약 배지**(예: 셀트리온 40건 · 순매수 894억)도 함께.\n\n"
+   + "⚠집계를 정직하게 만들기 위해 두 가지를 걸렀습니다: ①신규 보고는 '증감=보유 전량'으로 기재되는 "
+   + "관행이 있어(국민연금 93만주가 3.4조 '매수'로 잡힘) 그런 행은 금액 추정에서 제외 ②랭킹은 **개인 "
+   + "보고자만** 집계 — 법인(LS전선·한화에너지 등)의 계열 지분 이동은 성격이 달라 랭킹을 지배해 버립니다.\n\n"
+   + "⚠보고서에 증감 사유가 없어 장내 매매 외에 스톡옵션 행사·증여·상속이 섞일 수 있습니다 — 참고 신호로만."],
   ["v392", "2026-08-13", "💰 자본 이벤트 신설 — 자사주(환원) vs 유증·CB(희석)",
    "회사가 주주 돈을 **돌려주는 결정**(자사주 취득·신탁)과 **지분을 희석하는 결정**(유상증자·CB·BW·EB·"
    + "자사주 처분)을 DART 주요사항보고서에서 수집해 공시 스캐너의 소탭으로 추가했습니다 — 최근 60일 486건. "
@@ -8293,6 +8303,108 @@ function lkCapevBadge(st) {
         <span class="sub-note">${(e.d || "").slice(5)}</span></button>`;
     }).join("");
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("capev"));
+  });
+}
+
+/* ---------- 👔 내부자 매매(v393) — insider.json (DART elestock) ---------- */
+let INSIDER = null, insiderLoading = null, insiderRendered = false;
+let inQ = "", inMine = false, inDir = "";
+function loadInsider() {
+  if (INSIDER) return Promise.resolve(INSIDER);
+  if (insiderLoading) return insiderLoading;
+  insiderLoading = fetch("data/insider.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (INSIDER = j)).catch(() => null);
+  return insiderLoading;
+}
+
+function initInsider() {
+  insiderRendered = true;
+  loadInsider().then(() => renderInsider());
+  $("#in-q").oninput = () => { inQ = $("#in-q").value.trim().toLowerCase(); renderInsider(); };
+  $("#in-mine").onclick = () => { inMine = !inMine; $("#in-mine").classList.toggle("active", inMine); renderInsider(); };
+}
+
+function renderInsider() {
+  const host = $("#in-table");
+  if (!host) return;
+  const stocks = INSIDER?.stocks || {};
+  if (!Object.keys(stocks).length) {
+    host.innerHTML = `<tbody><tr><td class="sub-note">데이터 없음 — python analysis\\insider_trades.py 실행 필요</td></tr></tbody>`;
+    return;
+  }
+  // 전 종목의 행을 평탄화(최근순) — 표는 '보고 단위'가 읽기 자연스럽다
+  const mine = myKrCodes();
+  let flat = [];
+  Object.entries(stocks).forEach(([code, e]) =>
+    (e.rows || []).forEach((r) => flat.push({ code, name: e.name, r })));
+  flat.sort((a, b) => (b.r[0] + b.r[7]).localeCompare(a.r[0] + a.r[7]));
+
+  const cnt = { "": flat.length, buy: 0, sell: 0 };
+  flat.forEach((x) => cnt[x.r[3] > 0 ? "buy" : "sell"]++);
+  $("#in-filter").innerHTML = [["", `전체 <b>${cnt[""]}</b>`], ["buy", `🟢 취득 <b>${cnt.buy}</b>`], ["sell", `🔴 처분 <b>${cnt.sell}</b>`]]
+    .map(([k, lab]) => `<button class="chip${inDir === k ? " active" : ""}" data-f="${k}">${lab}</button>`).join("");
+  $("#in-filter").querySelectorAll(".chip").forEach((b) => b.onclick = () => { inDir = b.dataset.f; renderInsider(); });
+
+  flat = flat.filter((x) =>
+    (!inDir || (inDir === "buy" ? x.r[3] > 0 : x.r[3] < 0)) &&
+    (!inMine || mine[x.code]) &&
+    (!inQ || x.name.toLowerCase().includes(inQ) || (x.r[1] || "").toLowerCase().includes(inQ)));
+  $("#in-count").textContent = `${flat.length}건 · 최근 400일`;
+
+  // 랭킹: 90일 추정 순매수/순매도(금액 추정 가능 건만)
+  const rk = INSIDER.rank || {};
+  const rankCard = (title, list, cls) => `<div class="card-flat cv-rank"><b>${title}</b>` +
+    ((list || []).length ? list.slice(0, 8).map((e) => `<div class="cv-rk" data-goto="kr_${e.code}">
+        <span class="cv-rk-n">${diEsc(e.name)}</span><span class="sub-note">${e.n90}건/90일</span>
+        <b class="${cls}">${fmtEok(Math.abs(e.net90))}</b></div>`).join("")
+      : `<p class="mini-note">해당 없음</p>`) + `</div>`;
+  $("#in-ranks").innerHTML =
+    rankCard("🟢 내부자 순매수 상위 — 90일 추정 금액", rk.buy, "kup")
+    + rankCard("🔴 내부자 순매도 상위 — 90일 추정 금액", rk.sell, "kdn");
+  $("#in-ranks").querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+
+  host.innerHTML = `<thead><tr><th>보고일</th><th>회사</th><th>보고자</th>
+      <th class="num">증감 주수</th><th class="num">추정 금액</th><th class="num">보유 주수</th><th>원본</th></tr></thead><tbody>`
+    + (flat.length ? flat.slice(0, 300).map(({ code, name, r }) => {
+      const buy = r[3] > 0;
+      return `<tr>
+        <td>${r[0]}</td>
+        <td class="hld-name"><img class="mv-logo" src="${logoUrl("kr", code)}" onerror="this.style.visibility='hidden'">
+          <b class="dsc-go" data-goto="kr_${code}">${diEsc(name)}</b>${mine[code] ? ` <span title="내 종목">${mine[code]}</span>` : ""}</td>
+        <td>${diEsc(r[1])}${r[2] ? ` <span class="sub-note">${diEsc(r[2])}</span>` : ""}</td>
+        <td class="num ${buy ? "kup" : "kdn"}">${buy ? "+" : ""}${r[3].toLocaleString()}</td>
+        <td class="num ${buy ? "kup" : "kdn"}">${r[6] != null ? (buy ? "+" : "−") + fmtEok(Math.abs(r[6])) : "-"}</td>
+        <td class="num">${r[4] != null ? Math.round(r[4]).toLocaleString() : "-"}</td>
+        <td><a class="dsc-src" href="${discLink(r[7])}" target="_blank" rel="noopener">DART ↗</a></td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="7" class="sub-note">조건에 맞는 보고가 없습니다.</td></tr>`) + `</tbody>`;
+  host.querySelectorAll(".dsc-go").forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+  $("#in-note").innerHTML = `출처 DART 임원·주요주주 특정증권등 소유상황보고 · 갱신 ${INSIDER.generated} ·
+    추정 금액 = 증감 주수 × 보고일 종가(우리 시세 캐시). ⚠<b>증감 사유가 공시에 없어</b>
+    장내 매매 외에 스톡옵션 행사·증여·상속·전환권 행사가 섞일 수 있습니다 — 참고 신호로만 쓰세요.`;
+}
+
+/* 종목조회 배지(v393): 이 종목의 최근 90일 내부자 순매수 요약 — 있으면 한 줄 */
+function lkInsiderBadge(st) {
+  const host = $("#lk-insider");
+  if (!host) return;
+  host.style.display = "none";
+  if (st.market !== "kr") return;
+  loadInsider().then(() => {
+    if (LOOKUP_ST !== st) return;
+    const e = INSIDER?.stocks?.[st.ticker];
+    if (!e?.rows?.length) return;
+    const c90 = new Date(Date.now() - 90 * 86400e3).toISOString().slice(0, 10);
+    const r90 = e.rows.filter((r) => r[0] >= c90);
+    if (!r90.length) return;
+    host.style.display = "";
+    const net = e.net90;
+    const buyN = r90.filter((r) => r[3] > 0).length, sellN = r90.length - buyN;
+    host.innerHTML = `<span class="lk-ind-label">👔 내부자 매매</span>
+      <button class="lk-ind-badge ${net > 0 ? "cv-return" : net < 0 ? "cv-dilute" : ""}">
+        90일 ${r90.length}건 (취득 ${buyN} · 처분 ${sellN})
+        ${net != null ? `· 순${net > 0 ? "매수" : "매도"} <b>${fmtEok(Math.abs(net))}</b>` : ""}</button>`;
+    host.querySelector(".lk-ind-badge").onclick = () => gotoTabFull("insider");
   });
 }
 
