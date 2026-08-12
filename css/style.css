@@ -2778,3 +2778,8 @@ header h1 { margin-right: auto; }
 .pf-corr { border-collapse: collapse; font-size: .74rem; }
 .pf-corr th, .pf-corr td { padding: 4px 7px; text-align: center; border: 1px solid rgba(218,223,233,.08); white-space: nowrap; }
 .pf-corr thead th, .pf-corr tbody th { color: var(--muted); font-weight: 600; }
+
+/* v395: 공매도 스트립 */
+.short-strip { display: flex; align-items: center; gap: 10px; font-size: .8rem;
+  border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; flex-wrap: wrap; }
+.short-spark { width: 150px; height: 30px; flex: 0 0 auto; opacity: .9; }

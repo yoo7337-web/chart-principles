@@ -4111,6 +4111,10 @@ const DATA_SCHEDULE = [
     ["소유지분도 (ownership/) · 딜 구조 (deals_struct)", "매일 07:40", "90일/180일 증분 · 상태=딜 구조 기준", { u: "data/deals_struct.json", exp: 30 }],
     ["사업 심층 (bizdeep/) · 종목뉴스 아카이브 (stocknews/)", "매일 07:40", "종목별 90일 증분 / 1년치 증분", null],
     ["산업지표 (sector_metrics.json)", "하루 1회 (20h 가드)", "ECOS·야후 프록시", { u: "data/sector_metrics.json", exp: 30 }],
+    ["신용잔고·증시자금 (margin_debt.json)", "매일 07:40", "금융투자협회 일간(T+1~2) — v391", { u: "data/margin_debt.json", exp: 30 }],
+    ["내부자 매매 (insider.json)", "매일 07:40", "DART 공시 트리거 증분 — v393", { u: "data/insider.json", exp: 30 }],
+    ["자본 이벤트: 자사주·유증·CB (capital_events.json)", "매일 07:40", "DART 주요사항 — v392", { u: "data/capital_events.json", exp: 30 }],
+    ["공매도 잔고 (short_interest.json)", "매일 07:40", "KRX 계정(.env KRX_ID/PW) 등록 시에만 — v395", null],
     ["내재가치 · 재무 스냅샷 · 투자 대가 (valuation/fundamentals/gurus)", "주 1회", "heavy 배치 · 상태=내재가치 기준", { u: "data/valuation.json", exp: 24 * 9 }],
   ]],
   ["📐 수동 · 분기", [
@@ -11194,8 +11198,45 @@ function renderLookupProfile(st) {
   });
 }
 
+/* 🩳 공매도 잔고(v395) — short_interest.json은 KRX 무료 계정을 .env에 등록해야 생성된다.
+   파일이 없으면(404) 이 블록 전체가 조용히 숨는다 — 사이트는 계정 없이도 완전 동작. */
+let SHORTI = null, shortiLoading = null;
+function loadShorti() {
+  if (SHORTI !== null) return Promise.resolve(SHORTI);
+  if (shortiLoading) return shortiLoading;
+  shortiLoading = fetch("data/short_interest.json" + _cb)
+    .then((r) => (r.ok ? r.json() : false)).then((j) => (SHORTI = j || false)).catch(() => (SHORTI = false));
+  return shortiLoading;
+}
+
+function drawShortStrip(st) {
+  const host = $("#lookup-short");
+  if (!host) return;
+  host.style.display = "none";
+  if (st.market !== "kr") return;
+  loadShorti().then(() => {
+    if (LOOKUP_ST !== st || !SHORTI) return;
+    const rows = SHORTI.stocks?.[st.ticker]?.rows;
+    if (!rows || rows.length < 5) return;
+    host.style.display = "";
+    const vals = rows.map((r) => r[1]).filter((v) => v != null);
+    const last = rows[rows.length - 1];
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+    const W = 300, H = 30;
+    const pts = rows.map((r, i) => r[1] == null ? null :
+      `${(i / (rows.length - 1) * W).toFixed(1)},${(H - 3 - (r[1] - lo) / span * (H - 6)).toFixed(1)}`).filter(Boolean);
+    host.innerHTML = `<div class="short-strip">
+      <span>🩳 공매도 잔고비중 <b>${last[1]}%</b>
+        <span class="sub-note">(${last[0]} · T+2 지연${last[2] ? ` · ${fmtEok(last[2])}` : ""})</span></span>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="short-spark">
+        <polyline points="${pts.join(" ")}" fill="none" stroke="#c084fc" stroke-width="1.4"/></svg>
+      <span class="sub-note">${rows.length}일 · 저 ${lo}% ~ 고 ${hi}%</span></div>`;
+  });
+}
+
 function drawSupply(st) {
   const card = $("#lookup-supply-card");
+  drawShortStrip(st);   // 공매도 잔고(있을 때만) — 수급 카드 하단 스트립
   if (lookupSupply) { lookupSupply.remove(); lookupSupply = null; }
   const sup = st.supply;
   if (!sup || !sup.length) {  // US 또는 데이터 없음
