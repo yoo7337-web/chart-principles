@@ -492,6 +492,53 @@ function renderRank() {
   $("#sell-cards").innerHTML = sel.filter((r) => r.side === "sell").map(card).join("") || "<p>통과 원칙 없음</p>";
   $("#passed-table").innerHTML = ruleTable(DATA.rules.filter((r) => r.passed && !r.selected), false);
   $("#rejected-table").innerHTML = ruleTable(DATA.rules.filter((r) => !r.passed), true);
+  renderRuleHist();   // v395: 재검증 시계열(rule_history.json — lazy)
+}
+
+/* 📈 원칙 성적 추이(v395) — rule_history.json은 재검증(90일 텀)마다 축적되는데 화면이 없었다.
+   "이 원칙이 언제부터 약해졌나"는 이 사이트의 존재 이유(원칙 생존 검증)와 직결된다.
+   ⚠점이 아직 2~3개뿐이라 라인차트는 과장이다 — 재검증일별 **표 + 변화 화살표**로 정직하게 보여주고,
+     기록이 5회 이상 쌓이면 차트로 바꾼다(그때의 결정). */
+function renderRuleHist() {
+  const host = $("#rule-hist");
+  if (!host) return;
+  fetch("data/rule_history.json" + _cb).then((r) => (r.ok ? r.json() : null)).then((j) => {
+    const es = j?.entries || [];
+    if (es.length < 2) return;                       // 1회뿐이면 추이가 아니다
+    host.style.display = "";
+    const dates = es.map((e) => e.date);
+    // 채택 원칙(최신 기준) 우선, 과거에 채택됐다 빠진 원칙도 함께(빠진 것 자체가 정보)
+    const latest = es[es.length - 1].rules || [];
+    const everSel = new Set();
+    es.forEach((e) => (e.rules || []).forEach((r) => { if (r.selected) everSel.add(r.rule_id); }));
+    const byId = {};
+    es.forEach((e, i) => (e.rules || []).forEach((r) => {
+      (byId[r.rule_id] = byId[r.rule_id] || { name: r.name, side: r.side, pts: {} }).pts[i] = r;
+    }));
+    const fmt = (r) => r == null ? "-" :
+      `${(r.edge20 * 100).toFixed(1)}%<span class="sub-note">/${(r.win_rate * 100).toFixed(0)}%</span>`;
+    const arrow = (a, b) => (a == null || b == null) ? "" :
+      b.edge20 - a.edge20 > 0.005 ? ` <span class="kup">▲</span>` :
+      a.edge20 - b.edge20 > 0.005 ? ` <span class="kdn">▼</span>` : "";
+    const rows = [...everSel].map((id) => byId[id]).filter(Boolean)
+      .sort((a, b) => (a.side || "").localeCompare(b.side || "") || (b.pts[es.length - 1]?.edge20 || -9) - (a.pts[es.length - 1]?.edge20 || -9));
+    host.innerHTML = `<h3 class="lk-h3">📈 원칙 성적 추이 <span class="sub-note">— 재검증 ${es.length}회
+        (90일 텀 · 값 = 20일 초과수익/승률) · 채택 이력이 있는 원칙만</span></h3>
+      <div class="fin-wrap"><table class="hld-table"><thead><tr><th>원칙</th>${dates.map((d) =>
+        `<th class="num">${d}</th>`).join("")}<th>상태</th></tr></thead><tbody>` +
+      rows.map((r) => {
+        const last = r.pts[es.length - 1];
+        const state = !last ? `<span class="sub-note">측정 제외</span>`
+          : last.selected ? `<span class="kup">채택</span>`
+          : last.passed ? `통과` : `<span class="kdn">탈락</span>`;
+        return `<tr><td>${r.side === "buy" ? "🟢" : "🔴"} ${r.name}</td>` +
+          dates.map((d, i) => `<td class="num">${fmt(r.pts[i])}${i ? arrow(r.pts[i - 1], r.pts[i]) : ""}</td>`).join("")
+          + `<td>${state}</td></tr>`;
+      }).join("") + `</tbody></table></div>
+      <p class="mini-note">재검증은 90일 텀(잦은 재검증 = 커브 피팅)이라 점이 천천히 쌓입니다.
+        ▲▼ = 직전 재검증 대비 초과수익 ±0.5%p 이상 변화. <b>탈락으로 바뀐 원칙은 그 자체가 경고</b>입니다 —
+        기록이 5회 이상 쌓이면 추이 차트로 전환합니다.</p>`;
+  }).catch(() => {});
 }
 
 /* ---------- 사례 차트 ---------- */
@@ -4107,6 +4154,17 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v395", "2026-08-13", "📈 원칙 성적 추이 — '원칙이 약해지는 중인가'",
+   "재검증 때마다 축적만 되고 화면이 없던 **원칙별 성적 이력**(rule_history.json)을 원칙 탭에 "
+   + "표로 추가했습니다. 채택 이력이 있는 원칙 16개의 재검증일별 20일 초과수익/승률과 변화 방향(▲▼), "
+   + "그리고 **탈락으로 바뀐 원칙**을 바로 보이게 했습니다 — 원칙 생존 검증이라는 이 사이트의 존재 이유와 "
+   + "직결되는 화면입니다. 아직 재검증 2회라 표로 시작하고, 5회 쌓이면 차트로 바꿉니다."],
+  ["v394", "2026-08-13", "🧮 포트폴리오 통계 리스크 — 같은 베팅 탐지",
+   "포트폴리오 점검에 **상관행렬·포트 베타·집중도** 카드를 추가했습니다(새 수집 0 — 이미 있는 "
+   + "시계열·순환성 데이터 결합). 핵심은 **\"사실상 같은 베팅\" 탐지**: 최근 126거래일 일수익률 상관이 "
+   + "0.7 이상인 쌍을 경고합니다(검증: 삼성전자↔하이닉스 0.88 — Python 교차 검산 일치).\n\n"
+   + "포트 베타(평가금 가중), 상위1·3 종목 비중, **유효 산업 수**(1/HHI — 낮을수록 한 산업 쏠림)도 함께. "
+   + "한·미 혼합 포트는 겹치는 거래일 기준으로 계산하고, 판정 점수와는 별개인 정보 카드입니다."],
   ["v393", "2026-08-13", "👔 내부자 매매 신설 — 임원·대주주가 사면 신호",
    "임원·주요주주가 자기 회사 주식을 사고 판 보고(DART 특정증권등 소유상황보고)를 수집해 "
    + "공시 스캐너의 세 번째 소탭으로 추가했습니다 — 최근 400일 689종목 1.2만 건. "
@@ -15184,7 +15242,108 @@ async function pfRender() {
   }));
   pfRenderStats(arr);
   pfRenderMatrix(arr);   // 판정 근거 도표(매트릭스·점수 막대)
+  pfRenderRisk(arr);     // v394: 상관·베타·집중도(통계적 리스크)
   pfRenderList(arr);
+}
+
+/* 🧮 포트폴리오 통계 리스크(v394) — "내 종목들이 사실 같은 것 하나에 4번 베팅"인지 잡아낸다.
+   기존 데이터만 사용: 상관=pfStockCache의 일봉 시계열(126일) · 베타=cyclical.json · 집중도=평가금+산업 분류.
+   ⚠판정 점수(pfCheck)에는 넣지 않는다 — 정보 카드다(감점 규칙 변경은 별도 논의). */
+function pfRenderRisk(arr) {
+  const host = $("#pf-risk");
+  if (!host) return;
+  // 시계열 있는 보유종목만(유니버스 밖 레버리지 ETF 등은 제외 표시)
+  const items = arr.filter((h) => pfStockCache.get(h.mk + "_" + h.ticker)?.series?.length > 60);
+  if (items.length < 2) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const totVal = arr.reduce((s, h) => s + (h.val || 0), 0) || 1;
+
+  // ── ① 상관행렬(최근 126거래일 일수익률, 날짜 교집합 기준) ──
+  const rets = items.map((h) => {
+    const s = pfStockCache.get(h.mk + "_" + h.ticker).series.slice(-127);
+    const m = new Map();
+    for (let i = 1; i < s.length; i++) {
+      if (s[i].c && s[i - 1].c) m.set(s[i].t, s[i].c / s[i - 1].c - 1);
+    }
+    return m;
+  });
+  const corr = (a, b) => {
+    const ks = [...a.keys()].filter((k) => b.has(k));   // 한·미 혼합은 거래일이 달라 교집합으로
+    if (ks.length < 60) return null;
+    const xa = ks.map((k) => a.get(k)), xb = ks.map((k) => b.get(k));
+    const ma = xa.reduce((s, v) => s + v, 0) / ks.length, mb = xb.reduce((s, v) => s + v, 0) / ks.length;
+    let sab = 0, saa = 0, sbb = 0;
+    for (let i = 0; i < ks.length; i++) {
+      const da = xa[i] - ma, db = xb[i] - mb;
+      sab += da * db; saa += da * da; sbb += db * db;
+    }
+    return saa && sbb ? sab / Math.sqrt(saa * sbb) : null;
+  };
+  const n = items.length;
+  const M = [], hi = [];
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < n; i++) {
+    M.push([]);
+    for (let j = 0; j < n; j++) {
+      const v = i === j ? 1 : (j < i ? M[j][i] : corr(rets[i], rets[j]));
+      M[i].push(v);
+      if (j < i && v != null) {
+        sum += v; cnt++;
+        if (v >= 0.7) hi.push([items[i].name || items[i].ticker, items[j].name || items[j].ticker, v]);
+      }
+    }
+  }
+  const avg = cnt ? sum / cnt : null;
+  const cellBg = (v) => v == null ? "" : v >= 0.7 ? "rgba(245,68,90,.30)" : v >= 0.4 ? "rgba(240,179,76,.22)"
+    : v <= -0.2 ? "rgba(67,145,255,.22)" : "rgba(255,255,255,.04)";
+  const shortN = (h) => (h.name || h.ticker).slice(0, 6);
+  const mat = `<div class="fin-wrap"><table class="pf-corr"><thead><tr><th></th>${items.map((h) =>
+    `<th>${shortN(h)}</th>`).join("")}</tr></thead><tbody>` + items.map((h, i) => `<tr><th>${shortN(h)}</th>` +
+    M[i].map((v, j) => `<td style="background:${cellBg(i === j ? null : v)}">${i === j ? "·" : v == null ? "-" : v.toFixed(2)}</td>`).join("")
+    + `</tr>`).join("") + `</tbody></table></div>`;
+
+  // ── ② 포트 베타(cyclical.json, 커버 종목 가중) — lazy 도착 후 채움 ──
+  const betaId = "pf-risk-beta";
+  loadCyclical().then(() => {
+    const el = document.getElementById(betaId);
+    if (!el || !CYC?.map) return;
+    let wsum = 0, bsum = 0, miss = [];
+    arr.forEach((h) => {
+      const b = CYC.map[h.mk + "_" + h.ticker]?.beta;
+      if (b != null && h.val) { wsum += h.val; bsum += h.val * b; } else miss.push(h.name || h.ticker);
+    });
+    if (!wsum) { el.textContent = "베타 데이터 없음"; return; }
+    const pb = bsum / wsum;
+    el.innerHTML = `포트 베타 <b>${pb.toFixed(2)}</b>
+      <span class="sub-note">(시장이 1% 움직일 때 내 포트는 약 ${pb.toFixed(2)}% · 평가금 가중 ·
+      ${miss.length ? `미수록 ${miss.length}종목 제외` : "전 종목 반영"})</span>`;
+  });
+
+  // ── ③ 집중도 — 상위 종목 비중 + 산업 HHI ──
+  const sorted = arr.slice().sort((a, b) => (b.val || 0) - (a.val || 0));
+  const top1 = (sorted[0]?.val || 0) / totVal * 100;
+  const top3 = sorted.slice(0, 3).reduce((s, h) => s + (h.val || 0), 0) / totVal * 100;
+  const secW = {};
+  arr.forEach((h) => { const s = hldFineSector(h) || "기타"; secW[s] = (secW[s] || 0) + (h.val || 0) / totVal; });
+  const hhi = Object.values(secW).reduce((s, w) => s + w * w, 0);
+  const effN = hhi ? (1 / hhi) : null;               // 유효 산업 수 — "사실상 몇 개 산업에 나눠 탔나"
+
+  host.innerHTML = `<h3 class="lk-h3">🧮 통계 리스크 <span class="sub-note">— 상관·베타·집중도 (판정 점수와 별개인 정보 카드)</span></h3>
+    <div class="margin-caps">
+      <span>평균 상관 <b>${avg == null ? "-" : avg.toFixed(2)}</b></span>
+      <span>0.7↑ 쌍 <b class="${hi.length ? "kdn" : ""}">${hi.length}</b><span class="sub-note">/${cnt}쌍</span></span>
+      <span id="${betaId}">포트 베타 계산 중…</span>
+      <span>상위1 비중 <b class="${top1 >= 40 ? "kdn" : ""}">${top1.toFixed(0)}%</b> · 상위3 <b>${top3.toFixed(0)}%</b></span>
+      <span>유효 산업 수 <b class="${effN != null && effN < 3 ? "kdn" : ""}">${effN == null ? "-" : effN.toFixed(1)}</b>
+        <span class="sub-note">(1/HHI — 낮을수록 한 산업 쏠림)</span></span>
+    </div>
+    ${hi.length ? `<p class="mini-note">⚠ <b>사실상 같은 베팅 ${hi.length}쌍</b>: ${hi.slice(0, 4).map(([a2, b2, v]) =>
+      `${a2}↔${b2} (${v.toFixed(2)})`).join(" · ")}${hi.length > 4 ? ` 외 ${hi.length - 4}쌍` : ""}
+      — 한쪽이 빠질 때 같이 빠질 가능성이 큽니다.</p>` : `<p class="mini-note">상관 0.7 이상인 쌍이 없습니다 — 분산이 잘 되어 있는 편입니다.</p>`}
+    ${mat}
+    <p class="mini-note">최근 126거래일 일수익률 상관(한·미 혼합은 겹치는 거래일 기준, 60일 미만이면 '-').
+      빨강 0.7↑ = 거의 같은 움직임 · 노랑 0.4↑ · 파랑 −0.2↓ = 분산 효과.
+      ${arr.length - items.length ? `시계열 없는 ${arr.length - items.length}종목(유니버스 밖)은 행렬에서 제외.` : ""}</p>`;
 }
 
 // 시장 수급 컨텍스트 — 토스 스냅샷의 KOSPI/KOSDAQ 투자자별 순매수 20일 + 국채 스프레드 (참고 표시 전용)

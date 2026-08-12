@@ -2773,3 +2773,8 @@ header h1 { margin-right: auto; }
 .dsc-tr-name { font-size: .78rem; font-weight: 600; }
 .dsc-tr-cell .sub-note b { color: #ff8f9c; }
 #dsc-trend { padding: 10px 14px; margin-bottom: 10px; }
+
+/* v394: 포트 상관행렬 */
+.pf-corr { border-collapse: collapse; font-size: .74rem; }
+.pf-corr th, .pf-corr td { padding: 4px 7px; text-align: center; border: 1px solid rgba(218,223,233,.08); white-space: nowrap; }
+.pf-corr thead th, .pf-corr tbody th { color: var(--muted); font-weight: 600; }
