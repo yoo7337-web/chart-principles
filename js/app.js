@@ -92,9 +92,11 @@ const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
+  // v392: 공시 스캐너 아래에 자본 이벤트(환원/희석) — 둘 다 DART 공시가 원천이라 한 지붕이 자연스럽다
+  disc:      [["disc", "공시 스캐너"], ["capev", "💰 자본 이벤트"]],
 };
 const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings",
-  secmet: "rotation" };
+  secmet: "rotation", capev: "disc" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
 function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한 pill 바 주입
@@ -114,7 +116,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", capev: "자본 이벤트", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", memo: "종목 메모", devlog: "개발일지",
   secmet: "산업 지표",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
@@ -206,6 +208,7 @@ function activateTab(tabId) {
   if (tabId === "assets" && !assetsRendered) renderAssets();
   if (tabId === "watch") renderWatch();
   if (tabId === "disc" && !discRendered) initDisc();
+  if (tabId === "capev" && !capevRendered) initCapev();
   if (tabId === "news" && !newsRendered) renderNews();
   if (tabId === "macro" && !macroRendered) renderMacroTab();
   if (tabId === "internals" && !internalsRendered) renderInternals();
@@ -1289,6 +1292,7 @@ function loadLookup(key) {
     appendLiveBar(st);   // 헤더의 '차트와 시세 차이' 경고 계산 전에 잠정 당일봉부터 반영
     renderLookupHead(st);
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
+    lkCapevBadge(st);           // 최근 90일 자본 이벤트(자사주·유증·CB) 배지 — lazy, 없으면 숨김
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
     finhubUser = false; finhubSel = "snap";   // 종목이 바뀌면 기본 탭(Snapshot) 우선으로 복귀
@@ -7961,6 +7965,7 @@ document.addEventListener("click", (e) => {
    데이터: disclosure_scan.py → data/disclosures/{날짜}.json (+ index.json).
    날짜별 파일이라 **선택한 날만 lazy 로드**한다(전체를 한 번에 받으면 수 MB). */
 let discRendered = false, discIdx = null, discDate = null, discCat = "", discMk = "", discQ = "";
+let discMine = false;   // v392: 보유(cp_portfolio_v2)·관심(cp_watch_v1) 종목만
 // v215: 전 시장 수집 — 코스피/코스닥 외에 코넥스(N)·기타(E, 비상장 지주·SPC 등)도 포함
 const DISC_MK_KO = { Y: "코스피", K: "코스닥", N: "코넥스", E: "기타" };
 // 정렬: time=접수순(DART 기본) · mcap/price/chg=헤더 클릭 정렬(첫 클릭 내림차순 → 다시 클릭 오름차순)
@@ -8000,6 +8005,7 @@ function initDisc() {
       return;
     }
     discIdx = idx;
+    renderDiscTrend();                            // v392: 카테고리 54일 추세(색인만으로, fetch 0)
     discDate = idx.days[0].d;                     // 최신 영업일
     $("#dsc-date").innerHTML = idx.days.map((d) =>
       `<option value="${d.d}">${d.d} (${discDow(d.d)}) · ${d.n}건</option>`).join("");
@@ -8014,6 +8020,7 @@ function discDow(ds) { return "일월화수목금토"[new Date(ds + "T00:00:00")
 
 function bindDiscUI() {
   $("#dsc-date").onchange = (e) => { discDate = e.target.value; loadDiscDay(discDate); };
+  $("#dsc-mine").onclick = () => { discMine = !discMine; $("#dsc-mine").classList.toggle("active", discMine); renderDiscTable(); };
   $("#dsc-nav").querySelectorAll("button").forEach((b) => b.onclick = () => {
     const days = discIdx.days.map((x) => x.d);     // ⚠최신순 정렬 — 인덱스가 클수록 과거
     const mv = +b.dataset.mv;                       // -1=이전(과거) · +1=다음(최근)
@@ -8070,8 +8077,11 @@ function renderDiscTable() {
   if (!d) return;
   const cats = discIdx.cats;
   const q = discQ.toLowerCase();
+  const mine = discMine ? myKrCodes() : null;      // v392: 보유·관심 종목만 보기
+  const mineAll = myKrCodes();
   let rows = d.items.filter((it) =>
     (!discCat || it[6] === discCat) && (!discMk || it[2] === discMk) &&
+    (!mine || (it[1] && mine[String(it[1]).padStart(6, "0")])) &&
     (!q || it[0].toLowerCase().includes(q) || it[3].toLowerCase().includes(q)));
   if (DISC_SORTABLE[discSortKey]) {
     // 변동은 '변동액'(현재가 − 전일종가) 기준. 값이 없는 종목(유니버스 밖)은 방향과 무관하게 항상 뒤로.
@@ -8109,7 +8119,7 @@ function renderDiscTable() {
     const col = up ? "var(--kup)" : "var(--kdn)";
     return `<tr>
       <td class="hld-name">${code ? `<img class="mv-logo" src="${logoUrl("kr", code)}" onerror="this.style.visibility='hidden'">` : ""}
-        <span>${code ? `<b class="dsc-go" data-goto="kr_${code}">${name}</b>` : `<b>${name}</b>`}
+        <span>${code ? `<b class="dsc-go" data-goto="kr_${code}">${name}</b>` : `<b>${name}</b>`}${code && mineAll[String(code).padStart(6, "0")] ? ` <span title="내 종목">${mineAll[String(code).padStart(6, "0")]}</span>` : ""}
         <span class="sub-note">${DISC_MK_KO[mk] || mk || ""}</span></span></td>
       <td class="num">${q2?.mcap != null ? fmtMcap(q2.mcap, "kr") : "-"}</td>
       <td class="num">${q2?.price != null ? Math.round(q2.price).toLocaleString() : "-"}</td>
@@ -8144,6 +8154,177 @@ function renderDiscTable() {
   // 상단 토글도 현재 정렬 상태를 따라간다(헤더로 바꿔도 어긋나지 않게)
   $("#dsc-sort")?.querySelectorAll("button").forEach((b) =>
     b.classList.toggle("active", b.dataset.s === discSortKey));
+}
+
+/* ---------- 💰 자본 이벤트(v392) — capital_events.json (자사주=환원 / 유증·CB·BW·EB·처분=희석) ---------- */
+let CAPEV = null, capevLoading = null, capevRendered = false;
+let cvDir = "", cvQ = "", cvMine = false;
+const CV_TYPE = { buyback: ["🟢", "자사주 취득"], trust: ["🟢", "자사주 신탁"], disposal: ["🔴", "자사주 처분"],
+                  rights: ["🔴", "유상증자"], cb: ["🔴", "CB 발행"], bw: ["🔴", "BW 발행"], eb: ["🔴", "EB 발행"] };
+function loadCapev() {
+  if (CAPEV) return Promise.resolve(CAPEV);
+  if (capevLoading) return capevLoading;
+  capevLoading = fetch("data/capital_events.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (CAPEV = j)).catch(() => null);
+  return capevLoading;
+}
+
+/* 보유(💼)·관심(⭐) KR 종목코드 → 배지 문자열. 공시 스캐너·자본 이벤트가 같이 쓴다. */
+function myKrCodes() {
+  const out = {};
+  try {
+    (pfHoldings() || []).forEach((h) => {
+      if ((h.mk || h.market) === "kr" && (h.qty ?? 1) > 0) out[h.ticker] = "💼";
+    });
+  } catch (e) {}
+  try {
+    Object.keys(watchLoad() || {}).forEach((k) => {
+      if (k.startsWith("kr_")) out[k.slice(3)] = (out[k.slice(3)] || "") + "⭐";
+    });
+  } catch (e) {}
+  return out;
+}
+
+function initCapev() {
+  capevRendered = true;
+  loadCapev().then(() => renderCapev());
+  $("#cv-q").oninput = () => { cvQ = $("#cv-q").value.trim().toLowerCase(); renderCapev(); };
+  $("#cv-mine").onclick = () => { cvMine = !cvMine; $("#cv-mine").classList.toggle("active", cvMine); renderCapev(); };
+}
+
+function renderCapev() {
+  const host = $("#cv-table");
+  if (!host) return;
+  const ev = CAPEV?.events || [];
+  if (!ev.length) {
+    host.innerHTML = `<tbody><tr><td class="sub-note">데이터 없음 — python analysis\\capital_events.py 실행 필요</td></tr></tbody>`;
+    return;
+  }
+  // 필터 칩(방향 + 유형) — 건수 배지
+  const cnt = { "": ev.length, ret: 0, dil: 0 };
+  ev.forEach((e) => cnt[e.dir === "return" ? "ret" : "dil"]++);
+  $("#cv-filter").innerHTML = [
+    ["", `전체 <b>${cnt[""]}</b>`], ["return", `🟢 환원 <b>${cnt.ret}</b>`], ["dilute", `🔴 희석 <b>${cnt.dil}</b>`],
+    ...Object.entries(CV_TYPE).map(([k, [ico, nm]]) => [k, `${nm} <b>${ev.filter((e) => e.type === k).length}</b>`]),
+  ].map(([k, lab]) => `<button class="chip${cvDir === k ? " active" : ""}" data-f="${k}">${lab}</button>`).join("");
+  $("#cv-filter").querySelectorAll(".chip").forEach((b) => b.onclick = () => { cvDir = b.dataset.f; renderCapev(); });
+
+  const mine = myKrCodes();
+  let rows = ev.filter((e) =>
+    (!cvDir || e.dir === cvDir || e.type === cvDir) &&
+    (!cvMine || mine[e.code]) &&
+    (!cvQ || (e.name || "").toLowerCase().includes(cvQ)));
+  $("#cv-count").textContent = `${rows.length}건 · 최근 400일`;
+
+  // 랭킹 2열 — 환원 강도 / 희석 규모 (시총 대비 %, 시총 없는 종목 제외)
+  const top = (dir) => ev.filter((e) => e.dir === dir && e.pct_mcap != null && !e.amend)
+    .sort((a, b) => b.pct_mcap - a.pct_mcap).slice(0, 8);
+  const rankCard = (title, list, cls) => `<div class="card-flat cv-rank"><b>${title}</b>` +
+    (list.length ? list.map((e) => `<div class="cv-rk" data-goto="kr_${e.code}">
+        <span class="cv-rk-n">${diEsc(e.name)}</span>
+        <span class="sub-note">${CV_TYPE[e.type]?.[1] || e.type} · ${e.d?.slice(5) || ""}</span>
+        <b class="${cls}">${e.pct_mcap}%</b><span class="sub-note">${e.amount ? fmtEok(e.amount) : ""}</span>
+      </div>`).join("") : `<p class="mini-note">해당 없음</p>`) + `</div>`;
+  $("#cv-ranks").innerHTML =
+    rankCard("🟢 환원 강도 상위 — 취득·신탁 금액 ÷ 시가총액", top("return"), "kup")
+    + rankCard("🔴 희석 규모 상위 — 조달 금액 ÷ 시가총액", top("dilute"), "kdn");
+  $("#cv-ranks").querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+
+  const detail = (e) => {
+    const bits = [];
+    if (e.type === "rights" && e.dilution != null) bits.push(`<b class="kdn">희석 ${e.dilution}%</b>`);
+    if (e.conv_price) bits.push(`전환가 ${Math.round(e.conv_price).toLocaleString()}원`);
+    if (e.method) bits.push(diEsc(String(e.method).slice(0, 22)));
+    if (e.maturity) bits.push(`만기 ${diEsc(e.maturity)}`);
+    if (e.purpose) bits.push(diEsc(String(e.purpose).replace(/\s+/g, " ").slice(0, 30)));
+    return bits.join(" · ");
+  };
+  host.innerHTML = `<thead><tr><th>공시일</th><th>회사</th><th>유형</th>
+      <th class="num">금액</th><th class="num">시총 대비</th><th>내용</th><th>원본</th></tr></thead><tbody>`
+    + (rows.length ? rows.slice(0, 400).map((e) => {
+      const [ico, nm] = CV_TYPE[e.type] || ["", e.type];
+      return `<tr>
+        <td>${e.d || ""}${e.amend ? ` <span class="dsc-fix">정정</span>` : ""}</td>
+        <td class="hld-name"><img class="mv-logo" src="${logoUrl("kr", e.code)}" onerror="this.style.visibility='hidden'">
+          <b class="dsc-go" data-goto="kr_${e.code}">${diEsc(e.name)}</b>${mine[e.code] ? ` <span title="내 종목">${mine[e.code]}</span>` : ""}</td>
+        <td><span class="cv-badge ${e.dir}">${ico} ${nm}</span></td>
+        <td class="num">${e.amount ? fmtEok(e.amount) : "-"}</td>
+        <td class="num">${e.pct_mcap != null ? `<b class="${e.dir === "return" ? "kup" : "kdn"}">${e.pct_mcap}%</b>` : "-"}</td>
+        <td class="dsc-title">${detail(e)}</td>
+        <td><a class="dsc-src" href="${discLink(e.rcept)}" target="_blank" rel="noopener">DART ↗</a></td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="7" class="sub-note">조건에 맞는 이벤트가 없습니다.</td></tr>`) + `</tbody>`;
+  host.querySelectorAll(".dsc-go").forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+  $("#cv-note").innerHTML = `출처 DART 주요사항보고서(구조화 필드) · 갱신 ${CAPEV.generated} ·
+    <b>환원</b>=자사주 취득·신탁(주주 몫이 늘어남) / <b>희석</b>=유상증자·CB·BW·EB·자사주 처분(주식 수가 늘어남).
+    ⚠유증 '희석률'은 신주 ÷ 증자 전 발행주식수, CB·BW는 전액 전환 가정 시 잠재 물량입니다.`;
+}
+
+// 억원 표기(1조 이상은 조 단위) — 자본 이벤트 전용 짧은 포맷
+function fmtEok(v) {
+  if (v == null) return "-";
+  return v >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억";
+}
+
+/* 종목조회 배지(v392): 이 종목의 최근 90일 자본 이벤트 — 있으면 헤더 아래 한 줄 */
+function lkCapevBadge(st) {
+  const host = $("#lk-capev");
+  if (!host) return;
+  host.style.display = "none";
+  if (st.market !== "kr") return;
+  loadCapev().then(() => {
+    if (LOOKUP_ST !== st || !CAPEV?.events) return;
+    const cut = new Date(Date.now() - 90 * 86400e3).toISOString().slice(0, 10);
+    const ev = CAPEV.events.filter((e) => e.code === st.ticker && (e.d || "") >= cut && !e.amend).slice(0, 4);
+    if (!ev.length) return;
+    host.style.display = "";
+    host.innerHTML = `<span class="lk-ind-label">💰 자본 이벤트</span>` + ev.map((e) => {
+      const [ico, nm] = CV_TYPE[e.type] || ["", e.type];
+      return `<button class="lk-ind-badge cv-${e.dir}">${ico} ${nm} ${e.amount ? fmtEok(e.amount) : ""}
+        ${e.type === "rights" && e.dilution != null ? `· 희석 ${e.dilution}%` : ""}
+        <span class="sub-note">${(e.d || "").slice(5)}</span></button>`;
+    }).join("");
+    host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("capev"));
+  });
+}
+
+/* 공시 카테고리 추세(v392) — index.json days[].counts(이미 로드됨)로 최근 8주 미니 막대.
+   유의미 급증(오늘 ≥ 평균 2배)만 강조 — 자본조달(희석)·자기주식(환원)·M&A가 관심 대상. */
+function renderDiscTrend() {
+  const host = $("#dsc-trend");
+  if (!host || !discIdx?.days?.length) return;
+  const days = discIdx.days.slice(0, 54).reverse();     // 과거 → 최근
+  const cats = discIdx.cats || {};
+  // 전체 합 상위 6개 카테고리(etc 제외)
+  const tot = {};
+  days.forEach((d) => Object.entries(d.counts || {}).forEach(([c, n]) => {
+    if (c !== "etc") tot[c] = (tot[c] || 0) + n;
+  }));
+  const top = Object.entries(tot).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c);
+  if (!top.length) return;
+  host.style.display = "";
+  const W = 150, H = 34;
+  host.innerHTML = `<div class="dsc-trend-h"><b>📈 카테고리 추세</b>
+      <span class="sub-note">최근 ${days.length}일 · 막대=일별 건수 · 클릭=해당 카테고리 필터</span></div>
+    <div class="dsc-trend-grid">` + top.map((c) => {
+    const vals = days.map((d) => (d.counts || {})[c] || 0);
+    const mx = Math.max(...vals, 1), avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const last = vals[vals.length - 1];
+    const hot = last >= avg * 2 && last >= 5;
+    const bw = W / vals.length;
+    const bars = vals.map((v, i) =>
+      `<rect x="${(i * bw).toFixed(1)}" y="${(H - v / mx * H).toFixed(1)}" width="${Math.max(1, bw - 1).toFixed(1)}"
+         height="${(v / mx * H).toFixed(1)}" fill="${i === vals.length - 1 ? (hot ? "#f5445a" : "#4391ff") : "#3d4657"}"/>`).join("");
+    return `<button class="dsc-tr-cell${hot ? " hot" : ""}" data-c="${c}">
+        <span class="dsc-tr-name">${cats[c]?.icon || ""} ${cats[c]?.name || c}</span>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}</svg>
+        <span class="sub-note">오늘 ${last} · 평균 ${avg.toFixed(1)}${hot ? " · <b>급증</b>" : ""}</span>
+      </button>`;
+  }).join("") + `</div>`;
+  host.querySelectorAll(".dsc-tr-cell").forEach((b) => b.onclick = () => {
+    const chip = document.querySelector(`#dsc-cats .dsc-cat[data-c="${b.dataset.c}"]`);
+    if (chip) chip.click();
+  });
 }
 
 /* ⭐ 관심종목 탭 — 시세·산업·오늘 신호·메모를 한 표로 */
