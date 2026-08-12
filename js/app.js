@@ -4101,6 +4101,14 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v391", "2026-08-13", "💳 신용잔고(빚투) 신설 — 시장 과열·반대매매 압력",
+   "**신용거래융자 잔고**(빚으로 산 주식의 총량)를 새로 수집해 증권 탭에 추가했습니다 — "
+   + "금융투자협회 일간 데이터 2015년부터 2,860일. 잔고 급증 = 과열, 급락장에선 이 물량이 "
+   + "반대매매로 쏟아져 낙폭을 키우는 고전 지표인데 그동안 없었습니다.\n\n"
+   + "카드 구성: 잔고 추이(1/3/5년 토글 연동) + 1·3개월 변화 + 5년 백분위 + **예탁금 대비 비율**"
+   + "(대기자금 대비 빚 크기) + 미수금·반대매매 비중, 그리고 조합 판정 한 줄.\n\n"
+   + "⚠컬럼 의미는 **한국은행 ECOS 월간 통계와 교차 검증**해 확정했습니다(2021-08 융자 24.45조 ≈ "
+   + "ECOS 24.92조, 유가+코스닥=합계 일치). 소스가 컬럼을 바꾸면 저장을 거부하는 자기검증도 넣었습니다."],
   ["v390", "2026-08-13", "🐞 실적괴리 검증치 복구 + 놀고 있던 데이터 4종 화면에",
    "**실적 vs 주가 괴리 칩의 '12개월 뒤 중앙값'이 항상 `-`였던 버그**를 고쳤습니다 — 10년 검증 결과를 "
    + "일일 배치가 매일 지우고 있었습니다(이제 보존). 재검증 수치도 갱신: 💎실적↑주가↓ +4.1%.\n\n"
@@ -9786,13 +9794,84 @@ function renderInternals() {
       </div>
     </div>`;
 
-  $("#int-mk").onchange = drawInternals;
+  $("#int-mk").onchange = () => { drawInternals(); renderMargin(); };
   $("#int-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
     intRange = +b.dataset.r;
     $("#int-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
     drawInternals();
+    renderMargin();
   });
   drawInternals();
+  loadMargin().then(renderMargin);   // 신용잔고는 별도 파일(lazy) — 도착 후 채움
+}
+
+/* 💳 신용잔고(빚투) — margin_debt.json(금융투자협회 일간 · 노트북 배치 · v391).
+   신용융자 잔고는 '빚으로 산 주식'의 총량이다. **급증 = 과열(레버리지 베팅)**,
+   **급감 = 디레버리징·반대매매 진행**으로 읽는다. KR 전용(미국은 FINRA 월간이라 성격이 다름 — 미수집). */
+let MARGIN = null, marginLoading = null;
+function loadMargin() {
+  if (MARGIN) return Promise.resolve(MARGIN);
+  if (marginLoading) return marginLoading;
+  marginLoading = fetch("data/margin_debt.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (MARGIN = j)).catch(() => null);
+  return marginLoading;
+}
+
+function renderMargin() {
+  const host = $("#int-margin");
+  if (!host) return;
+  const mk = $("#int-mk")?.value || "kr";
+  if (mk !== "kr" || !MARGIN?.rows?.length) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const cut = new Date(Date.now() - intRange * 365.25 * 86400e3).toISOString().slice(0, 10);
+  const rows = MARGIN.rows.filter((r) => r[0] >= cut && r[1] != null);
+  if (rows.length < 20) { host.style.display = "none"; return; }
+  const L = MARGIN.latest || {};
+
+  const W = 940, H = 210, padL = 8, padR = 74, padT = 12, padB = 20, plotW = W - padL - padR, plotH = H - padT - padB;
+  const vals = rows.map((r) => r[1]);
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const X = (i) => padL + (i / Math.max(1, rows.length - 1)) * plotW;
+  const Y = (v) => padT + (1 - (v - lo) / span) * plotH;
+  const pts = rows.map((r, i) => `${X(i).toFixed(1)},${Y(r[1]).toFixed(1)}`);
+  // x축 연 라벨
+  let ax = "", py = "";
+  rows.forEach((r, i) => {
+    const yr = r[0].slice(0, 4);
+    if (yr !== py) { ax += `<text x="${X(i).toFixed(1)}" y="${H - 5}" font-size="9.5" fill="#8b8b93">${yr}</text>`; py = yr; }
+  });
+  const last = rows[rows.length - 1];
+  const jo = (v) => (v == null ? "-" : (v / 1e4).toFixed(1) + "조");
+  const chgCls = (v) => (v == null ? "" : v >= 0 ? "kup" : "kdn");
+  // 판정: 5년 백분위 × 최근 1개월 방향
+  const p5 = L.pct_5y, m1 = L.chg_1m;
+  const verdict = p5 == null ? "" :
+    p5 >= 85 && (m1 ?? 0) > 3 ? `🔥 <b>빚투 과열 구간</b> — 잔고가 5년 상위 ${(100 - p5).toFixed(0)}% 수준이고 한 달 새 +${m1}% 증가 중. 하락 시 반대매매가 낙폭을 키울 수 있습니다`
+    : p5 >= 85 ? `⚠ 잔고 자체는 5년 상위 ${(100 - p5).toFixed(0)}% 수준(레버리지 높음)` +
+      ((m1 ?? 0) < -5 ? ` — 다만 한 달 새 ${m1}%로 <b>디레버리징 진행 중</b>(반대매매·차익청산)` : "")
+    : (m1 ?? 0) < -10 ? `📉 <b>급격한 디레버리징</b> — 한 달 새 ${m1}%. 반대매매성 매물이 지나가는 중일 수 있습니다`
+    : `잔고 5년 백분위 ${p5} · 특이 과열 신호 없음`;
+
+  host.innerHTML = `<h3 class="lk-h3">💳 신용잔고(빚투) <span class="sub-note">— 신용거래융자 ${jo(L.loan)} ·
+      ${L.d} 기준 · 금융투자협회 일간(T+1~2)</span></h3>
+    <div class="margin-caps">
+      <span>1개월 <b class="${chgCls(L.chg_1m)}">${L.chg_1m == null ? "-" : (L.chg_1m >= 0 ? "+" : "") + L.chg_1m + "%"}</b></span>
+      <span>3개월 <b class="${chgCls(L.chg_3m)}">${L.chg_3m == null ? "-" : (L.chg_3m >= 0 ? "+" : "") + L.chg_3m + "%"}</b></span>
+      <span>5년 백분위 <b>${L.pct_5y ?? "-"}</b></span>
+      <span>예탁금 대비 <b>${L.loan_over_deposit ?? "-"}%</b> <span class="sub-note">(대기자금 ${jo(L.deposit)})</span></span>
+      <span>미수금 ${L.misu == null ? "-" : Math.round(L.misu).toLocaleString() + "억"} · 반대매매 비중 <b>${L.cover_pct ?? "-"}%</b></span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
+      <polyline points="${pts.join(" ")}" fill="none" stroke="#e0912f" stroke-width="1.8"/>
+      <circle cx="${X(rows.length - 1)}" cy="${Y(last[1])}" r="2.6" fill="#e0912f"/>
+      <text x="${W - padR + 4}" y="${(Y(last[1]) + 3).toFixed(1)}" font-size="10" fill="#e0912f">${jo(last[1])}</text>
+      <text x="${W - padR + 4}" y="${(Y(hi) + 10).toFixed(1)}" font-size="9" fill="#8b8b93">고 ${jo(hi)}</text>
+      <text x="${W - padR + 4}" y="${(Y(lo) - 2).toFixed(1)}" font-size="9" fill="#8b8b93">저 ${jo(lo)}</text>
+      ${ax}</svg>
+    <p class="mini-note">${verdict}</p>
+    <p class="mini-note">신용거래융자 = 증권사에서 돈을 빌려 산 주식의 잔고(유가증권+코스닥 합계).
+      <b>잔고 급증 = 상승에 베팅한 빚이 쌓이는 중(과열 신호)</b>, 급락장에선 이 물량이 반대매매로 쏟아져
+      낙폭을 키웁니다. 컬럼 의미는 한국은행 ECOS 월간 통계와 교차 검증했습니다(2026-08-13).</p>`;
 }
 
 // 시장 진단 차트 표시 기간(년) — 데이터는 5년 보관, 1/3/5년 확대만 조절
