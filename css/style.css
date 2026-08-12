@@ -2746,3 +2746,30 @@ header h1 { margin-right: auto; }
 .margin-caps { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .8rem; color: var(--muted); margin: 2px 0 8px; }
 .margin-caps b { color: var(--ink); }
 .margin-caps .kup { color: var(--kup); } .margin-caps .kdn { color: var(--kdn); }
+
+/* v392: 자본 이벤트 소탭 + 공시 추세 */
+.cv-ranks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 900px) { .cv-ranks { grid-template-columns: 1fr; } }
+.cv-rank { padding: 10px 14px; font-size: .84rem; }
+.cv-rank > b { display: block; font-size: .86rem; margin-bottom: 6px; }
+.cv-rk { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; cursor: pointer; border-radius: 6px; }
+.cv-rk:hover { background: rgba(255,255,255,.05); }
+.cv-rk-n { font-weight: 600; min-width: 110px; }
+.cv-rk > b { margin-left: auto; }
+.cv-badge { font-size: .76rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.cv-badge.return { background: rgba(34,192,122,.15); color: #57d99f; }
+.cv-badge.dilute { background: rgba(245,68,90,.14); color: #ff8f9c; }
+.lk-ind-badge.cv-return { border-color: rgba(34,192,122,.5); }
+.lk-ind-badge.cv-dilute { border-color: rgba(245,68,90,.5); }
+#cv-filter .chip b, #dsc-mine.active, #cv-mine.active { color: inherit; }
+#dsc-mine.active, #cv-mine.active { background: #4391ff; border-color: #4391ff; color: #fff; }
+.dsc-trend-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.dsc-trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 14px; }
+.dsc-tr-cell { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px 5px;
+  cursor: pointer; color: inherit; font: inherit; text-align: left; }
+.dsc-tr-cell:hover { border-color: rgba(255,255,255,.3); }
+.dsc-tr-cell.hot { border-color: rgba(245,68,90,.55); }
+.dsc-tr-cell svg { display: block; width: 100%; height: 34px; margin: 4px 0 2px; }
+.dsc-tr-name { font-size: .78rem; font-weight: 600; }
+.dsc-tr-cell .sub-note b { color: #ff8f9c; }
+#dsc-trend { padding: 10px 14px; margin-bottom: 10px; }
