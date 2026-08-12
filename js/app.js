@@ -4101,6 +4101,13 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v390", "2026-08-13", "🐞 실적괴리 검증치 복구 + 놀고 있던 데이터 4종 화면에",
+   "**실적 vs 주가 괴리 칩의 '12개월 뒤 중앙값'이 항상 `-`였던 버그**를 고쳤습니다 — 10년 검증 결과를 "
+   + "일일 배치가 매일 지우고 있었습니다(이제 보존). 재검증 수치도 갱신: 💎실적↑주가↓ +4.1%.\n\n"
+   + "수집만 되고 화면에 없던 데이터 4종을 살렸습니다: ①홈 랭킹에 **기관 순매수·순매도**와 "
+   + "**🔥 거래량 급증**(전일 대비 배율) 칩 ②매크로 국채 커브에 **스프레드 추이(2020~)와 커브 변화**"
+   + "(현재 vs 1M·3M·1Y 전 — 스티프닝/플래트닝 판정 포함) ③공포·탐욕 **구성지표 7종에 시계열 스파크라인**"
+   + "(숫자만으론 '80에서 내려오는 중'인지 알 수 없었습니다)."],
   ["v389", "2026-08-09", "📔 투자 다이어리 좌우 분할 — 포스트잇 클릭해서 수정",
    "화면 위쪽을 크게 차지했던 입력 폼을 **오른쪽 분할 패널로 옮겼습니다**(사용자 요청). "
    + "`＋ 기록`을 누르면 오른쪽에 빈 폼이 열리고, **왼쪽 포스트잇을 클릭하면 그 기록이 열려 바로 수정**됩니다. "
@@ -6587,25 +6594,39 @@ function renderHomeSchedule() {
 
 // 주요 뉴스 미리보기 (뉴스 탭 데이터 재사용, 상위 5건)
 // 실시간 랭킹 (toss_market.json) — 홈 시장 토글(homeMk)에 연동. TOSSM 없으면 섹션 숨김.
-const RANK_CATS = [["amount", "거래대금"], ["volume", "거래량"], ["gainers", "급등"],
-                   ["losers", "급락"], ["frgn_buy", "외국인 순매수"], ["frgn_sell", "외국인 순매도"],
+/* v390: 기관 순매수·순매도(investor.rank.inst_* — 수집만 되고 화면 0이던 필드)와
+   거래량 급증(market.hot, volx 상위 — 역시 0회 참조)을 칩으로 추가. 데이터 소스는 기존 그대로. */
+const RANK_CATS = [["amount", "거래대금"], ["volume", "거래량"], ["hot", "🔥 거래량 급증"],
+                   ["gainers", "급등"], ["losers", "급락"],
+                   ["frgn_buy", "외국인 순매수"], ["frgn_sell", "외국인 순매도"],
+                   ["inst_buy", "기관 순매수"], ["inst_sell", "기관 순매도"],
                    ["toss", "🟦 토스 고객"]];
 let rankCat = "amount";
 
 // movers(market.json, 30분 클라우드 갱신) 카테고리 → 랭킹 카테고리 매핑
 const RANK_MV = { amount: "value", volume: "volume", gainers: "gainers", losers: "losers" };
+// 수급 랭킹 칩 → investor.rank 키·주체 라벨(외국인/기관 공용 분기)
+const RANK_INV = { frgn_buy: ["foreign_buy", "외국인", "buy"], frgn_sell: ["foreign_sell", "외국인", "sell"],
+                   inst_buy: ["inst_buy", "기관", "buy"], inst_sell: ["inst_sell", "기관", "sell"] };
 
 function rankRows(cat) {
   if (cat === "toss") {
     const g = TOSSM?.rankings?.[`${homeMk}_toss`];
     return g?.rows ? { src: "toss", rows: g.rows } : null;
   }
-  if (cat === "frgn_buy" || cat === "frgn_sell") {
-    if (homeMk !== "kr") return null;  // 외국인 순매수 랭킹은 국내만(자체 수급 집계)
-    const arr = INVESTOR?.rank?.[cat === "frgn_buy" ? "foreign_buy" : "foreign_sell"];
+  if (RANK_INV[cat]) {
+    if (homeMk !== "kr") return null;  // 투자자별 순매수 랭킹은 국내만(자체 수급 집계)
+    const [key, who, dir] = RANK_INV[cat];
+    const arr = INVESTOR?.rank?.[key];
     return arr?.length ? { src: "investor", rows: arr.map((r, i) => ({
       t: r.code, name: r.name, last: r.last, chg: null, rank: i + 1,
-      netbuy: r.net, dir: cat === "frgn_buy" ? "buy" : "sell" })) } : null;
+      netbuy: r.net, dir, who })) } : null;
+  }
+  if (cat === "hot") {
+    // 거래량 급증(전일 대비 volx배) — 유동성 없는 종목의 노이즈가 아니라 '오늘 갑자기 붐비는 곳'
+    const arr = (MARKET?.hot || []).filter((r) => (r.market || "kr") === homeMk);
+    return arr.length ? { src: "hot", rows: arr.map((r, i) => ({
+      t: r.ticker, name: r.name, last: null, chg: r.chg, rank: i + 1, volx: r.volx })) } : null;
   }
   const mv = MARKET?.movers?.[homeMk]?.[RANK_MV[cat]];
   if (!mv?.length) return null;
@@ -6628,7 +6649,10 @@ function renderRankings() {
   if (g.src === "movers") {
     $("#rank-note").innerHTML = `(거래소 30분 갱신 · ${relTime(MARKET.generated)})`;
   } else if (g.src === "investor") {
-    $("#rank-note").innerHTML = `(외국인 20일 누적 ${rankCat === "frgn_buy" ? "순매수" : "순매도"} 상위 · 억원 · ${INVESTOR.generated ? relTime(INVESTOR.generated) : ""})`;
+    const [, who, dir] = RANK_INV[rankCat] || [null, "외국인", "buy"];
+    $("#rank-note").innerHTML = `(${who} 20일 누적 ${dir === "buy" ? "순매수" : "순매도"} 상위 · 억원 · ${INVESTOR.generated ? relTime(INVESTOR.generated) : ""})`;
+  } else if (g.src === "hot") {
+    $("#rank-note").innerHTML = `(전일 대비 거래량 배율 상위 · 거래소 30분 갱신 · ${relTime(MARKET.generated)})`;
   } else {
     const ageH = TOSSM.generated
       ? (Date.now() - new Date(TOSSM.generated.replace(" ", "T") + "+09:00").getTime()) / 3.6e6 : null;
@@ -6647,9 +6671,11 @@ function renderRankings() {
     const up = (r.chg ?? 0) >= 0;
     const sub = r.dir
       // netbuy 단위=억원(자체 수급 집계). 1조 이상만 '조' 표기 — fmtMcap(원 단위)에 넣으면 자릿수가 어긋남
-      ? `외국인 ${r.dir === "buy" ? "순매수" : "순매도"}${r.netbuy != null
+      ? `${r.who || "외국인"} ${r.dir === "buy" ? "순매수" : "순매도"}${r.netbuy != null
           ? " " + (Math.abs(r.netbuy) >= 10000 ? (Math.abs(r.netbuy) / 10000).toFixed(1) + "조원"
                                                : Math.round(Math.abs(r.netbuy)).toLocaleString() + "억원") : ""}`
+      : r.volx != null
+      ? `전일 대비 거래량 <b>×${r.volx.toFixed(1)}</b>`
       : rankCat === "volume"
       ? `거래량 ${(r.volume || 0).toLocaleString()}주`
       : `거래대금 ${fmtMcap(r.amount || 0, homeMk)}`;
@@ -6664,7 +6690,7 @@ function renderRankings() {
       <img class="mv-logo" src="${logoUrl(homeMk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="mv-name"><b>${r.name}</b><span class="sub-note"> ${r.t}</span>${r.halted ? ` <span class="rank-halt">거래정지</span>` : ""}<br>
         <span class="mv-sub">${sub}</span></span>
-      <span class="mv-price"><span class="mv-p">${fmtPrice(r.last, homeMk)}</span>
+      <span class="mv-price">${r.last != null ? `<span class="mv-p">${fmtPrice(r.last, homeMk)}</span>` : ""}
         <span class="mv-d ${cls}">${diffTxt}${flat ? "" : "("}${pct(r.chg, 1)}${flat ? "" : ")"}</span></span>
     </div>`;
   }).join("") || `<p class="mini-note">데이터 없음</p>`;
@@ -6879,9 +6905,27 @@ function renderSentiment() {
   if (!d) { host.style.display = "none"; return; }
   host.style.display = "";
   const score = d.score ?? 0;
+  /* v390: 구성지표 시계열 스파크라인 — series가 데이터에 처음부터 있었는데(각 260일) 숫자만 보여주고 있었다.
+     "지금 50"보다 "80에서 50으로 내려오는 중"이 투자 판단엔 훨씬 유용하다. */
+  const spark = (s, dotColor) => {
+    if (!Array.isArray(s) || s.length < 10) return "";
+    // series 항목은 {t,v} 객체(sentiment.py) — 배열·숫자 형태도 방어적으로 수용
+    const vals = s.map((x) => (x && typeof x === "object" && !Array.isArray(x) ? x.v : Array.isArray(x) ? x[1] : x))
+      .filter((v) => v != null && isFinite(v));
+    if (vals.length < 10) return "";
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+    const W2 = 220, H2 = 34;
+    const pts = vals.map((v, i) => `${(i / (vals.length - 1) * W2).toFixed(1)},${(H2 - 3 - (v - lo) / span * (H2 - 6)).toFixed(1)}`);
+    // ⚠점 색은 series 마지막 값이 아니라 **score**로 — US 구성지표 series는 0~100이 아니라
+    //   원자료(S&P 지수 6,445 등)라 값으로 색을 정하면 항상 '극단적 탐욕' 색이 된다.
+    return `<svg viewBox="0 0 ${W2} ${H2}" class="sp-spark" preserveAspectRatio="none">
+      <polyline points="${pts.join(" ")}" fill="none" stroke="#8aa0c0" stroke-width="1.4"/>
+      <circle cx="${W2}" cy="${pts[pts.length - 1].split(",")[1]}" r="2.2" fill="${dotColor}"/></svg>`;
+  };
   const parts = (d.parts || []).map((p) => `<div class="sent-part">
       <div class="sp-h"><b>${p.label}</b><span class="sp-score" style="color:${sentColor(p.score ?? 50)}">${
         p.score == null ? "-" : Math.round(p.score)}</span></div>
+      ${spark(p.series, sentColor(p.score ?? 50))}
       <div class="sub-note">${p.note}</div></div>`).join("");
   const pc = SENT.us?.putcall;
   const pcBlock = sentMk === "us" && pc?.last ? `<div class="card-flat" style="margin-top:12px">
@@ -6960,7 +7004,9 @@ function drawCurve() {
     done(b.curve, b.spreads || {}, b.inverted,
       `(${TOSSM?.generated} 기준 · 만기별 수익률)`,
       `출처: 토스증권 Open API · 장단기 스프레드가 <b>마이너스(역전)</b>면 경기침체 신호로 해석됩니다`);
+    drawCurveHist();
   } else {
+    const bh = $("#bond-hist"); if (bh) bh.innerHTML = "";   // 이력은 KR 국고채만(토스 curve_hist)
     loadSecMet().then((d) => {
       if (curveMk !== "us") return;
       const us = d?.us_curve || [];
@@ -6973,6 +7019,68 @@ function drawCurve() {
         `출처: 야후 파이낸스(실시간) · 아래 <b>주요국 비교</b>는 ECOS <b>월평균</b>이라 값이 다를 수 있습니다`);
     });
   }
+}
+
+/* v390: 커브의 '시간 변화' — curve_hist(토스 국고채 일봉 백필 1,600행)를 그동안 10Y−2Y 한 필드만 쓰고 있었다.
+   ①스프레드 추이(10Y−2Y·10Y−3Y, 0선=역전 경계) ②현재 vs 1M/3M/1Y 전 커브 스냅샷 —
+   "지금 커브가 가팔라지는 중인가(스티프닝) 눕는 중인가(플래트닝)"를 한눈에. */
+function drawCurveHist() {
+  const host = $("#bond-hist");
+  const H0 = TOSSM?.curve_hist || [];
+  if (!host || H0.length < 30) { if (host) host.innerHTML = ""; return; }
+  const W = 940, H = 170, padL = 40, padR = 88, padT = 14, padB = 20, plotW = W - padL - padR, plotH = H - padT - padB;
+
+  // ── ① 스프레드 추이(전 구간) ──
+  const sp = H0.filter((r) => r["10_2"] != null || r["10_3"] != null);
+  const vals = sp.flatMap((r) => [r["10_2"], r["10_3"]]).filter((v) => v != null);
+  const lo = Math.min(...vals, 0), hi = Math.max(...vals, 0), span = hi - lo || 1;
+  const X = (i) => padL + (i / Math.max(1, sp.length - 1)) * plotW;
+  const Y = (v) => padT + (1 - (v - lo) / span) * plotH;
+  const line = (k, color) => {
+    const pts = sp.map((r, i) => (r[k] != null ? `${X(i).toFixed(1)},${Y(r[k]).toFixed(1)}` : null)).filter(Boolean);
+    const last = sp[sp.length - 1][k];
+    return `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8"/>`
+      + (last != null ? `<text x="${W - padR + 4}" y="${(Y(last) + 3).toFixed(1)}" font-size="10" fill="${color}">${k === "10_2" ? "10Y−2Y" : "10Y−3Y"} ${last >= 0 ? "+" : ""}${last.toFixed(2)}</text>` : "");
+  };
+  // x축 연 라벨(1월 첫 관측)
+  let ax = "", py = "";
+  sp.forEach((r, i) => {
+    const yr = r.t.slice(0, 4);
+    if (yr !== py) { ax += `<text x="${X(i).toFixed(1)}" y="${H - 5}" font-size="9.5" fill="#8b8b93">${yr}</text>`; py = yr; }
+  });
+  const spreadSvg = `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">
+    <line x1="${padL}" y1="${Y(0)}" x2="${W - padR}" y2="${Y(0)}" stroke="#8b8b93" stroke-dasharray="3 3"/>
+    <text x="${padL - 4}" y="${Y(0) + 3}" font-size="9" fill="#8b8b93" text-anchor="end">0(역전선)</text>
+    ${line("10_2", "#4391ff")}${line("10_3", "#22c07a")}${ax}</svg>`;
+
+  // ── ② 커브 스냅샷: 현재 vs 1M(21행)·3M(63행)·1Y(252행) 전 ──
+  const mats = [["y2", "2Y"], ["y3", "3Y"], ["y5", "5Y"], ["y10", "10Y"], ["y20", "20Y"], ["y30", "30Y"]];
+  const snaps = [[0, "현재", "#f5445a"], [21, "1M 전", "#f0b34c"], [63, "3M 전", "#4391ff"], [252, "1Y 전", "#8b8b93"]]
+    .map(([back, lab, color]) => ({ lab, color, row: H0[H0.length - 1 - back] })).filter((s) => s.row);
+  const ys2 = snaps.flatMap((s) => mats.map(([k]) => s.row[k])).filter((v) => v != null);
+  const lo2 = Math.min(...ys2), hi2 = Math.max(...ys2), span2 = hi2 - lo2 || 1;
+  const H2 = 160, plot2 = H2 - padT - padB;
+  const X2 = (i) => padL + (i / (mats.length - 1)) * plotW;
+  const Y2 = (v) => padT + (1 - (v - lo2) / span2) * plot2;
+  const snapSvg = `<svg viewBox="0 0 ${W} ${H2}" class="fin-svg">` + snaps.map((s) => {
+    const pts = mats.map(([k], i) => (s.row[k] != null ? `${X2(i).toFixed(1)},${Y2(s.row[k]).toFixed(1)}` : null)).filter(Boolean);
+    const lastV = s.row[mats[mats.length - 1][0]];
+    return `<polyline points="${pts.join(" ")}" fill="none" stroke="${s.color}" stroke-width="${s.lab === "현재" ? 2.4 : 1.5}"${s.lab === "현재" ? "" : ' stroke-dasharray="4 3"'}/>`
+      + (lastV != null ? `<text x="${W - padR + 4}" y="${(Y2(lastV) + 3).toFixed(1)}" font-size="10" fill="${s.color}">${s.lab}</text>` : "");
+  }).join("") + mats.map(([, lab], i) => `<text x="${X2(i).toFixed(1)}" y="${H2 - 5}" font-size="9.5" fill="#8b8b93" text-anchor="middle">${lab}</text>`).join("") + `</svg>`;
+
+  // 판정 한 줄: 1M 전 대비 10Y−2Y가 벌어졌으면 스티프닝, 좁아졌으면 플래트닝
+  const now = sp[sp.length - 1]?.["10_2"], ago = sp[Math.max(0, sp.length - 1 - 21)]?.["10_2"];
+  const verdict = now != null && ago != null
+    ? (now - ago >= 0.03 ? `📈 <b>스티프닝</b> — 1개월 전보다 장단기 차가 ${(now - ago).toFixed(2)}%p 벌어짐(경기 회복 기대 또는 장기물 부담)`
+      : now - ago <= -0.03 ? `📉 <b>플래트닝</b> — 1개월 전보다 ${(ago - now).toFixed(2)}%p 좁아짐(긴축·둔화 우려 쪽)`
+      : `→ 커브 기울기 큰 변화 없음(1개월간 ${(now - ago >= 0 ? "+" : "")}${(now - ago).toFixed(2)}%p)`) : "";
+  host.innerHTML = `
+    <div class="lk-h3" style="font-size:.88rem;margin:14px 0 2px">스프레드 추이 <span class="sub-note">(10Y−2Y·10Y−3Y · ${sp[0]?.t}~)</span></div>
+    ${spreadSvg}
+    <div class="lk-h3" style="font-size:.88rem;margin:10px 0 2px">커브 변화 <span class="sub-note">(현재 vs 1M·3M·1Y 전)</span></div>
+    ${snapSvg}
+    ${verdict ? `<p class="mini-note" style="margin-top:4px">${verdict}</p>` : ""}`;
 }
 
 // 🌏 주요국 장·단기 금리 비교(ECOS 월평균 — 기준 월 명시)

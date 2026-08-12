@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=389">
-<script src="firebase-config.js?v=389"></script>
-<script src="js/auth.js?v=389"></script>
+<link rel="stylesheet" href="css/style.css?v=390">
+<script src="firebase-config.js?v=390"></script>
+<script src="js/auth.js?v=390"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=389"></script>
+<script src="js/sync.js?v=390"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -802,6 +802,8 @@
             </span></h3>
           <div id="bond-spreads" class="bond-spreads"></div>
           <div id="bond-curve" class="bond-curve"></div>
+          <!-- v390: 커브의 '시간 변화' — 스프레드 추이 + 과거 커브 오버레이(curve_hist 1,600행, 그동안 10_2 한 필드만 쓰고 있었다) -->
+          <div id="bond-hist"></div>
           <p class="sub-note" id="bond-curve-src" style="margin-top:8px"></p>
         </div>
         <div class="card-flat">
@@ -1282,7 +1284,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=389"></script>
+<script src="js/app.js?v=390"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

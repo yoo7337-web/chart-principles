@@ -1998,6 +1998,7 @@ button.gf-item:hover { border-color: rgba(67,145,255,.5); background: rgba(255,2
   background: linear-gradient(90deg, #4391ff, #6ba7ff, #9aa4b2, #f0b34c, #f5445a); }
 .sent-gauge > span { position: absolute; top: -4px; width: 3px; height: 16px; background: var(--ink);
   border-radius: 2px; transform: translateX(-50%); }
+.sp-spark { display: block; width: 100%; height: 34px; margin: 3px 0 4px; opacity: .9; }
 .sent-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px; margin-top: 10px; }
 .sent-part { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
