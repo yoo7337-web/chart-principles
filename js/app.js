@@ -1360,7 +1360,6 @@ function loadLookup(key) {
       // 실적·재무 추이는 renderLookupFinancials(financials fetch) 완료 후 renderFinTrends가 통합 렌더
       // (구 renderLookupFin/FinQ/Stability는 v132에서 통합 카드로 대체 — 연간/분기 정보 통일)
       renderLookupSurprise(st);
-      renderLookupDividend(st);
       renderLookupPeers(st);
       renderLookupFinancials(st);
       renderLookupKpis(st);       // 헤더 아래 핵심지표 스트립(v349) — extras 도착 후에만 채울 수 있다
@@ -12206,209 +12205,8 @@ function finFmt(v, unit) {
   return Math.abs(v) >= 1000 ? "$" + (v / 1000).toFixed(1) + "B" : "$" + Math.round(v) + "M";
 }
 // 분기·연간 실적 차트를 한 자리(토글)로 — 두 카드가 각자 렌더된 뒤 병합(기본=분기, 연간은 토글로)
-function mergeFinCharts() {
-  const q = $("#lookup-finq"), a = $("#lookup-fin");
-  const hasQ = q && q.style.display !== "none" && q.innerHTML;
-  const hasA = a && a.style.display !== "none" && a.innerHTML;
-  if (!hasQ || !hasA) return;  // 한쪽뿐이면 그대로 단독 표시
-  const mkToggle = (act) => {
-    const s = document.createElement("span");
-    s.className = "mk-toggle fc-toggle";
-    s.style.marginLeft = "auto";
-    s.innerHTML = `<button data-m="q" class="${act === "q" ? "active" : ""}">분기</button>
-      <button data-m="a" class="${act === "a" ? "active" : ""}">연간</button>`;
-    s.querySelectorAll("button").forEach((b) => b.onclick = () => {
-      q.style.display = b.dataset.m === "q" ? "" : "none";
-      a.style.display = b.dataset.m === "a" ? "" : "none";
-    });
-    return s;
-  };
-  q.querySelector(".lk-h3")?.appendChild(mkToggle("q"));
-  a.querySelector(".lk-h3")?.appendChild(mkToggle("a"));
-  a.style.display = "none";  // 기본 = 분기
-}
-
-function renderLookupFin(st) {
-  const host = $("#lookup-fin");
-  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
-  const fin = co?.fin;
-  if (!fin?.length) { host.style.display = "none"; return; }
-  host.style.display = "";
-  const W = 640, H = 210, padL = 8, padB = 34, padT = 26;
-  const n = fin.length, gw = (W - padL * 2) / n;
-  const maxV = Math.max(...fin.map((r) => Math.max(r.rev || 0, r.op || 0)), 1);
-  const minOp = Math.min(0, ...fin.map((r) => r.op ?? 0));
-  const y0 = padT + (H - padT - padB) * (maxV / (maxV - minOp));  // 0선
-  const yScale = (v) => padT + (maxV - v) / (maxV - minOp) * (H - padT - padB);
-  const opms = fin.filter((r) => r.opm != null).map((r) => r.opm);
-  const opmMin = Math.min(...opms, 0), opmMax = Math.max(...opms, 1);
-  const opmY = (v) => padT + 4 + (opmMax - v) / (opmMax - opmMin || 1) * 52;  // 상단 60px 대역
-  let bars = "", line = "", labels = "";
-  const pts = [];
-  fin.forEach((r, i) => {
-    const cx = padL + gw * i + gw / 2;
-    const bw = Math.min(34, gw / 3);
-    if (r.rev != null) {
-      const y = yScale(r.rev);
-      bars += `<rect x="${cx - bw - 2}" y="${y}" width="${bw}" height="${Math.max(1, y0 - y)}" fill="${r.est ? "#c7d7f5" : "#7ba6e8"}" rx="2"/>
-        <text x="${cx - bw / 2 - 2}" y="${y - 4}" font-size="9" text-anchor="middle" fill="#4b5563">${finFmt(r.rev, co.fin_unit)}</text>`;
-    }
-    if (r.op != null) {
-      const y = yScale(Math.max(0, r.op)), y2 = yScale(Math.min(0, r.op));
-      bars += `<rect x="${cx + 2}" y="${r.op >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.op >= 0 ? y : y2)))}" fill="${r.op >= 0 ? (r.est ? "#f6c8ad" : "#f0955a") : "#f5445a"}" rx="2"/>
-        <text x="${cx + bw / 2 + 2}" y="${(r.op >= 0 ? y : y2) - 4}" font-size="9" text-anchor="middle" fill="#92400e">${finFmt(r.op, co.fin_unit)}</text>`;
-    }
-    if (r.opm != null) pts.push([cx, opmY(r.opm), r.opm]);
-    labels += `<text x="${cx}" y="${H - 14}" font-size="10" text-anchor="middle" fill="#6b7280">${r.y}${r.est ? "(E)" : ""}</text>`;
-  });
-  if (pts.length > 1) {
-    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#22c07a" stroke-width="2"/>` +
-      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#22c07a"/>
-        <text x="${p[0]}" y="${p[1] + (i % 2 ? 14 : -6)}" font-size="9" text-anchor="middle" fill="#15803d">${p[2].toFixed(1)}%</text>`).join("");
-  }
-  // 확장 지표 표: 순이익·순이익률·EPS·ROE·부채비율·주당배당금
-  let extTable = "";
-  const ext = co.fin_ext;
-  if (ext?.length) {
-    const kr = st.market === "kr";
-    const fmtN = (v) => v == null ? "-" : finFmt(v, co.fin_unit);
-    const fmtP = (v, warn) => v == null ? "-" :
-      `<span class="${warn ? (v >= 200 ? "neg" : "") : (v >= 0 ? "pos" : "neg")}">${v.toLocaleString(undefined, { maximumFractionDigits: 1 })}%</span>`;
-    const fmtE = (v) => v == null ? "-" : (kr ? Math.round(v).toLocaleString() + "원" : "$" + v);
-    const ROWS = [
-      ["순이익", (r) => fmtN(r.net)],
-      ["순이익률", (r) => fmtP(r.npm)],
-      ["EPS", (r) => fmtE(r.eps)],
-      ["ROE", (r) => fmtP(r.roe)],
-      ["부채비율", (r) => fmtP(r.debt, true)],
-    ];
-    if (ext.some((r) => r.dps != null)) ROWS.push(["주당배당금", (r) => fmtE(r.dps)]);
-    extTable = `<div class="tablewrap" style="margin-top:6px"><table class="fin-ext">
-      <tr><th></th>${ext.map((r) => `<th>${r.y}${r.est ? "(E)" : ""}</th>`).join("")}</tr>
-      ${ROWS.map(([name, f]) => `<tr><td>${name}</td>${ext.map((r) => `<td>${f(r)}</td>`).join("")}</tr>`).join("")}
-    </table></div>`;
-  }
-  host.innerHTML = `<h3 class="lk-h3">📊 연간 실적 <span class="sub-note">(단위 ${co.fin_unit === "억원" ? "조/억원" : "USD"} · (E)=컨센서스 추정 · ${st.market === "kr" ? (co.fin_src === "DART" ? "DART 전자공시 실적 + 네이버 추정" : "네이버") : "Yahoo"})</span></h3>
-    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
-      <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>
-      ${bars}${line}${labels}
-    </svg>
-    <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출액 ·
-      <span style="color:#f0955a">■</span> 영업이익 · <span style="color:#22c07a">●─</span> 영업이익률(%)
-      · 옅은색 = 추정치</p>
-    ${extTable}`;
-}
-
 // 분기 실적 추이: 매출·순이익 막대 + 순이익률 라인 + 성장률 표 (수익성/성장성)
-function renderLookupFinQ(st) {
-  const host = $("#lookup-finq");
-  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
-  const fq = co?.fin_q;
-  if (!fq || fq.length < 2) { host.style.display = "none"; return; }
-  host.style.display = "";
-  const unit = co.fin_unit;
-  const W = 660, H = 244, padL = 8, padB = 34, padT = 40;
-  const n = fq.length, gw = (W - padL * 2) / n;
-  const maxV = Math.max(...fq.map((r) => Math.max(r.rev || 0, r.np || 0)), 1);
-  const minV = Math.min(0, ...fq.map((r) => r.np ?? 0));
-  const y0 = padT + (H - padT - padB) * (maxV / (maxV - minV));
-  const yS = (v) => padT + (maxV - v) / (maxV - minV) * (H - padT - padB);
-  const npms = fq.filter((r) => r.npm != null).map((r) => r.npm);
-  const npmMin = Math.min(...npms, 0), npmMax = Math.max(...npms, 1);
-  const npmY = (v) => padT + 2 + (npmMax - v) / (npmMax - npmMin || 1) * 50;
-  let bars = "", labels = "";
-  const pts = [];
-  fq.forEach((r, i) => {
-    const cx = padL + gw * i + gw / 2, bw = Math.min(22, gw / 3);
-    if (r.rev != null) {
-      const y = yS(Math.max(0, r.rev));
-      bars += `<rect x="${cx - bw - 1}" y="${y}" width="${bw}" height="${Math.max(1, y0 - y)}" fill="${r.est ? "#c7d7f5" : "#7ba6e8"}" rx="1.5"/>
-        <text x="${cx - bw / 2 - 1}" y="${y - (i % 2 ? 13 : 4)}" font-size="8.5" text-anchor="middle" fill="#3b5e93">${finFmt(r.rev, unit)}</text>`;
-    }
-    if (r.np != null) {
-      const y = yS(Math.max(0, r.np)), y2 = yS(Math.min(0, r.np));
-      const topY = r.np >= 0 ? y : y2;
-      bars += `<rect x="${cx + 1}" y="${r.np >= 0 ? y : y0}" width="${bw}" height="${Math.max(1, Math.abs(y0 - (r.np >= 0 ? y : y2)))}" fill="${r.np >= 0 ? (r.est ? "#b9c6dd" : "#3f6fb5") : "#f5445a"}" rx="1.5"/>
-        <text x="${cx + bw / 2 + 1}" y="${r.np >= 0 ? topY - (i % 2 ? 4 : 13) : topY + 11}" font-size="8.5" text-anchor="middle" fill="${r.np >= 0 ? "#274e86" : "#b91c1c"}">${finFmt(r.np, unit)}</text>`;
-    }
-    if (r.npm != null) pts.push([cx, npmY(r.npm), r.npm]);
-    labels += `<text x="${cx}" y="${H - 14}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}${r.est ? "(E)" : ""}</text>`;
-  });
-  let line = "";
-  if (pts.length > 1) {
-    line = `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="#e0912f" stroke-width="2"/>` +
-      pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.3" fill="#e0912f"/>
-        <text x="${p[0]}" y="${p[1] + (i % 2 ? 13 : -6)}" font-size="8.5" text-anchor="middle" fill="#b56a10">${p[2].toFixed(1)}%</text>`).join("");
-  }
-  // 성장률(직전 분기 대비) 계산
-  const grow = (arr, i, key) => {
-    if (i === 0) return null;
-    const c = arr[i][key], p = arr[i - 1][key];
-    return c != null && p ? (c - p) / Math.abs(p) * 100 : null;
-  };
-  const fmtN = (v) => (v == null ? "-" : finFmt(v, unit));
-  const fmtPct = (v) => (v == null ? "-" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>`);
-  const ROWS = [
-    ["매출", (r) => fmtN(r.rev)],
-    ["영업이익", (r) => fmtN(r.op)],
-    ["순이익", (r) => fmtN(r.np)],
-    ["영업이익률", (r) => (r.opm == null ? "-" : r.opm.toFixed(1) + "%")],
-    ["순이익률", (r) => (r.npm == null ? "-" : r.npm.toFixed(1) + "%")],
-    ["순이익 성장률", (r, i) => fmtPct(grow(fq, i, "np"))],
-  ];
-  const table = `<div class="tablewrap" style="margin-top:8px"><table class="fin-ext">
-    <tr><th></th>${fq.map((r) => `<th>${r.q}${r.est ? "(E)" : ""}</th>`).join("")}</tr>
-    ${ROWS.map(([nm, f]) => `<tr><td>${nm}</td>${fq.map((r, i) => `<td>${f(r, i)}</td>`).join("")}</tr>`).join("")}
-  </table></div>`;
-
-  host.innerHTML = `<h3 class="lk-h3">📈 분기 실적 추이 <span class="sub-note">(단위 ${unit === "억원" ? "조/억원" : "USD"} · 성장률=직전 분기 대비 · (E)=추정)</span></h3>
-    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">
-      <line x1="${padL}" y1="${y0}" x2="${W - padL}" y2="${y0}" stroke="#e5e7eb"/>${bars}${line}${labels}</svg>
-    <p class="legend" style="margin-top:2px"><span style="color:#7ba6e8">■</span> 매출 ·
-      <span style="color:#3f6fb5">■</span> 순이익 · <span style="color:#e0912f">●─</span> 순이익률(%) · 옅은색 = 추정</p>
-    ${table}`;
-}
-
 // 안정성 분기 추이: 부채비율·유동비율(당좌비율) 라인 (총자본/총부채 있으면 병기)
-function renderLookupStability(st) {
-  const host = $("#lookup-stability");
-  const co = EXTRAS.company?.map?.[`${st.market}_${st.ticker}`];
-  const sq = co?.stability_q;
-  if (!sq || sq.length < 2) { host.style.display = "none"; return; }
-  host.style.display = "";
-  const W = 660, H = 300, padL = 34, padT = 24, padB = 34, padR = 10;
-  const n = sq.length, gw = (W - padL - padR) / n;
-  const series = [["debtRatio", "부채비율", "#e0912f"],
-                  [sq.some((r) => r.currentRatio != null) ? "currentRatio" : "quickRatio",
-                   sq.some((r) => r.currentRatio != null) ? "유동비율" : "당좌비율", "#3f6fb5"]];
-  const allV = sq.flatMap((r) => series.map(([k]) => r[k]).filter((v) => v != null));
-  // y축을 데이터 범위에 맞춤(0 강제 포함 제거) — 값이 100% 근처에 몰릴 때 변화가 보이도록 확대
-  const rawMax = Math.max(...allV, 1), rawMin = Math.min(...allV, 0);
-  const pad = (rawMax - rawMin) * 0.18 || rawMax * 0.1 || 10;
-  const maxV = rawMax + pad, minV = Math.max(0, rawMin - pad);
-  const yS = (v) => padT + (maxV - v) / (maxV - minV || 1) * (H - padT - padB);
-  let lines = "", labels = "", legend = "";
-  series.forEach(([k, lab, c], j) => {
-    const pts = sq.map((r, i) => (Number.isFinite(r[k]) ? [padL + gw * i + gw / 2, yS(r[k]), r[k]] : null)).filter(Boolean);
-    if (pts.length > 1) {
-      lines += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="${c}" stroke-width="2"/>` +
-        pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.3" fill="${c}"/>
-          <text x="${p[0]}" y="${p[1] + (j === 0 ? -(i % 2 ? 14 : 6) : (i % 2 ? 21 : 13))}" font-size="8.5" text-anchor="middle" fill="${c}">${p[2].toFixed(p[2] >= 100 ? 0 : 1)}%</text>`).join("");
-      legend += `<span style="color:${c}">●─</span> ${lab} `;
-    }
-  });
-  sq.forEach((r, i) => {
-    labels += `<text x="${padL + gw * i + gw / 2}" y="${H - 12}" font-size="9" text-anchor="middle" fill="#6b7280">${r.q}${r.est ? "(E)" : ""}</text>`;
-  });
-  // y축 눈금 3개 (상·중·하) + 기준선
-  const yticks = [maxV, (maxV + minV) / 2, minV].map((v) =>
-    `<line x1="${padL}" y1="${yS(v)}" x2="${W - padR}" y2="${yS(v)}" stroke="#eef0f4"/>
-     <text x="2" y="${yS(v) + 3}" font-size="8" fill="#9aa4b2">${Math.round(v)}%</text>`).join("");
-  host.innerHTML = `<h3 class="lk-h3">🛡️ 재무 안정성 추이 <span class="sub-note">(분기별 · ${st.market === "kr" ? "네이버" : "Yahoo"})</span></h3>
-    <svg viewBox="0 0 ${W} ${H}" class="fin-svg">${yticks}${lines}${labels}</svg>
-    <p class="legend">${legend}</p>`;
-}
-
 // 배당 이력 (미국): 분기 배당금 막대
 /* ---------- 💰 배당 섹션 (v241) — 스냅샷 안, DPS 막대 + 배당수익률/배당성향 라인 ----------
    배당수익률은 저장값(최신 1개)뿐이라 추이를 못 봤다 → **그해 DPS ÷ 그해 평균 종가**로 직접 계산해
@@ -12552,12 +12350,6 @@ function divPanel(st) {
 }
 
 /* 기존 별도 섹션은 숨긴다 — 내용이 Snapshot으로 옮겨갔다 */
-function renderLookupDividend(st) {
-  const host = $("#lookup-dividend");
-  if (host) host.style.display = "none";
-  void st;
-}
-
 // 실적 서프라이즈 (미국): EPS 발표치 vs 예상치 + 서프라이즈%
 function renderLookupSurprise(st) {
   const host = $("#lookup-surprise");
@@ -13084,7 +12876,7 @@ function renderValueBand(st) {
       class="cr-ax">${pts[i].t.slice(0, 7)}</text>`).join("");
 
   const estRow = finExtOk(co?.fin_ext).filter((r) => r.est && r.eps > 0).slice(-1)[0];
-  const nowPx = freshQuote(st)?.price ?? now.c;
+  const nowPx = freshQuote(st)?.cur ?? now.c;   // ⚠반환 스키마는 {cur,chg,src} — .price는 v315와 같은 오독
   const fwdPer = bandMode === "per" && estRow ? nowPx / estRow.eps : null;
   const fwdHtml = fwdPer && isFinite(fwdPer) && fwdPer > 0
     ? `<span class="band-fwd">선행 PER <b>${fwdPer.toFixed(fwdPer < 10 ? 2 : 1)}배</b>
@@ -13708,38 +13500,6 @@ function finLoadXlsx() {
   return finXlsxLoading;
 }
 
-function renderLookupReports(st) {
-  const host = $("#lookup-reports");
-  const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
-  const reps = fd?.reports || [];
-  if (!reps.length) { host.style.display = "none"; return; }
-  host.style.display = "";
-  const esc = (s) => String(s ?? "").replace(/</g, "&lt;");
-  if (st.market === "kr") {
-    // 증권사 리서치 — 한경 컨센서스(목표가·투자의견·애널리스트·PDF) 우선, 네이버(미리보기) 폴백
-    const isHankyung = reps.some((r) => r.target != null || r.opinion || r.analyst);
-    const priceKo = (v) => v == null ? "" : v.toLocaleString() + "원";
-    host.innerHTML = `<h3 class="lk-h3">📑 증권사 리포트 <span class="sub-note">(${isHankyung ? "한경 컨센서스 · 전 증권사" : "네이버 리서치"} · 최신순)</span></h3>
-      <div class="lk-reports">` + reps.map((r) => `<a class="lk-rep" href="${r.link}" target="_blank" rel="noopener">
-        <div class="lk-rep-top"><span class="lk-rep-broker">${esc(r.broker)}</span><span class="lk-rep-date">${esc(r.d)}</span></div>
-        <div class="lk-rep-title">${esc(r.title)}</div>
-        ${(r.target != null || r.opinion || r.analyst) ? `<div class="lk-rep-meta">
-          ${r.opinion ? `<span class="lk-rep-op">${esc(r.opinion)}</span>` : ""}
-          ${r.target != null ? `<span>목표 ${priceKo(r.target)}</span>` : ""}
-          ${r.analyst ? `<span class="sub-note">${esc(r.analyst)}</span>` : ""}</div>` : ""}
-        ${r.preview ? `<div class="lk-rep-prev">${esc(r.preview)}</div>` : ""}</a>`).join("") + `</div>
-      <p class="sub-note" style="margin:6px 0 0">클릭 시 ${isHankyung ? "리포트 원문 PDF 다운로드" : "네이버 리서치 상세(PDF 가능)"}</p>`;
-  } else {
-    // 미국 — 애널리스트 등급변경(증권사·등급·목표가 변화)
-    host.innerHTML = `<h3 class="lk-h3">📑 애널리스트 등급 변경 <span class="sub-note">(최근 6건 · yfinance)</span></h3>
-      <div class="lk-reports us">` + reps.map((r) => `<div class="lk-rep static">
-        <div class="lk-rep-top"><span class="lk-rep-broker">${esc(r.broker)}</span><span class="lk-rep-date">${esc(r.d)}</span></div>
-        <div class="lk-rep-title">${esc(r.grade)}${r.action ? ` <span class="lk-rep-act">${esc(r.action)}</span>` : ""}${r.target ? ` · ${esc(r.target)}` : ""}</div>
-      </div>`).join("") + `</div>
-      <p class="sub-note" style="margin:6px 0 0">미국 리서치 원문은 대부분 유료 — 공개된 등급·목표가 변경 이력으로 대체</p>`;
-  }
-}
-
 /* ---------- 🤔 AI 변동 사유 (v220) — 주가·공시·뉴스·수급을 근거로 Gemini가 설명 ----------
    키: localStorage 'gemini_key' — youtube-mentor(같은 origin)와 공유. 브라우저 밖으로 안 나감.
    원칙: **제공한 자료 안에서만** 답하게 강제하고, 일반 지식 추정은 [추정]으로 표시시킨다(환각 억제). */
@@ -14205,29 +13965,6 @@ ${arcNews.map((x) => `    · ${x}`).join("\n")}` : `- ${c.isOld ? "구간 당시
   WHY_BUSY = false;
 }
 
-
-function renderLookupFeed(st) {
-  const wrap = $("#lookup-feed");
-  const fd = EXTRAS.feed?.map?.[`${st.market}_${st.ticker}`];
-  if (!fd || (!fd.disc?.length && !fd.news?.length)) { wrap.style.display = "none"; return; }
-  wrap.style.display = "grid";
-  // 공시는 1년 전량(최대 120건)을 담는다 → 기본 12건만 보이고 나머지는 '더 보기'로 펼친다
-  const discRow = (d) => `<div class="lk-feed-row"><span class="lk-feed-date">${d.d.slice(2)}</span>
-        ${d.link ? `<a href="${d.link}" target="_blank" rel="noopener">${d.title}</a>` : `<span>${d.title}</span>`}</div>`;
-  const dl = fd.disc || [];
-  $("#lookup-disc").innerHTML = dl.length
-    ? dl.slice(0, 12).map(discRow).join("")
-      + (dl.length > 12
-        ? `<details class="lk-feed-more"><summary>+ ${dl.length - 12}건 더 보기 <span class="sub-note">(최근 1년)</span></summary>
-             ${dl.slice(12).map(discRow).join("")}</details>`
-        : "")
-    : `<p class="mini-note">최근 1년 공시 없음</p>`;
-  $("#lookup-news").innerHTML = fd.news?.length
-    ? fd.news.map((n) => `<div class="lk-feed-row"><span class="lk-feed-date">${n.t}</span>
-        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
-        ${n.src ? `<span class="sub-note">${n.src}</span>` : ""}</div>`).join("")
-    : `<p class="mini-note">최근 1주일 뉴스 없음</p>`;
-}
 
 function fmtMcap(v, mk) {
   if (mk === "kr") return v >= 1e12 ? (v / 1e12).toFixed(1) + "조원" : (v / 1e8).toFixed(0) + "억원";

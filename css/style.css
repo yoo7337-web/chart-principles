@@ -10,6 +10,7 @@
   --accent: #4391ff;        /* 토스 블루 */
   --kup: #f5445a;           /* 주가 상승(국내 관례) */
   --kdn: #4391ff;           /* 주가 하락 */
+  --lk-bar: 48px;           /* 종목조회 sticky 바 높이 — v399 전까지 미정의라 항상 폴백이 쓰였다 */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -494,12 +495,9 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .ext-link { color: var(--accent); text-decoration: none; border: 1px solid var(--line);
   border-radius: 999px; padding: 4px 12px; background: var(--card); }
 .ext-link:hover { border-color: var(--accent); }
+/* .lookup-two — 보유 탭(app.js 매매일지 카드)에서 사용 중. lk-two-align 변형은 v399에서 고아 확인 후 제거 */
 .lookup-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0; }
 @media (max-width: 820px) { .lookup-two { grid-template-columns: 1fr; } }
-/* 한쪽이 숨겨져도(peers 없는 종목 등) 남은 카드가 전폭 — auto-fit이 빈 트랙 붕괴 */
-/* align-items:stretch(기본)로 두 카드 높이를 나란히 맞춤(짧은 재무안정성 카드가 동종비교 높이만큼 늘어남) */
-.lookup-two.lk-two-align { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: stretch; }
-.lookup-two.lk-two-align > .card-flat { margin: 0; }
 .prof-grid { display: flex; flex-direction: column; gap: 2px; }
 .prof-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0;
   border-bottom: 1px solid var(--line); font-size: .85rem; }
@@ -1397,21 +1395,11 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 /* 종목조회 상단 고정 바(스크롤해도 유지) — 좌=현재 종목 / 우=검색 */
 .lk-sticky { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 8px;
   background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 2px; margin-bottom: 10px; }
-.lk-sticky-info { display: flex; align-items: center; gap: 6px; font-size: 1rem; min-width: 0; overflow: hidden; }
-.lk-sticky-info b { font-size: 1.05rem; white-space: nowrap; }
+/* ⚠.lk-sticky-logo는 관심종목 wsShow()가 재사용 — 삭제 금지. -info/-price/-search는 v399에서 고아 제거(검색은 전역 헤더로 이전) */
 .lk-sticky-logo { width: 24px; height: 24px; border-radius: 50%; background: #fff; object-fit: contain; flex: 0 0 auto; }
-.lk-sticky-price { font-weight: 700; margin-left: 4px; white-space: nowrap; }
-.lk-sticky-price.kup { color: var(--kup); } .lk-sticky-price.kdn { color: var(--kdn); }
 /* 검색창 위치: 종목 선택 시 우측 고정(gap이 늘어남) / 미선택(.empty) 시 안내문 바로 옆 */
 .lk-sticky-gap { flex: 1 1 auto; }
 .lk-sticky.empty .lk-sticky-gap { flex: 0 0 10px; }
-/* v269: 내재가치 탭 검색과 같은 모양 — 라벨(회색 소문자) + 넓은 라운드 입력 */
-.lk-sticky-search { display: flex; align-items: center; gap: 7px;
-  font-size: .82rem; color: var(--muted); }
-.lk-sticky-search input { padding: 5px 10px; font-size: .84rem; width: min(240px, 46vw);
-  border: 1px solid var(--line); border-radius: 8px; background: var(--card);
-  color: var(--ink); outline: none; }
-.lk-sticky-search input:focus { border-color: var(--accent); }
 
 /* 보조지표 설명 ⓘ 툴팁 */
 .osc-i { display: inline-block; margin-left: 3px; color: var(--muted); cursor: help; font-size: .8rem; vertical-align: 1px; }
@@ -1436,21 +1424,7 @@ footer { margin-top: 40px; font-size: .78rem; color: var(--muted); border-top: 1
 .fin-table tr.fin-sub td.fin-lab { color: var(--muted); }
 .fin-table tbody tr:hover td { background: rgba(255,255,255,.02); }
 
-/* 증권사 리포트 카드 */
-.lk-reports { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.lk-rep { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
-  background: #212127; text-decoration: none; color: var(--ink); }
-a.lk-rep:hover { border-color: var(--accent); }
-.lk-rep-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
-.lk-rep-broker { font-size: .78rem; font-weight: 600; color: var(--accent); }
-.lk-rep-date { font-size: .72rem; color: var(--muted); }
-.lk-rep-title { font-size: .86rem; font-weight: 600; line-height: 1.35; }
-.lk-rep-prev { font-size: .76rem; color: var(--muted); margin-top: 4px; line-height: 1.4;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.lk-rep-act { font-size: .74rem; border-radius: 6px; padding: 1px 6px; background: rgba(67,145,255,.15); color: #6ba7ff; }
-.lk-rep-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; font-size: .78rem; }
-.lk-rep-op { border-radius: 6px; padding: 1px 7px; background: rgba(245,68,90,.15); color: #ff8c9a; font-weight: 600; }
-@media (max-width: 720px) { .lk-reports { grid-template-columns: 1fr; } }
+/* 구 증권사 리포트 카드(.lk-reports/.lk-rep*)는 v349에서 통합 피드로 흡수, v399에서 CSS까지 제거 */
 
 .guru-cash { margin: 8px 0 12px; padding: 10px 12px; background: #212127; border: 1px solid var(--line); border-radius: 8px; }
 .guru-cash b { font-size: .88rem; }
@@ -1644,7 +1618,6 @@ dialog { background: var(--card); color: var(--ink); }
 .lk-side .lk-mrow span { white-space: nowrap; }
 .lk-side .lk-mrow b { font-size: .8rem; white-space: nowrap; }
 .lk-side .lk-mgrid.fin3 .lk-mrow b { font-size: 1rem; }
-.lk-side .lk-mcard-h { font-size: .8rem; }
 .lk-side .lk-cap { padding: 0 14px 6px; }
 .lk-side .lk-cap b { font-size: .9rem; }        /* 좁은 레일: 값이 카드 제목(.95rem)보다 크지 않게 */
 .lk-side .lk-cap > div { min-width: 108px; padding: 6px 10px; }
@@ -2564,10 +2537,11 @@ header h1 { margin-right: auto; }
 
 /* 종목조회 배치(v279) — 개요+투자지표 / 수급+컨센서스 각각 2열 */
 /* v313: 수급 차트가 정보량이 많아 더 넓게 — 프로파일은 값 중심이라 좁아도 읽힌다 */
+/* v399: 흩어져 있던 3중 정의(v279 start → v286 stretch → v316 start)를 최종 승자 값으로 병합 */
 .lk-suprow { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 12px; align-items: start; }
 .lk-supcol { min-width: 0; }
-.lk-suprow > .card-flat { margin-top: 16px; }
+.lk-suprow > .card-flat { margin-top: 16px; display: flex; flex-direction: column; }
 @media (max-width: 1100px) {
   .lk-suprow { grid-template-columns: 1fr; }
 }
@@ -2583,9 +2557,7 @@ header h1 { margin-right: auto; }
 #ov-deep .sub-note { font-size: .68rem; margin-left: 5px; }
 #ov-own-go { font-size: .76rem; }
 
-/* 수급 카드를 옆의 종목 프로파일과 같은 높이로(v286) — 차트가 남는 공간을 채운다 */
-.lk-suprow { align-items: stretch; }
-.lk-suprow > .card-flat { margin-top: 16px; display: flex; flex-direction: column; }
+/* 수급 카드(v286) — 차트가 남는 공간을 채운다 (.lk-suprow 정렬·flex는 v399에서 본 정의로 병합) */
 #lookup-supply-card #lookup-supply { flex: 1 1 auto; min-height: 220px; }
 
 /* 원칙 다중 선택 바(v313) */
@@ -2621,7 +2593,6 @@ header h1 { margin-right: auto; }
 .ws-sig.recent { font-size: 13px; font-weight: 700; }
 
 /* 수급·프로파일 높이 축소(v316) — 본문 폭에서 두 카드가 과하게 길었다 */
-.lk-suprow { align-items: start; }
 #lookup-supply-card #lookup-supply { min-height: 200px; }
 .lk-suprow #lookup-profile .fund-head { padding: 8px 14px 2px; }
 /* 실제 마크업은 .pf2-*(성과·게이지)와 .prof-row(값 목록)다 — 여백만 줄여 정보는 그대로 둔다 */

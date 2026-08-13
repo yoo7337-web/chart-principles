@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=398">
-<script src="firebase-config.js?v=398"></script>
-<script src="js/auth.js?v=398"></script>
+<link rel="stylesheet" href="css/style.css?v=399">
+<script src="firebase-config.js?v=399"></script>
+<script src="js/auth.js?v=399"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=398"></script>
+<script src="js/sync.js?v=399"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -555,17 +555,8 @@
       </div>
     </div>
     <div id="lookup-surprise" class="card-flat" style="display:none"></div>
-    <div id="lookup-dividend" class="card-flat" style="display:none"></div>
-    <!-- 📬 통합 피드(v349): 리포트 카드 + 공시/뉴스 2열을 필터 칩 타임라인 하나로.
-         구 #lookup-reports·#lookup-feed 마크업은 id 보존을 위해 남겨두되 렌더 호출은 끊었다(항상 숨김). -->
+    <!-- 📬 통합 피드(v349): 리포트+공시+뉴스 필터 칩 타임라인. 구 #lookup-reports/#lookup-feed는 v399에서 마크업까지 제거 -->
     <div id="lookup-unifeed" class="card-flat" style="display:none;margin-top:16px"></div>
-    <div id="lookup-reports" class="card-flat" style="display:none;margin-top:16px"></div>
-    <div class="lookup-two" id="lookup-feed" style="display:none;margin-top:16px">
-      <div class="card-flat"><h3 class="lk-h3">📢 공시 <span class="sub-note">(최근 1년)</span></h3>
-        <div id="lookup-disc" class="lk-feed-list"></div></div>
-      <div class="card-flat"><h3 class="lk-h3">📰 뉴스 <span class="sub-note">(최근 3개월)</span></h3>
-        <div id="lookup-news" class="lk-feed-list"></div></div>
-    </div>
     <!-- 이 종목의 원칙 이야기 + 원칙별 10년 성적 (최하단) — v349: 내러티브를 성적 카드에 흡수 -->
     <h2 id="lookup-stats-title" style="display:none;margin-top:18px">이 종목에서의 원칙 이야기와 10년 성적</h2>
     <div class="tablewrap card-flat" id="lookup-stats-wrap" style="display:none">
@@ -1357,7 +1348,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=398"></script>
+<script src="js/app.js?v=399"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">
