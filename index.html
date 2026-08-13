@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=397">
-<script src="firebase-config.js?v=397"></script>
-<script src="js/auth.js?v=397"></script>
+<link rel="stylesheet" href="css/style.css?v=398">
+<script src="firebase-config.js?v=398"></script>
+<script src="js/auth.js?v=398"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
-<script src="js/sync.js?v=397"></script>
+<script src="js/sync.js?v=398"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -449,6 +449,8 @@
       <div id="lk-capev" class="lk-industry" style="display:none"></div>
       <!-- v393: 최근 내부자 매매 요약 배지 — insider.json lazy, 없으면 숨김 -->
       <div id="lk-insider" class="lk-industry" style="display:none"></div>
+      <!-- v398: 최근 분기 컨센서스 vs 실제치 배지 — earnings_est.json lazy, 없으면 숨김 -->
+      <div id="lk-earn" class="lk-industry" style="display:none"></div>
       <div id="lookup-report" class="lk-report" style="display:none"></div>
       <div id="lookup-links" class="ext-links" style="display:none"></div>
     </div>
@@ -933,6 +935,27 @@
     </div>
   </section>
 
+  <!-- v398: 분기 실적 예측치(컨센서스)를 발표 전에 동결해 두고, 공시된 실제치와 비교 -->
+  <section id="tab-earn" class="panel">
+    <div class="criteria">🎯 <b>예측 vs 실적</b> — 실적 발표 <b>전</b>에 시장이 기대했던 컨센서스를 그날그날
+      <b>동결 저장</b>해 두고, DART에 실적이 공시되면 같은 자리에서 <b>얼마나 빗나갔는지</b> 보여줍니다.
+      컨센서스는 발표되면 확정치로 덮여 사라지기 때문에, 미리 저장하지 않으면 이 비교를 할 수 없습니다.</div>
+    <div class="home-topbar" style="margin:0 0 10px;align-items:center;flex-wrap:wrap">
+      <div class="chips" id="ea-q"></div>
+      <span style="flex:1"></span>
+      <button class="chip" id="ea-mine" title="보유(💼)·관심(⭐) 종목만">👤 내 종목만</button>
+      <label class="dsc-search">🔍 <input type="text" id="ea-search" placeholder="회사명 검색" autocomplete="off"></label>
+    </div>
+    <div id="ea-summary"></div>
+    <div class="cv-ranks" id="ea-ranks"></div>
+    <div id="ea-group"></div>
+    <h2 style="margin-top:14px">✅ 실적 공시 완료 <span class="sub-note" id="ea-done-n"></span></h2>
+    <div class="tablewrap card-flat"><table id="ea-done"></table></div>
+    <h2 style="margin-top:14px">⏳ 발표 대기 (컨센서스 보유) <span class="sub-note" id="ea-pend-n"></span></h2>
+    <div class="tablewrap card-flat"><table id="ea-pending"></table></div>
+    <p class="sub-note" id="ea-note" style="margin-top:10px"></p>
+  </section>
+
   <section id="tab-econcal" class="panel">
     <div class="criteria" id="ec-context"></div>
     <div class="home-topbar" style="align-items:center;gap:10px;flex-wrap:wrap">
@@ -1334,7 +1357,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=397"></script>
+<script src="js/app.js?v=398"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

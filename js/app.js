@@ -89,13 +89,13 @@ const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
   // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
   rotation:  [["rotation", "산업수익률"], ["secmet", "🏭 산업 지표"]],   // 상단 탭은 "산업", 소탭은 내용을 구체적으로
-  news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
+  news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["earn", "🎯 예측 vs 실적"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
   // v392~393: 공시 스캐너 아래에 자본 이벤트(환원/희석)·내부자 매매 — 셋 다 DART 공시가 원천
   disc:      [["disc", "공시 스캐너"], ["capev", "💰 자본 이벤트"], ["insider", "👔 내부자 매매"]],
 };
-const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings",
+const PILL_PARENT = { calendar: "news", econcal: "news", earn: "news", chart: "rank", portfolio: "holdings",
   secmet: "rotation", capev: "disc", insider: "disc" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
@@ -116,7 +116,7 @@ function injectSubtabs() {  // 부팅 시 1회 — 자식 섹션마다 동일한
 
 /* ---------- 탭 네비게이션 히스토리 (뒤로 가기) ---------- */
 const TAB_KO = { heatmap: "홈", macro: "매크로", internals: "증권", rotation: "산업", news: "뉴스·딜",
-  calendar: "실적발표", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", capev: "자본 이벤트", insider: "내부자 매매", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
+  calendar: "실적발표", earn: "예측 vs 실적", econcal: "경제지표", gurus: "투자 대가", today: "오늘의 신호", trends: "트렌드", crypto: "크립토", assets: "자산시장", watch: "관심종목", disc: "공시 스캐너", capev: "자본 이벤트", insider: "내부자 매매", lookup: "종목 조회", screener: "주식찾기", value: "내재가치",
   holdings: "보유 포트폴리오", portfolio: "포트폴리오 점검", memo: "종목 메모", devlog: "개발일지",
   secmet: "산업 지표",
   rank: "원칙", apply: "실전 검증", chart: "사례 차트",
@@ -203,6 +203,7 @@ function activateTab(tabId) {
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
   if (tabId === "calendar" && !calRendered) renderCalendar();
   if (tabId === "econcal" && !ecRendered) renderEconCal();
+  if (tabId === "earn" && !earnRendered) initEarn();
   if (tabId === "trends" && !trendsRendered) renderTrends();
   if (tabId === "crypto" && !cryptoRendered) renderCrypto();
   if (tabId === "assets" && !assetsRendered) renderAssets();
@@ -1342,6 +1343,7 @@ function loadLookup(key) {
     renderLookupIndustry(st);   // 분류된 산업·밸류체인 배지(클릭 시 주식찾기로 링크)
     lkCapevBadge(st);           // 최근 90일 자본 이벤트(자사주·유증·CB) 배지 — lazy, 없으면 숨김
     lkInsiderBadge(st);         // 최근 90일 내부자 매매 요약 배지 — lazy, 없으면 숨김
+    lkEarnBadge(st);            // 최근 분기 컨센서스 vs 실제치 배지(v398) — lazy, 없으면 숨김
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
     finhubUser = false; finhubSel = "snap";   // 종목이 바뀌면 기본 탭(Snapshot) 우선으로 복귀
@@ -4115,6 +4117,7 @@ const DATA_SCHEDULE = [
     ["내부자 매매 (insider.json)", "매일 07:40", "DART 공시 트리거 증분 — v393", { u: "data/insider.json", exp: 30 }],
     ["자본 이벤트: 자사주·유증·CB (capital_events.json)", "매일 07:40", "DART 주요사항 — v392", { u: "data/capital_events.json", exp: 30 }],
     ["공매도 잔고 (short_interest.json)", "매일 07:40", "KRX 계정(.env KRX_ID/PW) 등록 시에만 — v395", null],
+    ["실적 예측치 동결 · 서프라이즈 (earnings_est.json)", "매일 07:40", "컨센서스는 발표되면 덮이므로 매일 동결 — v398", { u: "data/earnings_est.json", exp: 30 }],
     ["내재가치 · 재무 스냅샷 · 투자 대가 (valuation/fundamentals/gurus)", "주 1회", "heavy 배치 · 상태=내재가치 기준", { u: "data/valuation.json", exp: 24 * 9 }],
   ]],
   ["📐 수동 · 분기", [
@@ -4158,6 +4161,19 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v398", "2026-08-13", "🎯 실적 예측치 동결 + 예측 vs 실적 비교",
+   "분기 실적 **컨센서스(예측치)를 발표 전에 동결 저장**하고, 실적이 공시되면 같은 자리에서 비교하는 "
+   + "메뉴를 새로 만들었습니다(뉴스·일정 → 🎯 예측 vs 실적).\n\n"
+   + "**왜 별도 저장이 필요한가**: 컨센서스는 실적이 나오면 확정치로 덮여 사라집니다. 즉 오늘 저장하지 "
+   + "않으면 '발표 전 시장이 무엇을 기대했는지'를 영구히 잃습니다. 그래서 `earnings_est.py`가 매일 "
+   + "예측치를 동결(한 번 저장하면 절대 덮지 않음)하고, 최신 컨센서스는 따로 추적해 **컨센서스 상향/하향**"
+   + "까지 보여줍니다.\n\n"
+   + "**첫 저장 결과(26Q2)**: 예측치 **561종목** 동결, 실적 공시 **47종목** 반영(DART 반기보고서 조기 제출분). "
+   + "서프라이즈 = (실제 − 발표 직전 컨센서스) ÷ |컨센서스|, 영업이익 ±5%로 상회/하회를 판정합니다.\n\n"
+   + "**화면**: 요약(동결·공시·상회/부합/하회·중앙 서프라이즈) · 상회/하회 랭킹 · 산업군별 서프라이즈 중앙값 · "
+   + "실적 공시 완료 표 · 발표 대기 표(컨센서스 규모 순) · 내 종목 필터. 종목조회 헤더에도 배지가 붙습니다.\n\n"
+   + "⚠컨센서스가 없는 종목(애널리스트 미커버)은 서프라이즈 대신 **전년동기 대비**를 표시합니다. 반기보고서 "
+   + "마감(8/14)이 지나면 비교 표본이 수백 종목으로 늘어납니다."],
   ["v397", "2026-08-13", "📊 산업 지표 30개 산업군 재편 + 분기 펀더멘털",
    "산업 지표 탭을 새 30개 분류에 맞춰 전면 갱신했습니다.\n\n"
    + "**지표 큐레이션 확장**: 구 12군 큐레이션을 폐기하고 30개 산업군마다 전용 지표를 배정했습니다. "
@@ -8417,6 +8433,178 @@ function lkCapevBadge(st) {
         <span class="sub-note">${(e.d || "").slice(5)}</span></button>`;
     }).join("");
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("capev"));
+  });
+}
+
+/* ---------- 🎯 예측 vs 실적 (v398) ----------
+   왜 별도 파일인가: 컨센서스(company.json fin_q의 est 행)는 **실적이 나오면 확정치로 덮인다**.
+   earnings_est.py가 매일 그 값을 동결(append-only)해 두므로, 여기서는 그 아카이브만 읽는다. */
+let EARN = null, earnLoading = null, earnRendered = false;
+let eaQ = null, eaMine = false, eaSearch = "";
+function loadEarn() {
+  if (EARN) return Promise.resolve(EARN);
+  if (earnLoading) return earnLoading;
+  earnLoading = fetch("data/earnings_est.json" + _cb).then((r) => (r.ok ? r.json() : null))
+    .then((j) => (EARN = j)).catch(() => null);
+  return earnLoading;
+}
+
+function initEarn() {
+  earnRendered = true;
+  loadEarn().then(() => renderEarn());
+  const s = $("#ea-search");
+  if (s) s.oninput = () => { eaSearch = s.value.trim().toLowerCase(); renderEarn(); };
+  const m = $("#ea-mine");
+  if (m) m.onclick = () => { eaMine = !eaMine; m.classList.toggle("active", eaMine); renderEarn(); };
+}
+
+const eaPct = (v, dgt = 1) => v == null ? "-"
+  : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(dgt)}%</span>`;
+
+function renderEarn() {
+  const host = $("#ea-done");
+  if (!host) return;
+  if (!EARN?.summary) {
+    host.innerHTML = `<tbody><tr><td class="sub-note">데이터 없음 — python analysis\\earnings_est.py 실행 필요</td></tr></tbody>`;
+    return;
+  }
+  /* 분기 칩 — 예측치가 있는 분기만.
+     ⚠12월 결산이 아닌 회사는 DART 분기 라벨이 회계연도 기준이라 '26Q3 실적 7종목'처럼 미래 분기에
+       실적이 찍힌다(2026-08-13 실측). 예측치가 하나도 없는 분기는 아직 추적 대상이 아니므로 숨긴다. */
+  const qs = (EARN.quarters || []).filter((q) => (EARN.summary[q]?.n_est || 0) > 0);
+  if (!eaQ || !qs.includes(eaQ)) {
+    eaQ = qs.slice().sort((a, b) => (EARN.summary[b].n_est || 0) - (EARN.summary[a].n_est || 0))[0] || qs[0];
+  }
+  $("#ea-q").innerHTML = qs.map((q) => {
+    const s = EARN.summary[q];
+    return `<button class="chip${q === eaQ ? " active" : ""}" data-q="${q}">${q}
+      <span class="sub-note">예측 ${s.n_est} · 실적 ${s.n_act}</span></button>`;
+  }).join("");
+  $("#ea-q").querySelectorAll(".chip").forEach((b) => b.onclick = () => { eaQ = b.dataset.q; renderEarn(); });
+
+  const s = EARN.summary[eaQ] || {};
+  const rk = EARN.rank?.[eaQ] || {};
+  const th = EARN.beat_th ?? 5;
+  // ── 요약 카드
+  const prog = s.n_est ? Math.round(s.n_act / s.n_est * 100) : null;
+  $("#ea-summary").innerHTML = `<div class="sm-fstrip" style="margin:0 0 10px">
+    <div class="sm-fcell"><span class="sub-note">동결한 예측치</span><b>${s.n_est || 0}종목</b></div>
+    <div class="sm-fcell"><span class="sub-note">실적 공시</span><b>${s.n_act || 0}종목</b>${prog != null ? ` <span class="sub-note">(컨센서스 보유분의 ${prog}%)</span>` : ""}</div>
+    <div class="sm-fcell"><span class="sub-note">비교 가능</span><b>${s.n_cmp || 0}종목</b></div>
+    <div class="sm-fcell"><span class="sub-note">🟢 상회</span><b class="pos">${s.beat || 0}</b></div>
+    <div class="sm-fcell"><span class="sub-note">➖ 부합</span><b>${s.inline || 0}</b></div>
+    <div class="sm-fcell"><span class="sub-note">🔴 하회</span><b class="neg">${s.miss || 0}</b></div>
+    ${s.med_op != null ? `<div class="sm-fcell"><span class="sub-note">영업이익 서프라이즈(중앙)</span><b>${eaPct(s.med_op)}</b></div>` : ""}
+    ${s.med_op_yoy != null ? `<div class="sm-fcell"><span class="sub-note">영업이익 전년동기(중앙)</span><b>${eaPct(s.med_op_yoy)}</b></div>` : ""}
+  </div>`
+    + (s.n_cmp != null && s.n_cmp < 10
+      ? `<p class="mini-note">⚠아직 비교 표본이 ${s.n_cmp}종목뿐입니다 — 반기·분기보고서 제출 마감(2월·5월·8월·11월 중순)
+         직후에 수백 종목으로 늘어납니다. 그 전까지는 아래 <b>전년동기 대비</b>를 보세요.</p>` : "");
+
+  // ── 서프라이즈 랭킹 2열
+  const rankCard = (title, list, cls, empty) => `<div class="card-flat cv-rank"><b>${title}</b>` +
+    (list?.length ? list.map((r) => `<div class="cv-rk" data-goto="${r.k}">
+        <span class="cv-rk-n">${diEsc(r.n)}</span>
+        <span class="sub-note">${r.grp && IND_BY_KEY[r.grp] ? indLabel(r.grp) : ""}</span>
+        <b class="${cls}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b>
+      </div>`).join("") : `<p class="mini-note">${empty}</p>`) + `</div>`;
+  $("#ea-ranks").innerHTML =
+    rankCard(`🟢 컨센서스 상회 — 영업이익 +${th}% 초과`, rk.beat, "kup", "아직 없습니다.")
+    + rankCard(`🔴 컨센서스 하회 — 영업이익 −${th}% 초과`, rk.miss, "kdn", "아직 없습니다.");
+  $("#ea-ranks").querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+
+  // ── 산업군별 중앙 서프라이즈(2종목 이상인 산업군만)
+  const bg = Object.entries(EARN.by_group?.[eaQ] || {}).sort((a, b) => (b[1].med_op ?? -999) - (a[1].med_op ?? -999));
+  $("#ea-group").innerHTML = bg.length ? `<div class="card-flat" style="margin-top:10px">
+    <b>🏭 산업군별 영업이익 서프라이즈 중앙값</b> <span class="sub-note">(2종목 이상 발표된 산업군만)</span>
+    <div class="chips" style="margin-top:8px">${bg.map(([gk, v]) =>
+      `<button class="chip" data-gk="${gk}">${IND_BY_KEY[gk] ? indLabel(gk) : gk}
+        <b class="${(v.med_op ?? 0) >= 0 ? "pos" : "neg"}">${v.med_op >= 0 ? "+" : ""}${v.med_op}%</b>
+        <span class="sub-note">${v.n}종목</span></button>`).join("")}</div></div>` : "";
+  $("#ea-group").querySelectorAll("[data-gk]").forEach((b) => b.onclick = () => gotoSecmet(b.dataset.gk));
+
+  // ── 실적 공시 완료 표
+  const mine = myKrCodes();
+  const filt = (r) => (!eaMine || mine[r.k.slice(3)]) && (!eaSearch || (r.n || "").toLowerCase().includes(eaSearch));
+  const done = (rk.done || []).filter(filt);
+  const eok = (v) => v == null ? "-" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString());
+  const nameCell = (r) => `<td class="hld-name"><img class="mv-logo" src="${logoUrl("kr", r.k.slice(3))}" onerror="this.style.visibility='hidden'">
+    <b class="dsc-go" data-goto="${r.k}">${diEsc(r.n)}</b>${mine[r.k.slice(3)] ? ` <span title="내 종목">${mine[r.k.slice(3)]}</span>` : ""}
+    ${r.grp && IND_BY_KEY[r.grp] ? ` <span class="sub-note">${indLabel(r.grp)}</span>` : ""}</td>`;
+  /* ⚠적자 기업의 % 는 부호를 그대로 읽으면 오해한다 — 영업이익이 마이너스면 +%는 '적자 축소',
+     −%는 '적자 확대'다(루닛 26Q2: 적자 65억 예상 → 154억, 서프라이즈 −136.5%). 라벨로 명시한다. */
+  const lossNote = (op, v) => (op != null && op < 0 && v != null) ? `<span class="sub-note">${v >= 0 ? "적자 축소" : "적자 확대"}</span>` : "";
+  $("#ea-done-n").textContent = `${done.length}종목 · ${eaQ} · 단위 억원`;
+  host.innerHTML = `<thead><tr><th>회사</th><th class="num">매출</th><th class="num">영업이익</th>
+      <th class="num">매출 전년동기</th><th class="num">영업이익 전년동기</th>
+      <th class="num">영업이익 서프라이즈</th><th>출처</th></tr></thead><tbody>`
+    + (done.length ? done.map((r) => `<tr>
+        ${nameCell(r)}
+        <td class="num">${eok(r.rev)}</td><td class="num">${eok(r.op)}</td>
+        <td class="num">${eaPct(r.rev_yoy)}</td>
+        <td class="num">${eaPct(r.op_yoy)} ${lossNote(r.op, r.op_yoy)}</td>
+        <td class="num">${r.op_sup == null ? `<span class="sub-note">컨센서스 없음</span>`
+          : `<b class="${r.op_sup >= th ? "kup" : r.op_sup <= -th ? "kdn" : ""}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b> ${lossNote(r.op, r.op_sup)}`}</td>
+        <td class="sub-note">${r.src === "dart" ? "DART" : "네이버"}</td>
+      </tr>`).join("") : `<tr><td colspan="7" class="sub-note">조건에 맞는 종목이 없습니다.</td></tr>`) + `</tbody>`;
+
+  // ── 발표 대기 표(컨센서스)
+  const pend = (rk.pending || []).filter(filt);
+  $("#ea-pend-n").textContent = `${pend.length}종목 · 컨센서스 규모 순`;
+  $("#ea-pending").innerHTML = `<thead><tr><th>회사</th><th class="num">예상 매출</th><th class="num">예상 영업이익</th>
+      <th class="num">컨센서스 변동</th></tr></thead><tbody>`
+    + (pend.length ? pend.map((r) => `<tr>
+        ${nameCell(r)}
+        <td class="num">${eok(r.rev)}</td><td class="num">${eok(r.op)}</td>
+        <td class="num">${r.drift == null ? "-" : eaPct(r.drift)}</td>
+      </tr>`).join("") : `<tr><td colspan="4" class="sub-note">조건에 맞는 종목이 없습니다.</td></tr>`) + `</tbody>`;
+
+  document.querySelectorAll("#ea-done .dsc-go, #ea-pending .dsc-go")
+    .forEach((el) => el.onclick = () => gotoLookup(el.dataset.goto));
+  $("#ea-note").innerHTML = `예측치=네이버 금융 컨센서스(증권사 추정 평균)를 <b>매일 동결 저장</b> · 실제치=DART 분기·반기보고서
+    (없으면 네이버 확정치) · 갱신 ${EARN.generated}.
+    서프라이즈 = (실제 − 발표 직전 컨센서스) ÷ |컨센서스|, 영업이익 ±${th}% 기준으로 상회/하회 판정.
+    <b>컨센서스 변동</b>은 최초 동결값 대비 최근 컨센서스의 증감(상향/하향)입니다.
+    ⚠적자↔흑자 전환은 %가 무의미해 판정에서 제외하고, 컨센서스 규모가 10억원 미만인 종목도 제외합니다.
+    ⚠컨센서스가 없는 종목(애널리스트 미커버)은 서프라이즈를 계산할 수 없어 <b>전년동기 대비</b>만 표시합니다.`;
+}
+
+/* 종목조회 배지(v398): 이 종목의 최근 분기 예측 vs 실적 */
+function lkEarnBadge(st) {
+  const host = $("#lk-earn");
+  if (!host) return;
+  host.style.display = "none";
+  if (st.market !== "kr") return;
+  loadEarn().then(() => {
+    if (LOOKUP_ST !== st || !EARN?.stocks) return;
+    const rec = EARN.stocks["kr_" + st.ticker];
+    if (!rec?.q) return;
+    // 실적이 나온 분기 우선, 없으면 예측치가 있는 분기
+    const qs = Object.keys(rec.q).sort().reverse();
+    const q = qs.find((x) => rec.q[x].act) || qs.find((x) => rec.q[x].est);
+    if (!q) return;
+    const c = rec.q[q], th = EARN.beat_th ?? 5;
+    const eok = (v) => v == null ? "-" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+    const base = c.est_last || c.est;
+    const bits = [];
+    if (c.act) {
+      const sup = c.sup?.op;
+      const cls = sup == null ? "" : sup >= th ? "cv-return" : sup <= -th ? "cv-dilute" : "";
+      const loss = (c.act.op != null && c.act.op < 0);
+      bits.push(`<button class="lk-ind-badge ${cls}">${q} 실적 영업이익 <b>${eok(c.act.op)}</b>
+        ${sup != null ? `· 컨센서스 ${sup >= 0 ? "상회 +" : "하회 "}${sup}%${loss ? ` (적자 ${sup >= 0 ? "축소" : "확대"})` : ""}`
+          : c.turn ? "· 흑자/적자 전환" : "· 컨센서스 없음"}</button>`);
+      if (c.yoy?.op != null)
+        bits.push(`<button class="lk-ind-badge">전년동기 영업이익 <b class="${c.yoy.op >= 0 ? "pos" : "neg"}">${c.yoy.op >= 0 ? "+" : ""}${c.yoy.op}%</b>${loss ? ` <span class="sub-note">적자 ${c.yoy.op >= 0 ? "축소" : "확대"}</span>` : ""}</button>`);
+    } else if (base) {
+      bits.push(`<button class="lk-ind-badge">${q} 컨센서스 영업이익 <b>${eok(base.op)}</b> <span class="sub-note">발표 대기</span></button>`);
+      if (c.est_drift != null)
+        bits.push(`<button class="lk-ind-badge">컨센서스 ${c.est_drift >= 0 ? "상향 +" : "하향 "}${c.est_drift}%</button>`);
+    }
+    if (!bits.length) return;
+    host.style.display = "";
+    host.innerHTML = `<span class="lk-ind-label">🎯 예측 vs 실적</span>` + bits.join("");
+    host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("earn"));
   });
 }
 
