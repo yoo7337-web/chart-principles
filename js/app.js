@@ -1273,6 +1273,7 @@ function loadLookup(key) {
       return;
     }
     LOOKUP_ST = st;
+    lkSubReset();               // v401: 이전 종목의 배지 요약 칩 제거 + 접기
     ["lookup-info", "lookup-chart", "lookup-legend", "lookup-stats-title", "lookup-stats-wrap",
      "lookup-filter", "lookup-profile", "draw-tools"]
       .forEach((id) => { document.getElementById(id).style.display = ""; });
@@ -5618,6 +5619,50 @@ function loadReportsIdx() {
 }
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
+/* ---------- 배지 한 줄 요약(v401) ----------
+   .lk-subhead가 배지 5줄(~190px)로 본문을 밀어내던 것을 요약 스트립 한 줄 + 펼침으로 압축.
+   🔑비동기 경쟁 없음: 각 배지 렌더러가 자기 렌더 끝에 lkSubSum(고유 k)을 불러 **자기 칩만** upsert한다.
+   요약이 없어도 상세 배지(#lk-sub-full 하위)가 하나라도 보이면 ▾ 토글은 노출된다. */
+const LK_SUM_ORDER = ["ind", "capev", "insider", "earn", "techpat", "gap", "report"];
+function lkSubSum(k, html) {
+  const host = document.getElementById("lk-sub-sum");
+  if (!host) return;
+  if (!host.querySelector(".lk-sum-tg")) {
+    const tg = document.createElement("button");
+    tg.className = "lk-sum-tg";
+    tg.textContent = "▾ 자세히";
+    tg.onclick = () => lkSubToggle();
+    host.appendChild(tg);
+  }
+  host.querySelector(`[data-k="${k}"]`)?.remove();
+  if (html) {
+    const b = document.createElement("button");
+    b.className = "lk-sum-chip";
+    b.dataset.k = k;
+    b.innerHTML = html;
+    b.onclick = () => lkSubToggle();
+    const after = [...host.querySelectorAll("[data-k]")]
+      .find((c) => LK_SUM_ORDER.indexOf(c.dataset.k) > LK_SUM_ORDER.indexOf(k));
+    host.insertBefore(b, after || host.querySelector(".lk-sum-tg"));
+  }
+  const chips = host.querySelectorAll("[data-k]").length;
+  const anyFull = [...document.querySelectorAll("#lk-sub-full > div")].some((d) => d.style.display !== "none");
+  host.style.display = (chips || anyFull) ? "" : "none";
+}
+function lkSubToggle(force) {
+  const sub = document.querySelector(".lk-subhead");
+  if (!sub) return;
+  const on = force != null ? force : !sub.classList.contains("expanded");
+  sub.classList.toggle("expanded", on);
+  const tg = sub.querySelector(".lk-sum-tg");
+  if (tg) tg.textContent = on ? "▴ 접기" : "▾ 자세히";
+}
+function lkSubReset() {
+  const host = document.getElementById("lk-sub-sum");
+  if (host) { host.innerHTML = ""; host.style.display = "none"; }
+  lkSubToggle(false);
+}
+
 function renderLookupReportBtn(st) {
   const host = $("#lookup-report");
   if (!host) return;
@@ -5628,10 +5673,12 @@ function renderLookupReportBtn(st) {
       <div class="lk-btnslot" id="rep-slot"></div>
       <div class="lk-btnslot" id="ov-deep"></div>
     </div>`;
+  lkSubSum("report", null);
   loadReportsIdx().then((idx) => {
     const key = `${st.market}_${st.ticker}`;
     const meta = idx.reports?.[key];
     if (!meta || LOOKUP_ST !== st) return;   // 종목 전환 경쟁 방지
+    lkSubSum("report", `📖 보고서 ${meta.date?.slice(2) || ""}`);
     const stale = meta.next_due && kstDay() > meta.next_due;
     const slot = document.getElementById("rep-slot");
     if (!slot) return;
@@ -5716,7 +5763,7 @@ function renderLookupIndustry(st) {
   if (st.market === "kr") {
     const sector = st.profile?.sector || tileSec || null;
     const links = stockChainLinks("kr", st.ticker, sector);
-    if (!links.length) { host.style.display = "none"; return; }
+    if (!links.length) { host.style.display = "none"; lkSubSum("ind", null); return; }
     host.style.display = "";
     // v366: 배지=주식찾기(같은 산업 종목 찾기) + 별도 버튼=산업 지표(그 산업의 수출·전방지표·펀더멘털)
     const grp = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.grp;
@@ -5727,14 +5774,17 @@ function renderLookupIndustry(st) {
       if (b.dataset.met) gotoSecmet(b.dataset.met);
       else scrOpenFromChain(b.dataset.ind, b.dataset.stage);
     });
+    const l0 = links[0];
+    lkSubSum("ind", `${l0.indIcon} ${l0.indName} › ${l0.stage}`);
   } else {
     let sector = tileSec || US_SECTOR_KO[st.profile?.sector] || st.profile?.sector || null;  // 한글 업종 우선
     const g = stockGroupLink(sector);
-    if (!g) { host.style.display = "none"; return; }
+    if (!g) { host.style.display = "none"; lkSubSum("ind", null); return; }
     host.style.display = "";
     // ⚠산업 지표(sector_metrics)는 국내 전용이라 미국 종목엔 그 버튼을 달지 않는다
     host.innerHTML = `<span class="lk-ind-label">🏭 업종</span><button class="lk-ind-badge" data-us="${g.key}">${g.icon} ${g.name}${sector ? ` <span class="sub-note">(${sector})</span>` : ""}</button>`;
     host.querySelector(".lk-ind-badge").onclick = () => scrOpenFromGroupUS(g.key, sector);
+    lkSubSum("ind", `${g.icon} ${g.name}`);
   }
 }
 let scrChainIndustry = null;    // 선택된 산업 key
@@ -8418,6 +8468,7 @@ function lkCapevBadge(st) {
   const host = $("#lk-capev");
   if (!host) return;
   host.style.display = "none";
+  lkSubSum("capev", null);
   if (st.market !== "kr") return;
   loadCapev().then(() => {
     if (LOOKUP_ST !== st || !CAPEV?.events) return;
@@ -8425,6 +8476,8 @@ function lkCapevBadge(st) {
     const ev = CAPEV.events.filter((e) => e.code === st.ticker && (e.d || "") >= cut && !e.amend).slice(0, 4);
     if (!ev.length) return;
     host.style.display = "";
+    const retN = ev.filter((e) => e.dir === "return").length;
+    lkSubSum("capev", `💰 ${retN && retN === ev.length ? "환원" : retN ? "환원·희석" : "희석"} ${ev.length}건`);
     host.innerHTML = `<span class="lk-ind-label">💰 자본 이벤트</span>` + ev.map((e) => {
       const [ico, nm] = CV_TYPE[e.type] || ["", e.type];
       return `<button class="lk-ind-badge cv-${e.dir}">${ico} ${nm} ${e.amount ? fmtEok(e.amount) : ""}
@@ -8573,6 +8626,7 @@ function lkEarnBadge(st) {
   const host = $("#lk-earn");
   if (!host) return;
   host.style.display = "none";
+  lkSubSum("earn", null);
   if (st.market !== "kr") return;
   loadEarn().then(() => {
     if (LOOKUP_ST !== st || !EARN?.stocks) return;
@@ -8604,6 +8658,10 @@ function lkEarnBadge(st) {
     host.style.display = "";
     host.innerHTML = `<span class="lk-ind-label">🎯 예측 vs 실적</span>` + bits.join("");
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("earn"));
+    const sup = c.act ? c.sup?.op : null;
+    lkSubSum("earn", c.act
+      ? `🎯 ${q} ${sup == null ? "실적 발표" : sup >= 0 ? `상회 +${sup}%` : `하회 ${sup}%`}`
+      : `🎯 ${q} 발표 대기`);
   });
 }
 
@@ -8690,6 +8748,7 @@ function lkInsiderBadge(st) {
   const host = $("#lk-insider");
   if (!host) return;
   host.style.display = "none";
+  lkSubSum("insider", null);
   if (st.market !== "kr") return;
   loadInsider().then(() => {
     if (LOOKUP_ST !== st) return;
@@ -8700,6 +8759,7 @@ function lkInsiderBadge(st) {
     if (!r90.length) return;
     host.style.display = "";
     const net = e.net90;
+    lkSubSum("insider", `👔 내부자 ${net == null ? r90.length + "건" : `순${net > 0 ? "매수" : "매도"} ${fmtEok(Math.abs(net))}`}`);
     const buyN = r90.filter((r) => r[3] > 0).length, sellN = r90.length - buyN;
     host.innerHTML = `<span class="lk-ind-label">👔 내부자 매매</span>
       <button class="lk-ind-badge ${net > 0 ? "cv-return" : net < 0 ? "cv-dilute" : ""}">
