@@ -5703,10 +5703,10 @@ function lkTechpatBadge(st) {
     else if (GAPD?.overvalued?.includes(key)) gapSide = "gap_over";
     if (!pats.length && !gapSide) return;
     host.style.display = "";
-    host.innerHTML = `<span class="lk-ind-label">📊 차트·괴리 신호</span>`
+    host.innerHTML = `<span class="lk-ind-label">📊 차트·괴리 신호</span><span class="lk-ind-body">`
       + pats.map((p) => `<button class="lk-ind-badge" data-tech="${p.id}" title="10년 이벤트스터디로 검증된 패턴 — 클릭 시 같은 패턴 종목 찾기">${TECH_ICON[p.id] || "📊"} ${p.name}</button>`).join("")
       + (gapSide ? `<button class="lk-ind-badge ${gapSide === "gap_under" ? "cv-return" : "cv-dilute"}" data-tech="${gapSide}"
-           title="${GAP_DEF[gapSide].cond}">${GAP_DEF[gapSide].icon} ${GAP_DEF[gapSide].name} <span class="sub-note">⚠부분 검증</span></button>` : "");
+           title="${GAP_DEF[gapSide].cond}">${GAP_DEF[gapSide].icon} ${GAP_DEF[gapSide].name} <span class="sub-note">⚠부분 검증</span></button>` : "") + `</span>`;
     host.querySelectorAll("[data-tech]").forEach((b) => b.onclick = () => gotoScreenerTech(b.dataset.tech));
     if (pats.length) lkSubSum("techpat", `${TECH_ICON[pats[0].id] || "📊"} ${pats[0].name}${pats.length > 1 ? ` 외 ${pats.length - 1}` : ""}`);
     if (gapSide) lkSubSum("gap", `${GAP_DEF[gapSide].icon} ${GAP_DEF[gapSide].name}`);
@@ -5719,10 +5719,11 @@ function renderLookupReportBtn(st) {
   /* v323: 보고서 버튼과 사업 심층 버튼을 **한 줄에 같은 크기로** 둔다(사용자 요청).
      보고서가 없는 종목도 사업 심층은 있을 수 있으므로 줄은 항상 만들어 두고, 각 슬롯을 따로 채운다. */
   host.style.display = "";
-  host.innerHTML = `<div class="lk-btnrow">
+  host.innerHTML = `<span class="lk-ind-label">📖 보고서·심층</span>
+    <span class="lk-ind-body"><div class="lk-btnrow">
       <div class="lk-btnslot" id="rep-slot"></div>
       <div class="lk-btnslot" id="ov-deep"></div>
-    </div>`;
+    </div></span>`;
   lkSubSum("report", null);
   loadReportsIdx().then((idx) => {
     const key = `${st.market}_${st.ticker}`;
@@ -5817,9 +5818,9 @@ function renderLookupIndustry(st) {
     host.style.display = "";
     // v366: 배지=주식찾기(같은 산업 종목 찾기) + 별도 버튼=산업 지표(그 산업의 수출·전방지표·펀더멘털)
     const grp = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.grp;
-    host.innerHTML = `<span class="lk-ind-label">🏭 산업·밸류체인</span>` + links.map((l) =>
+    host.innerHTML = `<span class="lk-ind-label">🏭 산업·밸류체인</span><span class="lk-ind-body">` + links.map((l) =>
       `<button class="lk-ind-badge" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.indIcon} ${l.indName}<span class="lk-ind-arrow">›</span>${l.stageIcon} ${l.stage}</button>`).join("")
-      + (secmetOf(grp) ? `<button class="lk-ind-badge met" data-met="${secmetOf(grp)}" title="이 산업의 수출·전방지표·합산 펀더멘털 보기">📊 산업 지표 →</button>` : "");
+      + (secmetOf(grp) ? `<button class="lk-ind-badge met" data-met="${secmetOf(grp)}" title="이 산업의 수출·전방지표·합산 펀더멘털 보기">📊 산업 지표 →</button>` : "") + `</span>`;
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => {
       if (b.dataset.met) gotoSecmet(b.dataset.met);
       else scrOpenFromChain(b.dataset.ind, b.dataset.stage);
@@ -5832,7 +5833,7 @@ function renderLookupIndustry(st) {
     if (!g) { host.style.display = "none"; lkSubSum("ind", null); return; }
     host.style.display = "";
     // ⚠산업 지표(sector_metrics)는 국내 전용이라 미국 종목엔 그 버튼을 달지 않는다
-    host.innerHTML = `<span class="lk-ind-label">🏭 업종</span><button class="lk-ind-badge" data-us="${g.key}">${g.icon} ${g.name}${sector ? ` <span class="sub-note">(${sector})</span>` : ""}</button>`;
+    host.innerHTML = `<span class="lk-ind-label">🏭 업종</span><span class="lk-ind-body"><button class="lk-ind-badge" data-us="${g.key}">${g.icon} ${g.name}${sector ? ` <span class="sub-note">(${sector})</span>` : ""}</button></span>`;
     host.querySelector(".lk-ind-badge").onclick = () => scrOpenFromGroupUS(g.key, sector);
     lkSubSum("ind", `${g.icon} ${g.name}`);
   }
@@ -8528,12 +8529,12 @@ function lkCapevBadge(st) {
     host.style.display = "";
     const retN = ev.filter((e) => e.dir === "return").length;
     lkSubSum("capev", `💰 ${retN && retN === ev.length ? "환원" : retN ? "환원·희석" : "희석"} ${ev.length}건`);
-    host.innerHTML = `<span class="lk-ind-label">💰 자본 이벤트</span>` + ev.map((e) => {
+    host.innerHTML = `<span class="lk-ind-label">💰 자본 이벤트</span><span class="lk-ind-body">` + ev.map((e) => {
       const [ico, nm] = CV_TYPE[e.type] || ["", e.type];
       return `<button class="lk-ind-badge cv-${e.dir}">${ico} ${nm} ${e.amount ? fmtEok(e.amount) : ""}
         ${e.type === "rights" && e.dilution != null ? `· 희석 ${e.dilution}%` : ""}
         <span class="sub-note">${(e.d || "").slice(5)}</span></button>`;
-    }).join("");
+    }).join("") + `</span>`;
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("capev"));
   });
 }
@@ -8706,7 +8707,7 @@ function lkEarnBadge(st) {
     }
     if (!bits.length) return;
     host.style.display = "";
-    host.innerHTML = `<span class="lk-ind-label">🎯 예측 vs 실적</span>` + bits.join("");
+    host.innerHTML = `<span class="lk-ind-label">🎯 예측 vs 실적</span><span class="lk-ind-body">` + bits.join("") + `</span>`;
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => gotoTabFull("earn"));
     const sup = c.act ? c.sup?.op : null;
     lkSubSum("earn", c.act
@@ -8812,9 +8813,9 @@ function lkInsiderBadge(st) {
     lkSubSum("insider", `👔 내부자 ${net == null ? r90.length + "건" : `순${net > 0 ? "매수" : "매도"} ${fmtEok(Math.abs(net))}`}`);
     const buyN = r90.filter((r) => r[3] > 0).length, sellN = r90.length - buyN;
     host.innerHTML = `<span class="lk-ind-label">👔 내부자 매매</span>
-      <button class="lk-ind-badge ${net > 0 ? "cv-return" : net < 0 ? "cv-dilute" : ""}">
+      <span class="lk-ind-body"><button class="lk-ind-badge ${net > 0 ? "cv-return" : net < 0 ? "cv-dilute" : ""}">
         90일 ${r90.length}건 (취득 ${buyN} · 처분 ${sellN})
-        ${net != null ? `· 순${net > 0 ? "매수" : "매도"} <b>${fmtEok(Math.abs(net))}</b>` : ""}</button>`;
+        ${net != null ? `· 순${net > 0 ? "매수" : "매도"} <b>${fmtEok(Math.abs(net))}</b>` : ""}</button></span>`;
     host.querySelector(".lk-ind-badge").onclick = () => gotoTabFull("insider");
   });
 }
@@ -11400,8 +11401,8 @@ function renderLookupLinks(st) {
     ["구글 뉴스", `https://news.google.com/search?q=${encodeURIComponent(st.ticker + " stock")}&hl=ko`],
     ["TradingView", `https://kr.tradingview.com/chart/?symbol=${st.ticker}`],
   ];
-  host.innerHTML = `<span class="sub-note">심층 정보:</span> ` +
-    links.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener" class="ext-link">${t} ↗</a>`).join("");
+  host.innerHTML = `<span class="lk-ind-label">🔗 심층 정보</span><span class="lk-ind-body">` +
+    links.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener" class="ext-link">${t} ↗</a>`).join("") + `</span>`;
 }
 
 /* 🔄 순환성(cyclical) — cyclical.json lazy 로드(v370). 프로파일 배지 + 차트 과거 경로 오버레이가 쓴다. */

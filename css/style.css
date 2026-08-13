@@ -49,17 +49,23 @@
 .lk-sum-tg { font-size: var(--fs-note); color: var(--muted); background: none; border: none;
   cursor: pointer; padding: 2px 6px; }
 .lk-sum-tg:hover { color: var(--accent); }
-/* 상세 배지 묶음 — 기본 접힘. 펼치면 auto-fit 그리드 + 배지 소형화(펼쳐도 60~80px) */
+/* 상세 배지 묶음 — 기본 접힘. 펼치면 **카테고리별 한 행**(라벨 고정폭 + 배지 목록)의 정돈된 패널(v405).
+   ⚠auto-fit 그리드 자동 배치는 카테고리가 3열에 흩어져 읽기 어려웠다(사용자 제보). */
 #lk-sub-full { display: none; }
-.lk-subhead.expanded #lk-sub-full { display: grid; margin-top: 6px;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 2px 20px; align-items: start; }
-.lk-subhead.expanded #lk-sub-full > div { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+.lk-subhead.expanded #lk-sub-full { display: flex; flex-direction: column; gap: 5px; margin-top: 6px;
+  padding: 9px 12px; background: rgba(255,255,255,.02); border: 1px solid var(--line); border-radius: 10px; }
+.lk-subhead.expanded #lk-sub-full > div { display: flex; align-items: baseline; gap: 10px; }
 .lk-subhead.expanded #lk-sub-full > div[style*="display: none"],
 .lk-subhead.expanded #lk-sub-full > div[style*="display:none"] { display: none; }
-#lk-sub-full .lk-ind-label { flex: 0 0 auto; font-size: var(--fs-note); min-width: 92px; }
+#lk-sub-full .lk-ind-label { flex: 0 0 118px; font-size: var(--fs-note); color: var(--muted); }
+#lk-sub-full .lk-ind-body { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px;
+  flex: 1; min-width: 0; }
 #lk-sub-full .lk-ind-badge { font-size: var(--fs-sub); padding: 2px 9px; }
 #lk-sub-full .ext-link { font-size: var(--fs-sub); padding: 2px 10px; }
-@media (max-width: 900px) { .lk-subhead.expanded #lk-sub-full { grid-template-columns: 1fr; } }
+/* 보고서·심층 행 — 버튼 2슬롯이 배지들과 같은 줄 높이로 앉게 */
+#lk-sub-full .lk-ind-body .lk-btnrow { margin: 0; }
+@media (max-width: 700px) { .lk-subhead.expanded #lk-sub-full > div { flex-direction: column; gap: 3px; }
+  #lk-sub-full .lk-ind-label { flex: none; } }
 /* 핵심지표 스트립 */
 .lk-kpis { display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
