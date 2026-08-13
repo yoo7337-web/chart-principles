@@ -700,9 +700,6 @@ footer { margin-top: 40px; font-size: var(--fs-sub); color: var(--muted); border
 .lk-h3 { font-size: var(--fs-h); margin: 6px 0 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .lk-ov-text { font-size: var(--fs-body); line-height: 1.7; }
 .lk-overview { padding-top: 12px; }
-.cons-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 12px; }
-.cons-item { font-size: var(--fs-body); color: var(--muted); }
-.cons-item b { display: block; font-size: var(--fs-num); color: var(--ink); margin-top: 2px; }
 .cons-bar { position: relative; height: 10px; background: linear-gradient(90deg,#2a2a31,rgba(67,145,255,.18)); border-radius: 5px; margin: 14px 0 2px; }
 .cons-bar-fill { position: absolute; top: 0; height: 100%; border-radius: 5px; background: #7ba6e8; opacity: .55; left: 0; }
 .cons-cur { position: absolute; top: -15px; transform: translateX(-50%); font-size: var(--fs-note); font-weight: 700; color: var(--ink); }
@@ -1291,26 +1288,30 @@ footer { margin-top: 40px; font-size: var(--fs-sub); color: var(--muted); border
 .lk-cap b { font-size: var(--fs-num); }
 .lk-mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 4px 16px 4px; }
 .lk-mgrid.four { grid-template-columns: repeat(4, 1fr); }
-.lk-mgrid.fin3 { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 900px) { .lk-mgrid.four { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 700px) { .lk-mgrid, .lk-mgrid.fin3 { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .lk-mgrid { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .lk-mgrid.four { grid-template-columns: 1fr; } }
 .lk-mbox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; }
-.lk-mbox-h { font-size: var(--fs-body); font-weight: 700; color: var(--muted); margin-bottom: 6px; }
-.lk-mrow { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: var(--fs-body); }
-.lk-mrow span { color: var(--muted); }
-.lk-mrow b { font-size: var(--fs-num); }
-.lk-mgrid.fin3 .lk-mrow { justify-content: center; }
-.lk-mgrid.fin3 .lk-mrow b { font-size: var(--fs-hero); }
+/* v402: 투자지표 키-값을 미니 표(.lk-tbl)로 — .fin-ext/#secmet-table 패턴 이식.
+   (구 .lk-mrow/.lk-mbox-h/.fin3은 사용처 소멸로 제거 — 폰트는 전부 토큰이라 레일에서 자동 축소) */
+.lk-tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.lk-tbl caption { text-align: left; font-size: var(--fs-sub); font-weight: 700;
+  color: var(--muted); padding-bottom: 4px; }
+.lk-tbl td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+.lk-tbl tr:last-child td { border-bottom: none; }
+.lk-tbl td:first-child { color: var(--muted); text-align: left; padding-right: 8px; }
+.lk-tbl td:last-child { text-align: right; font-weight: 700;
+  font-variant-numeric: tabular-nums; font-size: var(--fs-num); white-space: nowrap; }
+/* 컨센서스 변형(v402): 다열이라 값 열을 가운데로, 헤더행은 회색 라벨 */
+.cons-tbl { margin: 8px 0 10px; }
+.cons-tbl thead th { font-size: var(--fs-sub); font-weight: 600; color: var(--muted); padding: 2px 0; text-align: center; }
+.cons-tbl td:not(:first-child) { text-align: center; font-weight: 700;
+  font-variant-numeric: tabular-nums; font-size: var(--fs-num); white-space: nowrap; }
 /* 52주 위치 미니 바 */
 .lk-52bar { position: relative; height: 5px; border-radius: 3px; margin-top: 5px;
   background: linear-gradient(90deg, #3f8cf5, #2a2a31, #f5445a); }
 .lk-52bar i { position: absolute; top: -2px; width: 3px; height: 9px; background: var(--ink); border-radius: 2px; transform: translateX(-50%); }
 /* 애널리스트 목표가 range + 의견 분포 */
-.an-tgt { display: flex; gap: 8px; margin: 12px 0 4px; }
-.an-tgt > div { flex: 1; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
-.an-tgt .sub-note { display: block; font-size: var(--fs-note); }
-.an-tgt b { display: block; font-size: var(--fs-num); margin: 1px 0; }
 .an-dist-h { margin: 12px 0 4px; }
 .an-dist { display: flex; align-items: flex-end; gap: 6px; height: 84px; padding: 0 4px; }
 .an-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
@@ -1322,7 +1323,7 @@ footer { margin-top: 40px; font-size: var(--fs-sub); color: var(--muted); border
 .peer-table tr.peer-self { background: rgba(67,145,255,.14); font-weight: 700; }
 .peer-table tr.peer-self td { color: var(--ink); }
 .perf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 8px 0 12px; }
-@media (max-width: 700px) { .perf-two, .cons-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .perf-two { grid-template-columns: 1fr; } }
 .perf-h { font-size: var(--fs-sub); font-weight: 700; color: var(--muted); margin-bottom: 4px; }
 .perf-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-body); padding: 2px 0; }
 .perf-lab { width: 44px; color: var(--muted); }
@@ -1648,12 +1649,7 @@ dialog { background: var(--card); color: var(--ink); }
 /* 우측 레일: 1열 스택은 투자지표가 577px까지 늘어져 한눈에 안 들어왔다 → 2열로 압축(v229).
    폰트가 아닌 **레이아웃**(폭·패딩·줄바꿈) 오버라이드만 남긴다. */
 .lk-side .lk-mgrid, .lk-side .lk-mgrid.four { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 4px 14px; }
-.lk-side .lk-mgrid.fin3 { grid-template-columns: 1fr; padding: 4px 14px; }
 .lk-side .lk-mbox { padding: 7px 10px; border-radius: 8px; }
-.lk-side .lk-mbox-h { margin-bottom: 3px; }
-.lk-side .lk-mrow { padding: 1px 0; gap: 6px; }
-.lk-side .lk-mrow span { white-space: nowrap; }
-.lk-side .lk-mrow b { white-space: nowrap; }
 .lk-side .lk-cap { padding: 0 14px 6px; }
 .lk-side .lk-cap > div { min-width: 108px; padding: 6px 10px; }
 .lk-side .card-flat { padding-left: 14px; padding-right: 14px; }

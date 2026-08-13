@@ -12110,14 +12110,25 @@ function renderLookupCons(st) {
   }
   // 현재가→목표가 위치 바 (0%=현재가-30%, 100%=목표가+10% 구간)
   const barPos = upside != null ? Math.max(4, Math.min(96, 70 / (1 + Math.max(0, upside)) )) : 50;
+  /* v402: cons-grid 3칸 + an-tgt 3박스 → 표 하나로 병합(정보 동일).
+     미국(analyst 있음)은 최저/평균/최고 3열, 국내는 평균 1열 — 행=목표가·현재가 대비. */
+  const a = co?.analyst;
+  const hasRange = a?.targetHigh != null && a?.targetLow != null;
+  const pu = (v) => (cur && v != null ? `<span class="${v / cur - 1 >= 0 ? "pos" : "neg"}">${pct(v / cur - 1, 1)}</span>` : "-");
+  const consTbl = hasRange
+    ? `<table class="lk-tbl cons-tbl"><thead><tr><th></th><th class="neg">최저</th><th>평균</th><th class="pos">최고</th></tr></thead><tbody>
+        <tr><td>목표주가</td><td>${fmtPrice(a.targetLow, st.market)}</td><td><b>${fmtPrice(a.targetMean ?? cons.target, st.market)}</b></td><td>${fmtPrice(a.targetHigh, st.market)}</td></tr>
+        <tr><td>현재가 대비</td><td>${pu(a.targetLow)}</td><td>${pu(a.targetMean ?? cons.target)}</td><td>${pu(a.targetHigh)}</td></tr>
+        <tr><td>투자의견</td><td colspan="3">${opLabel}${opDesc ? ` <span class="sub-note">${opDesc}</span>` : ""}</td></tr>
+      </tbody></table>`
+    : `<table class="lk-tbl cons-tbl"><tbody>
+        <tr><td>목표주가 평균</td><td><b>${fmtPrice(cons.target, st.market)}</b></td></tr>
+        <tr><td>현재가 대비</td><td class="${(upside ?? 0) >= 0 ? "pos" : "neg"}">${upside != null ? pct(upside, 1) : "-"}</td></tr>
+        <tr><td>투자의견</td><td>${opLabel}${opDesc ? ` <span class="sub-note">${opDesc}</span>` : ""}</td></tr>
+      </tbody></table>`;
   host.innerHTML = `<div class="fund-head">증권가 컨센서스
       <span class="sub-note">(${st.market === "kr" ? "네이버 집계" : "Yahoo 집계"}${cons.at ? " · " + cons.at : ""})</span></div>
-    <div class="cons-grid">
-      <div class="cons-item"><span>목표주가 평균</span><b>${fmtPrice(cons.target, st.market)}</b></div>
-      <div class="cons-item"><span>현재가 대비</span>
-        <b class="${(upside ?? 0) >= 0 ? "pos" : "neg"}">${upside != null ? pct(upside, 1) : "-"}</b></div>
-      <div class="cons-item"><span>투자의견</span><b>${opLabel}</b> <span class="sub-note">${opDesc}</span></div>
-    </div>
+    ${consTbl}
     ${upside != null ? `<div class="cons-bar"><div class="cons-bar-fill" style="width:${barPos}%"></div>
       <span class="cons-cur" style="left:${barPos}%">현재가</span></div>
     <div class="cons-bar-lab"><span>&nbsp;</span><span>목표가 ${fmtPrice(cons.target, st.market)}</span></div>` : ""}
@@ -12125,19 +12136,11 @@ function renderLookupCons(st) {
     <p class="sub-note" style="margin-top:6px">컨센서스는 증권사 추정 평균 — 매수·매도 판단이 아닌 참고 지표</p>`;
 }
 
-// 애널리스트 심화(미국): 목표가 최고/평균/최저 + 매수/중립/매도 의견 분포
+// 애널리스트 심화(미국): 매수/중립/매도 의견 분포(목표가 range는 v402에서 위 표로 병합)
 function renderConsAnalyst(st, co, cur) {
   const a = co?.analyst;
   if (!a) return "";
   let html = "";
-  if (a.targetHigh != null && a.targetLow != null) {
-    const pu = (v) => (cur ? pct(v / cur - 1, 1) : "");
-    html += `<div class="an-tgt">
-      <div><span class="sub-note">최저</span><b class="neg">${fmtPrice(a.targetLow, st.market)}</b><span class="sub-note">${pu(a.targetLow)}</span></div>
-      <div><span class="sub-note">평균</span><b>${fmtPrice(a.targetMean, st.market)}</b><span class="sub-note">${pu(a.targetMean)}</span></div>
-      <div><span class="sub-note">최고</span><b class="pos">${fmtPrice(a.targetHigh, st.market)}</b><span class="sub-note">${pu(a.targetHigh)}</span></div>
-    </div>`;
-  }
   const op = a.opinion;
   if (op) {
     const cats = [["strongBuy", "적극매수", "#f5445a"], ["buy", "매수", "#e0575c"],
@@ -12184,9 +12187,10 @@ function renderLookupMetrics(st) {
   const pctv = (v, warn) => (v == null ? "-" : `<span class="${warn && v >= 200 ? "neg" : ""}">${v.toLocaleString(undefined, { maximumFractionDigits: v >= 1000 ? 0 : 1 })}%</span>`);
   const pcts = (v) => (v == null ? "-" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : ""}${v.toFixed(1)}%</span>`);
   const money = (v) => (v == null ? "-" : kr ? Math.round(v).toLocaleString() + "원" : "$" + v.toFixed(2));
+  /* v402: 키-값 div 나열 → 미니 표(.lk-tbl). 2×2 그리드(.lk-mgrid)는 유지해 카드 높이 불변 */
   const box = (title, rows) => {
-    const body = rows.filter(Boolean).map(([k, v]) => `<div class="lk-mrow"><span>${k}</span><b>${v}</b></div>`).join("");
-    return body ? `<div class="lk-mbox"><div class="lk-mbox-h">${title}</div>${body}</div>` : "";
+    const body = rows.filter(Boolean).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+    return body ? `<div class="lk-mbox"><table class="lk-tbl"><caption>${title}</caption><tbody>${body}</tbody></table></div>` : "";
   };
 
   // 상단 캡슐: 시총 · EV · 52주 위치 · 베타
