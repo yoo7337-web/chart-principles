@@ -66,6 +66,10 @@
   padding: 8px 14px; margin: 6px 0 8px; }
 .lk-kpi { display: inline-flex; align-items: baseline; gap: 7px; font-size: var(--fs-body); }
 .lk-kpi b { font-size: var(--fs-h); }
+/* v403: 밸류|질|상태 그룹 구분선 + 클릭 이동 */
+.lk-kpi[data-goto] { cursor: pointer; border-radius: 6px; padding: 1px 4px; margin: -1px -4px; }
+.lk-kpi[data-goto]:hover { background: rgba(255,255,255,.05); }
+.lk-kpi-sep { width: 1px; align-self: stretch; background: var(--line); }
 /* 앵커 바 */
 .lk-anchors { display: flex; gap: 4px; align-items: center; }
 .lk-sticky.empty .lk-anchors { display: none; }

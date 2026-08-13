@@ -12224,7 +12224,7 @@ function renderLookupMetrics(st) {
     yld != null && ["배당수익률", "연 " + yld.toFixed(2) + "%"],
     payout != null && ["배당성향", pctv(payout)],
   ]);
-  const dRatio = m.debtRatio ?? co.stability_q?.[co.stability_q.length - 1]?.debtRatio ?? co.fin_ext?.[co.fin_ext.length - 1]?.debt;
+  const dRatio = lkDebtRatio(co, m);
   const liqVal = m.currentRatio != null ? m.currentRatio : m.quickRatio;
   const stabBox = box("재무 안정성", [
     dRatio != null && ["부채비율", pctv(dRatio, true)],
@@ -14120,6 +14120,14 @@ function renderUnifiedFeed(st) {
 }
 
 /* ---------- 📌 핵심지표 스트립 (v349) — 헤더 바로 아래 한 줄 요약 ---------- */
+/* 부채비율 폴백 체인 — 투자지표 카드(renderLookupMetrics)와 KPI 스트립(v403)이 공용 */
+function lkDebtRatio(co, m) {
+  return m.debtRatio ?? co.stability_q?.[co.stability_q.length - 1]?.debtRatio
+    ?? co.fin_ext?.[co.fin_ext.length - 1]?.debt ?? null;
+}
+
+/* v403: KPI 스트립 6칸 → 밸류 | 질 | 상태 3그룹 — 전부 이미 로드된 데이터 재활용.
+   칸 클릭 → 관련 카드로 스크롤(앵커 바와 같은 방식). */
 function renderLookupKpis(st) {
   const host = $("#lookup-kpis");
   if (!host) return;
@@ -14133,18 +14141,32 @@ function renderLookupKpis(st) {
   const target = co.cons?.target, upside = target && cur ? target / cur - 1 : null;
   const dps = m.dps ?? co.dividend?.dps;
   const yld = dps && cur ? dps / cur * 100 : f.div_yield;
-  const items = [
-    f.mcap != null && ["시가총액", fmtMcap(f.mcap, st.market), ""],
-    per != null && ["PER", per.toFixed(1) + "배", ""],
-    pbr != null && ["PBR", pbr.toFixed(1) + "배", ""],
-    pos52 != null && ["52주 위치", pos52.toFixed(0) + "%", ""],
-    upside != null && ["컨센 목표가까지", pct(upside, 1), upside >= 0 ? "pos" : "neg"],
-    yld != null && ["배당수익률", yld.toFixed(1) + "%", ""],
-  ].filter(Boolean);
-  if (!items.length) { host.style.display = "none"; return; }
+  const roe = m.roe ?? f.roe;
+  const debt = lkDebtRatio(co, m);
+  const cycScore = (typeof CYC !== "undefined" && CYC?.map?.[key]?.score != null) ? CYC.map[key].score : null;
+  // [라벨, 값, 색클래스, 이동 대상 id]
+  const G = (rows) => rows.filter(Boolean);
+  const groups = [
+    G([per != null && ["PER", per.toFixed(1) + "배", "", "lookup-metrics"],
+       pbr != null && ["PBR", pbr.toFixed(1) + "배", "", "lookup-metrics"],
+       upside != null && ["컨센 목표가까지", pct(upside, 1), upside >= 0 ? "pos" : "neg", "lookup-cons"]]),
+    G([roe != null && ["ROE", roe.toFixed(1) + "%", "", "lookup-metrics"],
+       f.op_margin != null && ["영업이익률", f.op_margin.toFixed(1) + "%", "", "lookup-finhub"],
+       debt != null && ["부채비율", Math.round(debt) + "%", debt >= 200 ? "neg" : "", "lookup-metrics"]]),
+    G([f.mcap != null && ["시가총액", fmtMcap(f.mcap, st.market), "", "lookup-metrics"],
+       pos52 != null && ["52주 위치", pos52.toFixed(0) + "%", "", "lookup-tfbar"],
+       yld != null && ["배당수익률", yld.toFixed(1) + "%", "", "lookup-metrics"],
+       cycScore != null && ["순환성", cycScore + "점", "", "lookup-metrics"]]),
+  ].filter((g) => g.length);
+  if (!groups.length) { host.style.display = "none"; return; }
   host.style.display = "flex";
-  host.innerHTML = items.map(([k, v, c]) =>
-    `<span class="lk-kpi"><span class="sub-note">${k}</span><b class="${c}">${v}</b></span>`).join("");
+  host.innerHTML = groups.map((g) => g.map(([k, v, c, goto]) =>
+    `<span class="lk-kpi" data-goto="${goto}" title="관련 카드로 이동"><span class="sub-note">${k}</span><b class="${c}">${v}</b></span>`).join(""))
+    .join(`<span class="lk-kpi-sep"></span>`);
+  host.querySelectorAll(".lk-kpi[data-goto]").forEach((el) => el.onclick = () => {
+    const t = document.getElementById(el.dataset.goto);
+    if (t && t.style.display !== "none") t.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 /* ---------- 🧭 앵커 바 (v349) — sticky 헤더에서 긴 페이지를 점프 ---------- */
