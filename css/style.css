@@ -144,6 +144,10 @@
 .cyc-badge.mid { background: rgba(255,255,255,.08); color: var(--muted); }
 .cyc-badge.low { background: rgba(67,145,255,.16); color: #7cb1ff; }
 .cyc-track { flex: 1; height: 6px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; }
+/* v404: 순환성 근거 행의 전 종목 백분위 미니바 */
+.cyc-axbar { flex: 0 0 52px; height: 4px; background: rgba(255,255,255,.07); border-radius: 2px;
+  overflow: hidden; margin-left: auto; align-self: center; }
+.cyc-axbar i { display: block; height: 100%; background: #f0b34c; border-radius: 2px; }
 .cyc-fill { display: block; height: 100%; }
 .cyc-fill.vhigh { background: var(--sell); } .cyc-fill.high { background: #f0b34c; }
 .cyc-fill.mid { background: var(--muted); } .cyc-fill.low { background: var(--accent); }

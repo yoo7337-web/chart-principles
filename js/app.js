@@ -1345,6 +1345,7 @@ function loadLookup(key) {
     lkCapevBadge(st);           // 최근 90일 자본 이벤트(자사주·유증·CB) 배지 — lazy, 없으면 숨김
     lkInsiderBadge(st);         // 최근 90일 내부자 매매 요약 배지 — lazy, 없으면 숨김
     lkEarnBadge(st);            // 최근 분기 컨센서스 vs 실제치 배지(v398) — lazy, 없으면 숨김
+    lkTechpatBadge(st);         // 현재 차트 패턴 + 실적-주가 괴리 배지(v404) — lazy, 없으면 숨김
     renderLookupReportBtn(st);  // 📖 기업 이해 보고서(있는 종목만 버튼 노출)
     renderLookupMicro(st);      // 호가·체결 스냅샷(토스, 랭킹 상위 종목만)
     finhubUser = false; finhubSel = "snap";   // 종목이 바뀌면 기본 탭(Snapshot) 우선으로 복귀
@@ -4161,6 +4162,22 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v404", "2026-08-13", "🎨 종목조회 디자인 전면 정리 (v399~404)",
+   "종목조회 화면을 6단계로 정리했습니다. **정보는 하나도 빼지 않고** 형태만 다듬었습니다.\n\n"
+   + "**v399 정리**: 죽은 렌더러 7종·레거시 마크업·고아 CSS 제거 + 🐞선행 PER이 30분 시세 대신 마지막 봉 "
+   + "종가로 계산되던 버그 수정(freshQuote 반환 스키마 오독 — v315와 같은 패턴).\n\n"
+   + "**v400 폰트 토큰**: 화면에 24종이던 폰트 크기를 6단 스케일(주석·라벨·본문·제목·숫자·히어로)로 수렴. "
+   + "우측 레일은 12개 클래스 개별 축소(20줄+) 대신 **변수 스코프 한 블록**으로 전체 축소 — 앞으로 레일에 "
+   + "새 블록을 넣어도 자동으로 맞춰집니다.\n\n"
+   + "**v401 배지 한 줄 요약**: 헤더 아래 5줄(~190px)로 쌓이던 배지(산업·자본이벤트·내부자·예측실적·보고서)를 "
+   + "**요약 칩 한 줄(24px)**로 압축 — 클릭하면 기존 배지 전체가 펼쳐집니다(정보 손실 0).\n\n"
+   + "**v402 표 전환**: 투자지표 4박스와 컨센서스(목표가 최저/평균/최고)를 정갈한 미니 표로 — 숫자는 우측 "
+   + "정렬 + 고정폭 숫자체.\n\n"
+   + "**v403 KPI 요약 강화**: 상단 스트립을 밸류(PER·PBR·목표가까지) | 질(ROE·영업이익률·부채비율) | "
+   + "상태(시총·52주·배당·순환성) 3그룹 10칸으로 — 칸을 클릭하면 해당 카드로 이동.\n\n"
+   + "**v404 신규 표시**: ①순환성 근거 4축(수익률·매출·이익 변동, 베타)에 **전 종목 백분위 미니바** — 점수의 "
+   + "내역이 보입니다 ②이 종목의 **현재 차트 패턴** 배지(주식찾기 전용이던 데이터에 진입점) ③**실적↑주가↓/"
+   + "실적↓주가↑ 괴리** 배지 — 클릭 시 같은 조건 주식찾기로."],
   ["v398", "2026-08-13", "🎯 실적 예측치 동결 + 예측 vs 실적 비교",
    "분기 실적 **컨센서스(예측치)를 발표 전에 동결 저장**하고, 실적이 공시되면 같은 자리에서 비교하는 "
    + "메뉴를 새로 만들었습니다(뉴스·일정 → 🎯 예측 vs 실적).\n\n"
@@ -5661,6 +5678,39 @@ function lkSubReset() {
   const host = document.getElementById("lk-sub-sum");
   if (host) { host.innerHTML = ""; host.style.display = "none"; }
   lkSubToggle(false);
+}
+
+/* v404: 이 종목의 현재 차트 패턴(tech_patterns) + 실적-주가 괴리(valuation_gap) 배지.
+   주식찾기 전용이던 두 데이터에 종목조회 진입점을 만든다 — 클릭 시 해당 패턴이 켜진 주식찾기로. */
+function gotoScreenerTech(id) {
+  gotoTabFull("screener");
+  if (!screenerRendered) initScreener();
+  scrTechActive = id;
+  try { renderScrTech(); renderScreener(); } catch (e) { /* 스크리너 초기 렌더 전이면 initScreener가 이어받음 */ }
+}
+function lkTechpatBadge(st) {
+  const host = $("#lk-techpat");
+  if (!host) return;
+  host.style.display = "none";
+  lkSubSum("techpat", null);
+  lkSubSum("gap", null);
+  const key = `${st.market}_${st.ticker}`;
+  Promise.all([loadTechPat(), loadGap()]).then(() => {
+    if (LOOKUP_ST !== st) return;
+    const pats = (TECHPAT?.patterns || []).filter((p) => (TECHPAT.current?.[p.id] || []).includes(key)).slice(0, 3);
+    let gapSide = null;
+    if (GAPD?.undervalued?.includes(key)) gapSide = "gap_under";
+    else if (GAPD?.overvalued?.includes(key)) gapSide = "gap_over";
+    if (!pats.length && !gapSide) return;
+    host.style.display = "";
+    host.innerHTML = `<span class="lk-ind-label">📊 차트·괴리 신호</span>`
+      + pats.map((p) => `<button class="lk-ind-badge" data-tech="${p.id}" title="10년 이벤트스터디로 검증된 패턴 — 클릭 시 같은 패턴 종목 찾기">${TECH_ICON[p.id] || "📊"} ${p.name}</button>`).join("")
+      + (gapSide ? `<button class="lk-ind-badge ${gapSide === "gap_under" ? "cv-return" : "cv-dilute"}" data-tech="${gapSide}"
+           title="${GAP_DEF[gapSide].cond}">${GAP_DEF[gapSide].icon} ${GAP_DEF[gapSide].name} <span class="sub-note">⚠부분 검증</span></button>` : "");
+    host.querySelectorAll("[data-tech]").forEach((b) => b.onclick = () => gotoScreenerTech(b.dataset.tech));
+    if (pats.length) lkSubSum("techpat", `${TECH_ICON[pats[0].id] || "📊"} ${pats[0].name}${pats.length > 1 ? ` 외 ${pats.length - 1}` : ""}`);
+    if (gapSide) lkSubSum("gap", `${GAP_DEF[gapSide].icon} ${GAP_DEF[gapSide].name}`);
+  });
 }
 
 function renderLookupReportBtn(st) {
@@ -11426,20 +11476,25 @@ function cycProfileHtml(st) {
   const c = cycOf(st);
   if (!c) return "";
   const [, lab, cls] = cycBand(c.score);
+  /* v404: 각 근거에 전 종목 백분위(axes) 미니바 — "점수 56.6의 내역"이 한눈에 보인다.
+     axes 키는 수집기(cyclical.py)의 4축과 1:1 — 백분위가 없는 행(주기·적자연도)은 바 없이 값만. */
+  const ax = c.axes || {};
   const rows = [
-    c.yr_vol != null && ["연간 수익률 변동", `±${c.yr_vol}%`, "사이클 진폭 — 클수록 오르내림이 크다"],
-    c.rev_vol != null && ["매출 증감 변동", `±${c.rev_vol}%p`, "수요 사이클에 매출이 얼마나 흔들리나"],
-    c.op_vol != null && ["영업이익 증감 변동", `±${c.op_vol}%p`, "이익 레버리지 — 순환주는 이익이 더 크게 흔들린다"],
-    c.op_loss_years ? ["적자 연도", `10년 중 ${c.op_loss_years}년`, "사이클 저점에서 적자를 내는가"] : null,
-    c.beta != null && ["시장 베타", c.beta.toFixed(2), "시장이 1% 움직일 때 이 종목의 반응"],
-    c.cycle_m ? ["관찰된 주기", `약 ${c.cycle_m}개월`, `월수익 자기상관 ρ=${c.cycle_rho}`] : null,
+    c.yr_vol != null && ["연간 수익률 변동", `±${c.yr_vol}%`, "사이클 진폭 — 클수록 오르내림이 크다", ax.yr_vol],
+    c.rev_vol != null && ["매출 증감 변동", `±${c.rev_vol}%p`, "수요 사이클에 매출이 얼마나 흔들리나", ax.rev_vol],
+    c.op_vol != null && ["영업이익 증감 변동", `±${c.op_vol}%p`, "이익 레버리지 — 순환주는 이익이 더 크게 흔들린다", ax.op_vol],
+    c.op_loss_years ? ["적자 연도", `10년 중 ${c.op_loss_years}년`, "사이클 저점에서 적자를 내는가", null] : null,
+    c.beta != null && ["시장 베타", c.beta.toFixed(2), "시장이 1% 움직일 때 이 종목의 반응", ax.beta],
+    c.cycle_m ? ["관찰된 주기", `약 ${c.cycle_m}개월`, `월수익 자기상관 ρ=${c.cycle_rho}`, null] : null,
   ].filter(Boolean);
   return `<div class="cyc-wrap">
     <div class="perf-h" style="margin:10px 0 4px">🔄 순환성 <span class="sub-note">(경기 사이클에 얼마나 민감한가)</span></div>
     <div class="cyc-head"><b class="cyc-badge ${cls}">${lab}</b>
       <span class="cyc-track"><span class="cyc-fill ${cls}" style="width:${c.score}%"></span></span>
       <b>${c.score.toFixed(0)}</b><span class="sub-note">/100</span></div>
-    ${rows.map(([k, v, tip]) => `<div class="ws-kv-row" title="${tip}"><span>${k}</span><b>${v}</b></div>`).join("")}
+    ${rows.map(([k, v, tip, pctl]) => `<div class="ws-kv-row" title="${tip}${pctl != null ? ` · 전 종목 중 상위 ${(100 - pctl).toFixed(0)}%` : ""}"><span>${k}</span><b>${v}</b>
+      ${pctl != null ? `<span class="cyc-axbar"><i style="width:${pctl.toFixed(0)}%"></i></span><span class="sub-note">${pctl.toFixed(0)}</span>` : ""}</div>`).join("")}
+    ${rows.some((r) => r[3] != null) ? `<p class="sub-note" style="margin:2px 0 0">막대 = 전 종목 백분위(길수록 순환적) — 점수는 이 축들의 평균</p>` : ""}
     ${cycFwd6Html(c)}
     <p class="sub-note" style="margin-top:4px">10년 시계열 + DART 연간 실적으로 산출한 <b>상대 순위</b>(전 종목 백분위 평균)
       ${c.partial ? " · ⚠실적 데이터가 없어 가격 지표만 사용" : ""}</p>
