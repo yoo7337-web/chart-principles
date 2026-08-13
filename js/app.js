@@ -4158,6 +4158,17 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v397", "2026-08-13", "📊 산업 지표 30개 산업군 재편 + 분기 펀더멘털",
+   "산업 지표 탭을 새 30개 분류에 맞춰 전면 갱신했습니다.\n\n"
+   + "**지표 큐레이션 확장**: 구 12군 큐레이션을 폐기하고 30개 산업군마다 전용 지표를 배정했습니다. "
+   + "ECOS 수출금액지수를 품목 단위로 세분화(화장품·의료기기·전지·통신장비·비철금속·석유화학·전기장비·"
+   + "음식료·섬유의복 등 신규 11종)하고, 내수 산업엔 서비스업생산지수(도소매·숙박음식·운수), 건설·부동산엔 "
+   + "KB주택가격지수와 **전국 미분양주택**을 추가했습니다. 야후 프록시도 9종 추가(스마트그리드 GRID, "
+   + "게임 ESPO, 철강 SLX, 항공 JETS, 천연가스, 헬스케어 XLV 등) — 총 시계열 29종 → **52종**.\n\n"
+   + "**분기 펀더멘털 신설**: 산업군 상세에 최근 9개 분기 합산 매출(전년동기 YoY 라벨)+영업이익률 차트를 "
+   + "추가했습니다. 연간 블록엔 순이익률·ROE(합산)·부채비율·영업현금흐름 스트립을 추가.\n\n"
+   + "**비교 보드**: 30개 산업군 × [시총·수익률·매출/CAPEX YoY·영업이익률·**매출 YoY(분기)**·**ROE**·"
+   + "대표지표]로 확장. v396 재편 후 히트맵 grp와 지표 키가 어긋나 시장 열이 비던 문제도 이번 통일로 해소."],
   ["v396", "2026-08-13", "🏭 산업 분류 30개 전면 재편",
    "산업군을 **15개 → 30개**로 재편했습니다(사용자 승인). 기존엔 상위 6개 그룹이 전체 종목의 70%를 "
    + "차지해(반도체 482·바이오 435·소비재 430…) 로테이션 판단이 뭉개졌습니다 — 재편 후 최대 379·최소 6.\n\n"
@@ -5295,18 +5306,9 @@ const CHAIN_OF_GRP = {
   finance: "finance", securities: "finance",
 };
 const chainOf = (grp) => { const k = CHAIN_OF_GRP[grp]; return k && CHAINS[k] ? k : null; };
-/* 산업군(30) → 산업지표(sector_metrics 12그룹) 매핑 — 지표 큐레이션은 12그룹 단위를 유지한다.
-   ⚠예전엔 tile.grp를 그대로 넘겨 construction→'construct' 불일치로 버튼이 죽는 잠복 버그가 있었다. */
-const SECMET_OF = {
-  semi: "semi", itparts: "semi", display: "semi", battery: "battery", electric: "battery",
-  auto: "auto", pharma: "bio", meddev: "bio", ship: "ship", transport: "ship",
-  chem: "chem", steel: "chem", construction: "construct", realestate: "construct",
-  finance: "finance", securities: "finance",
-  food: "consumer", beauty: "consumer", apparel: "consumer", retail: "consumer", leisure: "consumer",
-  internet: "internet", game: "internet", media: "internet", telecom: "internet",
-  defense: "defense", energy: "energy", utility: "energy",
-};
-const secmetOf = (grp) => SECMET_OF[grp] || null;
+/* v397: 산업지표(sector_metrics)도 30개 산업군 키를 그대로 쓴다 — 매핑 테이블 폐기.
+   (v396까지는 12군 큐레이션이라 SECMET_OF 변환이 필요했다. 이제 grp==지표 키.) */
+const secmetOf = (grp) => (grp && grp !== "etc" ? grp : null);
 const indName = (k) => (IND_BY_KEY[k] || SCR_GROUP_ETC).name;
 const indLabel = (k) => { const g = IND_BY_KEY[k] || SCR_GROUP_ETC; return `${g.icon} ${g.name}`; };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
@@ -10662,6 +10664,32 @@ const SM_MEANING = {
   ndx: "나스닥100. 글로벌 성장주 위험선호 — 국내 인터넷·게임·플랫폼과 동행.",
   ibb: "나스닥 바이오 ETF. 바이오 섹터 투자심리·자금 유입.",
   gold: "금. 안전자산 선호 — 위험자산(주식)과 역상관 경향.",
+  // v397 — 30개 산업군 세분화 신규 지표
+  exp_telecom_eq: "통신·방송장비 수출 지수. 네트워크 장비·스마트폰 부품 사이클 — IT부품·통신장비 업체 수주 환경.",
+  exp_dispeq: "디스플레이 장비 수출 지수. 패널사 설비투자 사이클 — OLED 전환 투자 국면 판단.",
+  exp_batt: "전지 수출 지수. 배터리 셀 수출(가격×물량) — LG에너지솔루션·삼성SDI 실적의 실물 확인.",
+  exp_meddev: "의료용기기 수출 지수. 미용기기·진단기기 수출 — 의료기기 업체 성장의 실물 확인.",
+  exp_food: "음식료품 수출 지수. K-푸드 수출(라면·과자 등) — 음식료 해외 성장 확인.",
+  exp_cosmetic: "화장품 수출 지수. K-뷰티 수출 사이클 — 중국·미국 수요가 화장품주 실적을 좌우.",
+  exp_textile: "섬유·의복 수출 지수. OEM 의류 수출 — 영원무역·한세실업 물량 환경.",
+  exp_nonfer: "비철금속 수출 지수. 아연·구리·니켈 제련 수출 — 고려아연·풍산 업황.",
+  exp_petrochem: "석유화학중간제품 수출 지수. NCC 스프레드의 실물 확인 — 화학 시황 회복 판단.",
+  exp_oil: "석탄·석유제품 수출 지수. 정제마진×물량 — SK이노베이션·에쓰오일 수출 환경.",
+  exp_elec: "전기장비 수출 지수. 변압기·전선 등 전력기기 수출 붐의 실물 확인 — HD현대일렉트릭·LS.",
+  svc_retail: "도소매업 생산지수. 내수 유통 활동의 실측 — 유통주 매출 환경.",
+  svc_hotel: "숙박·음식점업 생산지수. 국내 여행·외식 경기 — 호텔·레저·여행주 수요.",
+  svc_transport: "운수·창고업 생산지수. 물동량의 실물 확인 — 택배·물류·항공화물 업황.",
+  housing_px: "KB 주택매매가격지수. 부동산 가격 사이클 — 건설·리츠·가구 업황의 근본 변수.",
+  unsold: "전국 미분양주택(호). 증가=분양 경기 악화 — 건설주 실적·PF 리스크의 조기 경보.",
+  xlv: "미국 헬스케어 ETF. 글로벌 헬스케어 투자심리 — 의료기기·헬스케어 섹터와 동행.",
+  xlp: "미국 필수소비재 ETF. 방어주 선호도 — 음식료 섹터의 글로벌 자금 흐름.",
+  xly: "미국 임의소비재 ETF. 소비 경기 위험선호 — 의류·유통 섹터와 방향 유사.",
+  jets: "글로벌 항공 ETF. 여행 수요 사이클 — 항공·여행·레저주와 동행.",
+  natgas: "천연가스 선물. 발전 연료비·LNG 사이클 — 유틸리티 마진과 가스 인프라 투자.",
+  grid: "스마트그리드 인프라 ETF. 글로벌 전력망 투자 붐 — 변압기·전선 슈퍼사이클의 대리 지표.",
+  espo: "비디오게임·e스포츠 ETF. 글로벌 게임 섹터 투자심리 — 국내 게임주와 동행.",
+  slx: "글로벌 철강 ETF. 철강 가격·수요 사이클 — POSCO홀딩스·현대제철 업황.",
+  kospi: "코스피. 증시 활황도 그 자체 — 증권사 브로커리지·지주사 NAV의 근본 변수.",
 };
 
 // 미니 라인차트(시계열 [[label,value],...]) — 기간 명시 + 클릭 시 큰 팝업
@@ -10753,6 +10781,66 @@ function secFundChart(rows) {
       <span style="color:#22c07a">─</span> 영업이익률 <span class="sub-note">· 단위 억원 · 우리 DART 집계(${rows[rows.length - 1].n}개사)</span></p>`;
 }
 
+// v397: 연간 확장 지표 스트립 — 순이익률·ROE·부채비율·CFO(최근 연도, 전년 대비 화살표)
+function secFundStrip(rows) {
+  if (!rows?.length) return "";
+  const a = rows[rows.length - 1], b = rows.length > 1 ? rows[rows.length - 2] : null;
+  const eok = (v) => v == null ? "-" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억");
+  const cell = (lab, v, unit, prev, goodUp = true) => {
+    if (v == null) return "";
+    if (unit === "%" && Math.abs(v) > 150) return "";   // 금융 등 합산 왜곡 값은 숨긴다
+    let arrow = "";
+    if (prev != null) {
+      const d = v - prev, up = d >= 0;
+      arrow = ` <span class="${up === goodUp ? "pos" : "neg"}" style="font-size:.85em">${up ? "▲" : "▼"}${Math.abs(d).toFixed(1)}</span>`;
+    }
+    return `<div class="sm-fcell"><span class="sub-note">${lab}</span><b>${typeof v === "number" && unit === "%" ? v.toFixed(1) + "%" : v}${unit === "%" ? "" : unit}</b>${arrow}</div>`;
+  };
+  return `<div class="sm-fstrip">
+    ${cell("순이익률", a.npm, "%", b?.npm)}
+    ${cell("ROE(합산)", a.roe, "%", b?.roe)}
+    ${cell("부채비율", a.debt, "%", b?.debt, false)}
+    ${a.cfo != null ? `<div class="sm-fcell"><span class="sub-note">영업현금흐름</span><b>${eok(a.cfo)}</b></div>` : ""}
+    ${a.np != null ? `<div class="sm-fcell"><span class="sub-note">순이익</span><b>${eok(a.np)}</b></div>` : ""}
+    <div class="sm-fcell"><span class="sub-note">기준</span><b>${a.y}년</b></div>
+  </div>`;
+}
+
+// v397: 분기 펀더멘털 — 매출 막대(전년동기 YoY 라벨) + 영업이익률 라인
+function secFundQChart(rows) {
+  if (!rows || rows.length < 3) return `<p class="mini-note">분기 집계 데이터가 없습니다.</p>`;
+  const W = 620, H = 190, padL = 8, padR = 8, padT = 30, padB = 26;
+  const n = rows.length, gw = (W - padL - padR) / n, plot = H - padT - padB;
+  const maxV = Math.max(...rows.map((r) => r.rev || 0), 1);
+  const yS = (v) => padT + (1 - v / maxV) * plot;
+  const eok = (v) => v >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString();
+  let bars = "", labels = "";
+  rows.forEach((r, i) => {
+    const cx = padL + gw * i + gw / 2, bw = Math.min(30, gw * 0.55);
+    if (r.rev) {
+      const y = yS(r.rev);
+      bars += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${Math.max(1, H - padB - y)}" fill="#4391ff" rx="1.5" opacity="${i === n - 1 ? 1 : 0.75}"/>`;
+      if (r.rev_yoy != null)
+        bars += `<text x="${cx}" y="${y - 13}" font-size="8.5" text-anchor="middle" fill="${r.rev_yoy >= 0 ? "#22c07a" : "#e05656"}">${r.rev_yoy >= 0 ? "+" : ""}${r.rev_yoy}%</text>`;
+      bars += `<text x="${cx}" y="${y - 4}" font-size="8" text-anchor="middle" fill="#4391ff">${eok(r.rev)}</text>`;
+    }
+    labels += `<text x="${cx}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#8b8b93">${r.q}</text>`;
+  });
+  const oms = rows.map((r) => r.opm).filter((v) => v != null);
+  let lineSvg = "";
+  if (oms.length > 1) {
+    const oMax = Math.max(...oms, 1), oMin = Math.min(...oms, 0);
+    const yO = (v) => padT + (oMax - v) / (oMax - oMin || 1) * plot * 0.4;
+    const pts = rows.map((r, i) => r.opm == null ? null : [padL + gw * i + gw / 2, yO(r.opm), r.opm]).filter(Boolean);
+    lineSvg = `<polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
+      fill="none" stroke="#22c07a" stroke-width="1.8"/>` +
+      pts.map((p) => `<text x="${p[0]}" y="${p[1] - 5}" font-size="8" text-anchor="middle" fill="#22c07a">${p[2].toFixed(1)}%</text>`).join("");
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="fin-svg">${bars}${lineSvg}${labels}</svg>
+    <p class="legend"><span style="color:#4391ff">■</span> 분기 매출(막대 위 <span class="pos">+%</span>=전년동기 대비)
+      <span style="color:#22c07a">─</span> 영업이익률 <span class="sub-note">· 단위 억원 · 분기마다 보고사 수가 달라 YoY는 참고치(${rows[rows.length - 1].n}개사)</span></p>`;
+}
+
 function secMetricsHtml(sector) {
   if (!SECMET) return "";
   const gk = SECMET.map?.[sector];
@@ -10775,6 +10863,11 @@ function secMetricsHtmlByGk(gk) {
     <div class="sm-block">
       <div class="perf-h">💰 ${gname} 펀더멘털 <span class="sub-note">(소속 상장사 합산 · 연간)</span></div>
       ${secFundChart(SECMET.fund?.[gk])}
+      ${secFundStrip(SECMET.fund?.[gk])}
+    </div>
+    <div class="sm-block">
+      <div class="perf-h">📅 ${gname} 분기 추이 <span class="sub-note">(합산 · 최근 9개 분기)</span></div>
+      ${secFundQChart(SECMET.fundq?.[gk])}
     </div>
   </div>`;
 }
@@ -10817,6 +10910,14 @@ function buildSecmetRows() {
       r.opm = a.opm ?? null;
       r.opmD = a.opm != null && b.opm != null ? a.opm - b.opm : null;
       r.n_fund = a.n;
+      r.roe = a.roe ?? null;
+    }
+    // ── 분기(v397) — 최근 분기 매출 YoY
+    const fq = SECMET.fundq?.[gk];
+    if (fq?.length) {
+      const q = fq[fq.length - 1];
+      r.revQ = q.rev_yoy ?? null;
+      r.qLabel = q.q;
     }
     // ── 대표지표(spec 첫 ECOS 우선, 없으면 첫 YF) 3개월 변화
     const spec = SECMET.spec?.[gk] || {};
@@ -10833,7 +10934,8 @@ function buildSecmetRows() {
 const SECMET_COLS = [
   ["name", "산업군", 0], ["mcap", "시가총액", -1], ["chg", "당일", -1], ["r1m", "1개월", -1],
   ["r3m", "3개월", -1], ["revY", "매출 YoY", -1], ["capexY", "CAPEX YoY", -1],
-  ["opm", "영업이익률", -1], ["rep3m", "대표지표(3개월)", -1],
+  ["opm", "영업이익률", -1], ["revQ", "매출 YoY(분기)", -1], ["roe", "ROE", -1],
+  ["rep3m", "대표지표(3개월)", -1],
 ];
 
 function drawSecmetTable() {
@@ -10857,7 +10959,9 @@ function drawSecmetTable() {
       <td>${r.mcap ? fmtMcap(r.mcap, "kr") : "-"}</td>
       <td>${pctc(r.chg)}</td><td>${pctc(r.r1m)}</td><td>${pctc(r.r3m)}</td>
       <td>${pctc(r.revY)}</td><td>${pctc(r.capexY)}</td>
-      <td>${r.opm == null ? "-" : `${r.opm.toFixed(1)}%${r.opmD != null ? ` <span class="sub-note ${r.opmD >= 0 ? "pos" : "neg"}">(${r.opmD >= 0 ? "+" : ""}${r.opmD.toFixed(1)}%p)</span>` : ""}`}</td>
+      <td>${r.opm == null || Math.abs(r.opm) > 100 ? "-" : `${r.opm.toFixed(1)}%${r.opmD != null ? ` <span class="sub-note ${r.opmD >= 0 ? "pos" : "neg"}">(${r.opmD >= 0 ? "+" : ""}${r.opmD.toFixed(1)}%p)</span>` : ""}`}</td>
+      <td>${r.revQ == null ? "-" : `${pctc(r.revQ)} <span class="sub-note">${r.qLabel || ""}</span>`}</td>
+      <td>${r.roe == null || Math.abs(r.roe) > 60 ? "-" : r.roe.toFixed(1) + "%"}</td>
       <td class="secmet-rep">${r.rep3m == null ? "-" : `${pctc(r.rep3m)} <span class="sub-note">${r.repName || ""}</span>`}</td>
     </tr>`).join("") + `</tbody>`;
   tb.querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
