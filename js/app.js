@@ -4158,6 +4158,17 @@ async function devSchedFill() {
 }
 
 const DEV_HISTORY = [
+  ["v396", "2026-08-13", "🏭 산업 분류 30개 전면 재편",
+   "산업군을 **15개 → 30개**로 재편했습니다(사용자 승인). 기존엔 상위 6개 그룹이 전체 종목의 70%를 "
+   + "차지해(반도체 482·바이오 435·소비재 430…) 로테이션 판단이 뭉개졌습니다 — 재편 후 최대 379·최소 6.\n\n"
+   + "주요 분리: 반도체에서 **IT부품·통신장비**(핸드셋·통신장비는 반도체가 아닙니다), 바이오를 "
+   + "**제약·바이오 / 의료기기·헬스케어**로, 소비재를 **음식료 / 화장품·뷰티 / 패션·의류 / 유통·상사 / "
+   + "레저·교육·여행** 5개로, 인터넷을 **인터넷·SW / 게임 / 미디어·엔터 / 통신**으로, 화학에서 "
+   + "**철강·금속**, 산업재에서 **운송·물류**, 건설에서 **부동산·리츠**, 에너지에서 **유틸리티**와 "
+   + "**전력기기·전선**, 금융에서 **증권·창투**를 분리했습니다.\n\n"
+   + "산업 탭·주식찾기·종목조회 배지·연도별 주도산업이 모두 새 분류를 씁니다. 주식찾기 밸류체인과 "
+   + "산업 지표(12그룹 큐레이션)는 매핑으로 연결됩니다 — 이 과정에서 건설 종목의 '산업 지표' 버튼이 "
+   + "키 불일치로 죽어 있던 잠복 버그도 고쳤습니다."],
   ["v395", "2026-08-13", "📈 원칙 성적 추이 — '원칙이 약해지는 중인가'",
    "재검증 때마다 축적만 되고 화면이 없던 **원칙별 성적 이력**(rule_history.json)을 원칙 탭에 "
    + "표로 추가했습니다. 채택 이력이 있는 원칙 16개의 재검증일별 20일 초과수익/승률과 변화 방향(▲▼), "
@@ -5232,31 +5243,70 @@ const SCR_GROUP_ETC = { key: "etc", icon: "🏢", name: "기타" };
 /* 한·미 공통 12산업군 — 수집 단계(market_dash)가 타일에 `grp`를 넣어준다.
    같은 기준을 주식찾기·산업 진단·종목조회가 함께 쓰므로 화면 간 산업이 어긋나지 않는다.
    (밸류체인 CHAINS는 대체가 아니라 이 아래의 '공정 단계' 축으로 병존) */
+/* v396: 15 → 30개 전면 재편(사용자 승인) — analysis/industry_map.py GROUPS와 1:1.
+   기존은 상위 6개 그룹이 전체의 70%를 차지해(반도체 482·바이오 435·소비재 430…) 로테이션 판단이
+   뭉개졌다. 재편 후 최대 379·최소 6, 전 그룹이 industry_years MIN_N(5) 이상. */
 const IND_GROUPS = [
   { key: "semi", icon: "🔌", name: "반도체" },
+  { key: "itparts", icon: "📡", name: "IT부품·통신장비" },
+  { key: "display", icon: "🖥️", name: "디스플레이" },
   { key: "battery", icon: "🔋", name: "2차전지" },
   { key: "auto", icon: "🚗", name: "자동차" },
-  { key: "bio", icon: "💊", name: "바이오·헬스" },
-  { key: "display", icon: "🖥️", name: "디스플레이" },
+  { key: "pharma", icon: "💊", name: "제약·바이오" },
+  { key: "meddev", icon: "🩺", name: "의료기기·헬스케어" },
+  { key: "food", icon: "🍜", name: "음식료" },
+  { key: "beauty", icon: "💄", name: "화장품·뷰티" },
+  { key: "apparel", icon: "👕", name: "패션·의류" },
+  { key: "retail", icon: "🛒", name: "유통·상사" },
+  { key: "leisure", icon: "🎡", name: "레저·교육·여행" },
+  { key: "internet", icon: "📱", name: "인터넷·SW" },
+  { key: "game", icon: "🎮", name: "게임" },
+  { key: "media", icon: "🎬", name: "미디어·엔터" },
+  { key: "telecom", icon: "📶", name: "통신" },
+  { key: "chem", icon: "⚗️", name: "화학" },
+  { key: "steel", icon: "🔩", name: "철강·금속" },
+  { key: "machinery", icon: "🏭", name: "기계·산업재" },
+  { key: "transport", icon: "🚚", name: "운송·물류" },
+  { key: "construction", icon: "🏗️", name: "건설·건자재" },
+  { key: "realestate", icon: "🏢", name: "부동산·리츠" },
   { key: "defense", icon: "🛡️", name: "방산·우주항공" },
   { key: "ship", icon: "🚢", name: "조선·해운" },
-  { key: "chem", icon: "⚗️", name: "화학·소재" },
-  { key: "energy", icon: "⛽", name: "에너지·유틸리티" },
-  { key: "machinery", icon: "🏭", name: "산업재·기계·운송" },
-  { key: "construction", icon: "🏗️", name: "건설·건자재" },
-  { key: "internet", icon: "📱", name: "인터넷·게임·엔터" },
-  { key: "finance", icon: "🏦", name: "금융" },
-  { key: "consumer", icon: "🛒", name: "소비재·유통" },
+  { key: "energy", icon: "⛽", name: "에너지" },
+  { key: "utility", icon: "💡", name: "유틸리티" },
+  { key: "electric", icon: "⚡", name: "전력기기·전선" },
+  { key: "finance", icon: "🏦", name: "금융(은행·보험)" },
+  { key: "securities", icon: "📈", name: "증권·창투" },
   // 사업이 여러 산업에 걸쳐 하나로 묶을 수 없는 복합 지주회사(LG·CJ·두산·롯데지주 등).
   // 자회사가 한 산업에 몰린 지주(POSCO홀딩스=철강)는 그 산업에 그대로 둔다.
   { key: "holding", icon: "🏛️", name: "지주회사" },
 ];
 const IND_BY_KEY = Object.fromEntries(IND_GROUPS.map((g) => [g.key, g]));
-/* 산업군 → 밸류체인(CHAINS) 매핑. 12개 중 10개는 키가 같고 디스플레이는 반도체·IT에 흡수,
-   건설은 이름만 다르다. **밸류체인은 별도 산업 선택 없이 산업군을 따라간다**(중복 제거). */
-// 산업 = 밸류체인 산업과 **키가 완전히 동일**해졌다(14개 1:1) → 매핑 없이 키를 그대로 쓴다.
-// ⚠CHAINS는 아래에서 선언되므로 즉시 참조하면 TDZ 오류 — 호출 시점에 확인한다.
-const chainOf = (grp) => (grp && CHAINS[grp] ? grp : null);
+/* 산업군(30) → 밸류체인(CHAINS 14) 매핑 — v396부터 다시 다:1이다(세분화된 그룹이 상위 체인을 공유).
+   ⚠CHAINS는 아래에서 선언되므로 즉시 참조하면 TDZ 오류 — 호출 시점에 확인한다. */
+const CHAIN_OF_GRP = {
+  semi: "semi", itparts: "semi", display: "display", battery: "battery", auto: "auto",
+  pharma: "bio", meddev: "bio",
+  food: "consumer", beauty: "consumer", apparel: "consumer", retail: "consumer", leisure: "consumer",
+  internet: "internet", game: "internet", media: "internet", telecom: "internet",
+  chem: "chem", steel: "chem", machinery: "machinery", transport: "machinery",
+  construction: "construction", realestate: "construction",
+  defense: "defense", ship: "ship",
+  energy: "energy", utility: "energy", electric: "energy",
+  finance: "finance", securities: "finance",
+};
+const chainOf = (grp) => { const k = CHAIN_OF_GRP[grp]; return k && CHAINS[k] ? k : null; };
+/* 산업군(30) → 산업지표(sector_metrics 12그룹) 매핑 — 지표 큐레이션은 12그룹 단위를 유지한다.
+   ⚠예전엔 tile.grp를 그대로 넘겨 construction→'construct' 불일치로 버튼이 죽는 잠복 버그가 있었다. */
+const SECMET_OF = {
+  semi: "semi", itparts: "semi", display: "semi", battery: "battery", electric: "battery",
+  auto: "auto", pharma: "bio", meddev: "bio", ship: "ship", transport: "ship",
+  chem: "chem", steel: "chem", construction: "construct", realestate: "construct",
+  finance: "finance", securities: "finance",
+  food: "consumer", beauty: "consumer", apparel: "consumer", retail: "consumer", leisure: "consumer",
+  internet: "internet", game: "internet", media: "internet", telecom: "internet",
+  defense: "defense", energy: "energy", utility: "energy",
+};
+const secmetOf = (grp) => SECMET_OF[grp] || null;
 const indName = (k) => (IND_BY_KEY[k] || SCR_GROUP_ETC).name;
 const indLabel = (k) => { const g = IND_BY_KEY[k] || SCR_GROUP_ETC; return `${g.icon} ${g.name}`; };
 function scrGroupOf(sec) { for (const g of SCR_GROUPS) if (g.sectors.includes(sec)) return g.key; return "etc"; }
@@ -5655,7 +5705,7 @@ function renderLookupIndustry(st) {
     const grp = MARKET?.heatmap?.find((t) => t.m === st.market && t.t === st.ticker)?.grp;
     host.innerHTML = `<span class="lk-ind-label">🏭 산업·밸류체인</span>` + links.map((l) =>
       `<button class="lk-ind-badge" data-ind="${l.ind}" data-stage="${l.stageKey}">${l.indIcon} ${l.indName}<span class="lk-ind-arrow">›</span>${l.stageIcon} ${l.stage}</button>`).join("")
-      + (grp ? `<button class="lk-ind-badge met" data-met="${grp}" title="이 산업의 수출·전방지표·합산 펀더멘털 보기">📊 산업 지표 →</button>` : "");
+      + (secmetOf(grp) ? `<button class="lk-ind-badge met" data-met="${secmetOf(grp)}" title="이 산업의 수출·전방지표·합산 펀더멘털 보기">📊 산업 지표 →</button>` : "");
     host.querySelectorAll(".lk-ind-badge").forEach((b) => b.onclick = () => {
       if (b.dataset.met) gotoSecmet(b.dataset.met);
       else scrOpenFromChain(b.dataset.ind, b.dataset.stage);
@@ -9302,7 +9352,8 @@ function wsShow(key) {
           fel.innerHTML = fundRows
             + `<button class="today-chart-btn" id="ws-ind-more" style="margin-top:8px">📊 산업 지표 자세히 →</button>`;
           const more = document.getElementById("ws-ind-more");
-          if (more && tile?.grp) more.onclick = () => gotoSecmet(tile.grp);
+          if (more && secmetOf(tile?.grp)) more.onclick = () => gotoSecmet(secmetOf(tile.grp));
+          else if (more) more.style.display = "none";   // 지표 큐레이션 없는 그룹(지주 등)
         }
       });
       wsRelChart(key, mk);                 // 동종업계 상대주가 추이
