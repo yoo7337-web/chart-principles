@@ -3099,13 +3099,13 @@ async function dsOwnCtx(name) {
   /* 상위 = ①소유구조에서 자기보다 위에 있는 지배회사 ②법인 최대주주.
      ⚠단순히 '자기로 들어오는 간선'을 다 담으면 **자기 자회사가 모회사 주식을 조금 들고 있는 것**까지
        상위로 뒤집혀 나온다(실측: 삼성전자 상위에 동진쎄미켐 0%). 지분율 1% 미만·개인은 뺀다. */
-  const up = g.edges.filter((e) => e.t === id && byId[e.f] && (e.rate || 0) >= 1
+  const up = g.edges.filter((e) => e.t === id && byId[e.f] && (e.rate ?? 1) >= 1
       && (byId[e.f].lvl < (self?.lvl ?? 0) || byId[e.f].lvl === -1) && isCorp(byId[e.f]))
-    .sort((a, b) => b.rate - a.rate).slice(0, 3).map((e) => info(e.f, e.rate));
+    .sort((a, b) => ownR(b) - ownR(a)).slice(0, 3).map((e) => info(e.f, e.rate));
   const parents = up;
   // 하위는 **상장 계열사를 먼저** — 해외 판매법인(SPC)이 100%라 지분율만으로 정렬하면 그것만 나온다
   const kids = g.edges.filter((e) => e.f === id && byId[e.t] && ownIsCtrl(byId[e.t], e.rate))
-    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || b.rate - a.rate)
+    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || ownR(b) - ownR(a))
     .slice(0, 6).map((e) => info(e.t, e.rate));
   return (parents.length || kids.length) ? { parents, kids, group: g.name } : null;
 }
@@ -3733,7 +3733,12 @@ function ownIsCtrl(n, rate) {
 let ownShowInv = false;
 let ownView = "dia";        // dia=공정위式 도식 / list=카드 목록
 let ownFit = true;          // 화면 폭에 맞춰 축소(끄면 원래 크기 + 가로 스크롤)
-function ownPct(v) { return (v >= 100 ? "100" : v.toFixed(v >= 10 ? 1 : 2)) + "%"; }
+/* 정렬용 지분율 — null(공시 오기로 비운 값)을 0으로 접어 NaN 비교를 막는다.
+   ⚠`b.rate - a.rate`를 그대로 두면 null이 섞이는 순간 비교자가 NaN을 반환해 정렬이 무너진다. */
+const ownR = (e) => e.rate ?? 0;
+/* ⚠null 허용: 공시 원문의 지분율이 100%를 넘는(=오기) 간선은 수집기가 rate를 비운다.
+   숫자를 지어내지 않고 라벨만 생략한다 — 옛 코드는 여기서 null.toFixed로 죽었다. */
+function ownPct(v) { return v == null ? "" : (v >= 100 ? "100" : v.toFixed(v >= 10 ? 1 : 2)) + "%"; }
 const ownEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /* 소유지분도 도식(v263) — 공정위 소유지분도와 같은 모양으로 그린다.
@@ -3807,10 +3812,10 @@ function ownDiagram(g, byId, out, root, kids) {
   const nListed = (e) => (byId[e.t].listed ? 1 : 0)
     + (out[byId[e.t].id] || []).filter((x) => ownIsCtrl(byId[x.t], x.rate) && byId[x.t].listed).length;
   const withAll = kids.filter((e) => nSub(e) > 0)
-    .sort((a, b) => (nListed(b) - nListed(a)) || (nSub(b) - nSub(a)) || (b.rate - a.rate));
+    .sort((a, b) => (nListed(b) - nListed(a)) || (nSub(b) - nSub(a)) || (ownR(b) - ownR(a)));
   const kidsWith = withAll.slice(0, MAXCOL);
   const kidsNoneAll = kids.filter((e) => !kidsWith.includes(e))
-    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || (b.rate - a.rate));
+    .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || (ownR(b) - ownR(a)));
   const kidsNone = kidsNoneAll.slice(0, Math.max(0, LIMIT - kidsWith.length));
   const omitted = kidsNoneAll.length - kidsNone.length;
   // 스택 열 수를 제한해 폭이 무한정 늘어나지 않게(세로로 길어지는 편이 읽기 낫다 — v388: 6 → 3)
@@ -3821,7 +3826,7 @@ function ownDiagram(g, byId, out, root, kids) {
   const nCol = kidsWith.length + stacks.length;
 
   const holders = g.edges.filter((e) => e.t === root.id && byId[e.f] && byId[e.f].lvl === -1)
-    .sort((a, b) => b.rate - a.rate);
+    .sort((a, b) => ownR(b) - ownR(a));
   const person = holders.filter((e) => !/\(주\)|㈜|회사|법인|Ltd|Inc/i.test(byId[e.f].name));
   const corp = holders.filter((e) => !person.includes(e));
 
@@ -3851,7 +3856,7 @@ function ownDiagram(g, byId, out, root, kids) {
     const x = GAPL + i * (COL + GAP), n = byId[e.t];
     svg += ownArrow(cx, yRoot + 42, x + COL / 2, yKid, e.rate);
     svg += ownShape(x, yKid, COL, BOX, "unit") + ownLabel(x, yKid, COL, BOX, n);
-    const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).sort((a, b) => b.rate - a.rate);
+    const gk = (out[n.id] || []).filter((x2) => ownIsCtrl(byId[x2.t], x2.rate)).sort((a, b) => ownR(b) - ownR(a));
     /* ⚠지분율 라벨을 박스보다 **먼저** 그리면 박스가 덮어 숫자가 잘려 보인다(신세계 실측: '61.2%'가 '6'만 보임).
        → 박스를 먼저 그리고 라벨을 마지막에, 그리고 배선 왼쪽 여백(IND)을 라벨 폭만큼 확보한다. */
     const IND = 34;
@@ -3991,13 +3996,13 @@ function ownRender() {
   // 1) 최대주주 → 루트
   const hs = holders.map((e) => chip(byId[e.f], e.rate)).join("");
   // 2) 루트 → 자회사(지분율 높은 순), 자회사가 다시 자회사를 가지면 접이식으로
-  const allKids = (out[root.id] || []).slice().sort((a, b) => b.rate - a.rate);
+  const allKids = (out[root.id] || []).slice().sort((a, b) => ownR(b) - ownR(a));
   const ctrl = allKids.filter((e) => ownIsCtrl(byId[e.t], e.rate));
   const inv = allKids.filter((e) => !ownIsCtrl(byId[e.t], e.rate));
   const kids = ownShowInv ? allKids : ctrl;
   const kidHtml = kids.map((e) => {
     const n = byId[e.t];
-    const gk = (out[n.id] || []).slice().sort((a, b) => b.rate - a.rate);
+    const gk = (out[n.id] || []).slice().sort((a, b) => ownR(b) - ownR(a));
     const purpose = n.purpose && n.purpose !== "경영참여" ? n.purpose : null;
     return `<div class="own-branch">
       ${chip(n, e.rate, purpose)}
