@@ -3071,7 +3071,9 @@ function dsOwnClean(nm) {
 }
 
 async function dsOwnCtx(name) {
-  /* 회사명 → {parents:[{name,rate,listed,ticker}], kids:[...]} · 없으면 null */
+  /* 회사명 → {key, group, parents:[{name,rate,listed,ticker}], kids:[...]} · 없으면 null
+     ⚠`key`(어느 그래프에서 찾았는지)를 함께 돌려준다 — 종목조회의 '소유지분도 전체 보기'가
+       **자기 지분도가 없는 종목**(코오롱글로벌 등)을 소속 그룹 그래프로 보내는 데 쓴다. */
   if (!name) return null;
   if (DS_OWN_IDX === null) {
     DS_OWN_IDX = await fetch("data/ownership/search.json" + _cb)
@@ -3107,7 +3109,7 @@ async function dsOwnCtx(name) {
   const kids = g.edges.filter((e) => e.f === id && byId[e.t] && ownIsCtrl(byId[e.t], e.rate))
     .sort((a, b) => (byId[b.t].listed ? 1 : 0) - (byId[a.t].listed ? 1 : 0) || ownR(b) - ownR(a))
     .slice(0, 6).map((e) => info(e.t, e.rate));
-  return (parents.length || kids.length) ? { parents, kids, group: g.name } : null;
+  return (parents.length || kids.length) ? { parents, kids, group: g.name, key: k } : null;
 }
 
 /* 구조도 공통(v280) — 회사명이 길어 잘리던 문제를 **2줄 래핑**으로 푼다.
@@ -3895,8 +3897,16 @@ function ownDiagram(g, byId, out, root, kids) {
 }
 
 let OWN_SEARCH = null, OWN_NAMES = [], ownQ = "", ownHL = null;
+/* 다른 탭에서 "이 회사 지분도로" 하고 넘어올 때 목적지를 담아 둔다({key, hl}).
+   ⚠initOwnership이 **끝에서 기본 그래프를 연다** — 이걸 안 보고 나중에 ownLoad를 부르면
+     기본 그래프가 먼저 그려졌다가 덮이거나(깜빡임), 초기화 경쟁에 밀려 아예 무시된다. */
+let ownPending = null;
+/* ⚠호출자가 **완료를 기다릴 수 있어야** 한다 — 옛 코드는 setTimeout(300)으로 짐작했고
+   index.json+search.json 두 fetch가 늦으면 그대로 빗나갔다. promise를 memo해 재진입도 안전하게. */
+let ownInitP = null;
+function initOwnership() { return ownInitP || (ownInitP = initOwnershipRun()); }
 
-async function initOwnership() {
+async function initOwnershipRun() {
   ownRendered = true;
   if (!LOOKUP_INDEX) await aiIndexReady();
   if (!OWN_IDX) {
@@ -3918,7 +3928,10 @@ async function initOwnership() {
   const q = $("#own-q");
   if (q) q.oninput = () => { ownQ = q.value.trim(); ownPickRender(); };
   ownPickRender();
-  ownLoad(ownSel && OWN_IDX.includes(ownSel) ? ownSel : OWN_NAMES[0].key);
+  // 목적지가 예약돼 있으면 그걸 연다(기본 그래프를 먼저 그렸다 덮는 낭비·깜빡임 없음)
+  const want = ownPending && OWN_IDX.includes(ownPending.key) ? ownPending : null;
+  ownPending = null;
+  ownLoad(want ? want.key : (ownSel && OWN_IDX.includes(ownSel) ? ownSel : OWN_NAMES[0].key), want?.hl);
 }
 
 /* 회사 선택 — 드롭다운은 300개를 훑기 어렵다 → 목록 + 검색.
@@ -12078,16 +12091,27 @@ async function ovGroup(st) {
     <div class="ov-relrow"><a class="ext-link" href="#" id="ov-own-go">소유지분도 전체 보기 →</a></div></div>`;
   el.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => loadLookup(b.dataset.go));
   const go = document.getElementById("ov-own-go");
-  if (go) go.onclick = (e) => {
-    e.preventDefault();
-    gotoTabFull("ownership");
-    if (!ownRendered) initOwnership();
-    // ⚠배열엔 `in`을 쓰면 인덱스 검사가 된다 — includes로 판정
-    setTimeout(() => {
-      const own = `kr_${st.ticker}`;
-      ownLoad((OWN_IDX || []).includes(own) ? own : ownSel, dsOwnClean(name));
-    }, 300);
-  };
+  if (go) {
+    /* 목적지 결정(v407) — ①이 종목 자체 지분도가 있으면 그것 ②없으면 **이 종목이 들어 있는 그룹
+       지분도**(ctx.key, 위 그룹 관계를 뽑아온 바로 그 그래프)로 보내고 회사명을 강조한다.
+       ⚠옛 코드는 ②에서 `ownSel`(직전에 보던 그룹, 첫 진입이면 null)로 폴백해 **엉뚱한 그룹**이
+         열렸다 — "그냥 소유지분도 화면으로만 링크된다"는 제보의 정체.
+       ⚠자체 지분도 유무는 `DS_OWN_IDX.groups`로 판정한다(index.json과 키가 동일 — 실측 489/489).
+         OWN_IDX는 지분도 탭을 한 번도 안 열었으면 아직 null이라 못 쓴다. */
+    const own = `kr_${st.ticker}`;
+    const target = (DS_OWN_IDX?.groups?.[own] ? own : ctx.key) || null;
+    go.onclick = async (e) => {
+      e.preventDefault();
+      if (target) ownPending = { key: target, hl: dsOwnClean(name) };
+      gotoTabFull("ownership");            // 첫 진입이면 여기서 initOwnership이 시작된다
+      await initOwnership();               // ⚠await — setTimeout 짐작을 대체(로드 경쟁 제거)
+      if (ownPending) {                    // 이미 초기화돼 있었다면 여기서 소비
+        const p = ownPending;
+        ownPending = null;
+        ownLoad(p.key, p.hl);
+      }
+    };
+  }
 }
 
 /* ---------- 📚 사업 심층 (v221) — 사업보고서 '사업의 내용'/10-K Item 1 발췌 ---------- */
