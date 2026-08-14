@@ -97,23 +97,72 @@ _NAME_FIX = {
 # 공시 회사명에는 표 각주가 붙어 나온다 — (주1)(주2) · (계열회사) · (*1) · (상장) 등.
 # 회사 이름의 일부가 아니므로 **표시명에서도** 떼어낸다(사용자 요청).
 _NOTE = re.compile(r"\s*\(\s*(주\s*\d+|주석\s*\d*|\*+\d*|계열\s*회사|관계\s*회사|비상장|상장|"
+                   r"유가증권시장\s*상장|코스닥\s*시장\s*상장|상장\s*예정[^)]*|"
                    r"연결|종속\s*회사|공동\s*기업|관계\s*기업)\s*\)")
 
 
+# ⚠DART 출자현황·최대주주 표는 **법인명 칸에 주식 종류를 줄바꿈으로 붙여** 신고한다
+#   (실측 "코오롱글로벌\n보통주" · "코오롱모빌리티그룹\n우선주,"). 이걸 안 떼면
+#   ①같은 회사가 '코오롱글로벌보통주'/'코오롱글로벌우선주'로 갈라지고 ②상장사 매칭도 실패하며
+#   ③종류별 지분율이 합산돼 **129.46%** 같은 값이 나온다(2026-08-07 실측).
+#   ⚠⚠제거 **순서**가 중요하다 — 실제 값은 `'코오롱인더스트리\n보통주 (주1)'`처럼
+#     **주식 종류 뒤에 각주가 또 붙는다**. 종류를 먼저 지우려 하면 끝($) 앵커가 안 맞아 실패한다.
+#     → ①줄바꿈 정리 ②각주 제거 ③그 다음에 종류 제거 ④남은 구두점 정리.
+#
+#   ⚠2026-08-14 재점검: 접미형($ 앵커)만 잡던 옛 규칙은 **실제 표기의 1/6도 못 뗐다**(272건 중 44건만).
+#     종류 표기는 이름 **끝이 아니라 중간에도** 온다 — `㈜메타보라 보통주 (구. ㈜프렌즈게임즈)`,
+#     `Interact Group Ltd(보통주) (구. Cold Brew…)`. 뒤에 부연이 붙는 형태도 제각각이다:
+#     `(RCPS1)`·`(2차)`·`(구주)`·`(15우)`·`(의무인수주식)`·`(상장예정 2026.1.12)`·` RCPS`·` 비상장`·` 및`.
+#     → **끝 앵커를 버리고 '종류 낱말을 어디서든 지운다'**. '보통주/우선주/종류주/기타주'는 한국 사명에
+#       들어가는 낱말이 아니라 오탐 위험이 사실상 없다.
+#   ⚠⚠괄호 균형을 반드시 지킬 것 — `(제1종 종류주)`에서 닫는 괄호만 먹으면 `(유)서빈산업개발(제1종`처럼
+#     **여는 괄호가 남는다**(첫 구현 실측 버그). → 괄호가 통째로 종류인 경우를 **먼저 쌍으로** 제거한다.
+_KIND_CORE = (r"(?:제\s*[0-9A-Z]+\s*종\s*|\d+\s*종\s*)?"                  # 제G종 · 1종
+              r"(?:상환\s*전환|전환\s*상환|전환|상환|신형|구형|무의결권)?\s*"   # 상환전환·전환…
+              r"\d*\s*(?:보통|우선|종류|기타)\s*주식?")                      # 2우선주 · 보통주식
+# 종류 뒤에 붙는 짧은 부연(괄호 또는 낱말) — 회사 이름이 아니다
+_KIND_QUAL = (r"(?:\s*\(\s*[^()]{0,18}?\s*\))?"
+              r"(?:\s*(?:RCPS\d*|CPS\d*|BW|구주|신주|비상장|출자|투자|및|&\s*전환|\d+\s*우))*")
+_KIND_PAREN = re.compile(r"\s*\(\s*" + _KIND_CORE + r"[^()]{0,14}?\s*\)", re.I)
+_KIND_ANY = re.compile(_KIND_CORE + _KIND_QUAL, re.I)
+
+
+def _strip_kind(nm: str) -> str:
+    """주식 종류 표기 제거 — 각주가 이미 떨어진 문자열에 쓴다."""
+    s = str(nm or "").replace("\n", " ").replace("\r", " ")
+    for pat in (_KIND_PAREN, _KIND_ANY):
+        s2 = pat.sub("", s)
+        if s2.strip(" ,·()"):              # ⚠이름이 통째로 날아가면 되돌린다
+            s = s2
+    s = re.sub(r"\(\s*\)", "", s)          # 내용이 다 빠진 빈 괄호
+    s = re.sub(r"\s+\)", ")", s)
+    s = re.sub(r"\(\s+", "(", s)
+    return re.sub(r"\s{2,}", " ", s).strip(" ,·&")
+
+
 def _disp(nm: str) -> str:
-    """화면에 쓸 회사명 — 각주만 떼고 법인격 표기((주)·㈜)는 남긴다."""
-    s = _NOTE.sub("", str(nm or ""))
+    """화면에 쓸 회사명 — 각주·주식종류만 떼고 법인격 표기((주)·㈜)는 남긴다."""
+    s = _NOTE.sub("", str(nm or "").replace("\n", " ").replace("\r", " "))
     s = re.sub(r"\s*주\s*\d+\s*\)", "", s)      # 여는 괄호가 빠진 '두산로보틱스주1)' 형태
+    s = _strip_kind(s)                          # 각주를 뗀 다음에 종류를 뗀다(순서 중요)
     return re.sub(r"\s{2,}", " ", s).strip(" ,·")
 
 
 def _clean(nm: str) -> str:
-    """'(주)하림지주' '하림지주(주)' → '하림지주' (상장 여부 매칭·중복 제거용)"""
-    s = re.sub(r"\(주\)|㈜|주식회사|\(유\)|유한회사", "", str(nm or ""))
+    """'(주)하림지주' '하림지주(주)' → '하림지주' (상장 여부 매칭·중복 제거용)
+    ⚠'코오롱글로벌\\n보통주'처럼 주식 종류가 붙은 표기도 같은 회사로 모은다."""
+    s = str(nm or "").replace("\n", " ").replace("\r", " ")
+    # ⚠종류 제거를 **법인격 표기 제거보다 먼저** 한다 — '에스비바이오팜(주) (상환전환우선주)'처럼
+    #   괄호가 둘이면 (주)를 먼저 지웠을 때 남은 괄호 짝이 어긋나 꼬리 매치가 실패한다.
+    s = _NOTE.sub("", s)
+    s = _strip_kind(s)
+    s = re.sub(r"\(주\)|㈜|주식회사|\(유\)|유한회사", "", s)
     s = re.sub(r"\s+", "", s)
     s = re.sub(r"\((주\d+|계열회사|관계회사|비상장|상장|주\d*\)?)\)", "", s)   # 각주·분류 꼬리
     s = re.sub(r"주\d+\)", "", s)
-    s = s.strip()
+    # 각주를 뗀 뒤에 주식 종류를 한 번 더(공백이 지워져 '…글로벌보통주'처럼 붙은 형태가 된다)
+    s = _strip_kind(s)
+    s = re.sub(r"[,·]+$", "", s).strip()
     for a, b in _ALIAS:                                # 한글 음차 → 영문 약자
         if s.startswith(a):
             s = b + s[len(a):]
@@ -150,13 +199,42 @@ def top_holders(key: str, corp_code: str, year: int) -> list:
         return []
     if r.get("status") != "000":
         return []
+    return _fold_holders(r.get("list", []))
+
+
+def _fold_holders(rows: list) -> list:
+    """최대주주 행(주식 종류별로 쪼개져 온다)을 주주 1인 1행으로 접는다.
+
+    ⚠**합산하지 않는다** — 종류별 지분율은 각각 '그 종류 안에서의 비율'이라 더하면 129.46%처럼
+      100%를 넘는다. 지배력의 기준은 의결권이므로 **`stock_knd`가 의결권 있는(보통) 주식인 행**을
+      쓰고, 종류 표기가 없을 때만 최대값으로 폴백한다.
+    ⚠실측 2026-08-14: DART의 stock_knd는 '보통주/우선주'가 아니라 **'의결권있는주식'/'의결권없는주식'**으로
+      온다(코오롱글로벌: ㈜코오롱 의결권있는 72.70 + 의결권없는 56.76 = 129.46 → 정답은 72.70).
+    """
     agg = {}
-    for x in r.get("list", []):
-        nm, rt = (x.get("nm") or "").strip(), _num(x.get("trmend_posesn_stock_qota_rt"))
+    for x in rows:
+        nm, rt = _strip_kind(x.get("nm") or ""), _num(x.get("trmend_posesn_stock_qota_rt"))
         if not nm or _NOT_COMPANY.match(nm) or not rt:
             continue
-        agg[nm] = agg.get(nm, 0) + rt
-    return [{"name": n, "rate": round(v, 2)} for n, v in sorted(agg.items(), key=lambda x: -x[1])[:6]]
+        knd = str(x.get("stock_knd") or "").replace(" ", "")
+        v = agg.setdefault(nm, {"vote": None, "mx": 0.0})
+        if "의결권있는" in knd or "보통" in knd:
+            v["vote"] = max(v["vote"] or 0.0, rt)
+        v["mx"] = max(v["mx"], rt)
+    fold = {n: (v["vote"] if v["vote"] is not None else v["mx"]) for n, v in agg.items()}
+    return [{"name": n, "rate": round(v, 2)} for n, v in sorted(fold.items(), key=lambda x: -x[1])[:6]]
+
+
+def _rate(v):
+    """지분율 sanity — (표시값, 오기값). 100%를 넘는 지분율은 물리적으로 불가능하다.
+
+    ⚠실측 2026-08-14: **공시 원문 자체가 틀린 경우**가 있다 — 대상홀딩스→PT DAESANG은 지분율 칸에
+      주식수(204주)를 적었고, 산일전기→산일파트너스는 200.0으로 신고돼 있다. 참값을 복원할 방법이
+      없으므로 **틀린 숫자를 그리지 않는다**(rate=None). 관계 자체는 사실이라 간선은 남긴다.
+    """
+    if v is None:
+        return None, None
+    return (None, round(v, 2)) if v > 100.5 else (round(v, 2), None)
 
 
 def build(code: str, name: str, key: str, codes: dict, listed: dict,
@@ -194,7 +272,8 @@ def build(code: str, name: str, key: str, codes: dict, listed: dict,
         if _clean(h["name"]) == root:
             continue                                    # 자기주식은 지배구조가 아니다
         hk = add_node(_disp(h["name"]), -1, kind="holder")
-        edges.append({"f": hk, "t": root, "rate": h["rate"]})
+        rt_ok, rt_bad = _rate(h["rate"])
+        edges.append({"f": hk, "t": root, "rate": rt_ok, **({"rate_bad": rt_bad} if rt_bad else {})})
     time.sleep(0.25)
 
     # 하단: 출자 관계 BFS — 큐에는 corp_code(8자리)를 담아 **비상장 중간지주도** 내려간다
@@ -217,7 +296,19 @@ def build(code: str, name: str, key: str, codes: dict, listed: dict,
                          purpose=(x.get("invstmnt_purps") or "").strip() or None,
                          book=_num(x.get("trmend_blce_acntbk_amount")),
                          since=(x.get("frst_acqs_de") or "").strip() or None)
-            edges.append({"f": pk, "t": k, "rate": rt})
+            # 같은 (모회사→자회사)가 주식 종류별로 여러 행 → 간선 중복. 최대값으로 하나만 남긴다.
+            # ⚠지분율 sanity(_rate)는 **합치기 전에** 건다 — 오기값(200%)이 max를 이기면 안 된다.
+            rt_ok, rt_bad = _rate(rt)
+            dup = next((e for e in edges if e["f"] == pk and e["t"] == k and "via" not in e), None)
+            if dup:
+                if rt_ok is not None:
+                    dup["rate"] = max(dup.get("rate") or 0, rt_ok)
+                    dup.pop("rate_bad", None)
+                elif dup.get("rate") is None and rt_bad:
+                    dup["rate_bad"] = max(dup.get("rate_bad") or 0, rt_bad)
+            else:
+                edges.append({"f": pk, "t": k, "rate": rt_ok,
+                              **({"rate_bad": rt_bad} if rt_bad else {})})
             # 지배 관계(경영참여·과반)만 더 내려간다 — 단순투자까지 파면 그래프가 폭발한다
             ctrl = (rt >= 30) or bool(re.search(r"경영\s*(참여|참가)|지배", str(x.get("invstmnt_purps") or "")))
             _v = names.get(_clean(nm))
@@ -236,7 +327,9 @@ def build(code: str, name: str, key: str, codes: dict, listed: dict,
             if sk == root or sk == owner_name or any(e["t"] == sk and e["f"] == owner_name for e in edges):
                 continue
             add_node(s["name"], nodes[owner_name]["lvl"] + 1)
-            edges.append({"f": owner_name, "t": sk, "rate": s["rate"], "via": "holder"})
+            rt_ok, rt_bad = _rate(s["rate"])
+            edges.append({"f": owner_name, "t": sk, "rate": rt_ok, "via": "holder",
+                          **({"rate_bad": rt_bad} if rt_bad else {})})
     # 루트는 항상 lvl 0 — add_node의 min()이 **자기주식·자기 이름 주주** 때문에 -1로 낮출 수 있다
     # (실측: 두산테스나 그래프의 루트가 lvl -1이 되어 '이 회사가 속한 그룹' 색인에서 빠졌다)
     nodes[root]["lvl"] = 0

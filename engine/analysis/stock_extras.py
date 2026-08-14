@@ -762,7 +762,9 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
             if old.get("fin_src") == "DART" and any(r["y"] == target_year for r in old.get("fin", [])):
                 cmap[k]["fin"] = ([r for r in old["fin"] if not r.get("est")] + est)[-6:]
                 cmap[k]["fin_src"] = "DART"
-                if old.get("holders"):  # 주주구성도 연 1회 변화 — 재사용
+                # 주주구성도 연 1회 변화 — 재사용. ⚠단 **합산 버그로 100%를 넘는 옛 값은 재사용하지
+                #   않는다** — 재사용 경로가 있으면 수집기를 고쳐도 오염된 값이 영원히 살아남는다.
+                if old.get("holders") and not any((h.get("pct") or 0) > 100 for h in old["holders"]):
                     cmap[k]["holders"] = old["holders"]
                     if old.get("minor_pct") is not None:
                         cmap[k]["minor_pct"] = old["minor_pct"]
@@ -782,13 +784,25 @@ def build_company(quick: bool = False, prev: dict | None = None) -> dict:
                 hy = _getj(f"https://opendart.fss.or.kr/api/hyslrSttus.json?crtfc_key={_DART[0]}"
                            f"&corp_code={_DART[1][code]}&bsns_year={target_year}&reprt_code=11011")
                 if hy.get("status") == "000":
+                    # ⚠**주식 종류별 행을 합산하면 안 된다**(2026-08-14 실사고): 최대주주 표는 같은
+                    #   주주가 stock_knd별로 여러 행이고, 각 지분율은 **그 종류 안에서의 비율**이다.
+                    #   더하면 100%를 넘는다 — 코오롱글로벌 ㈜코오롱 = 의결권있는 72.70 + 없는 56.76
+                    #   = 129.46%로 저장돼 있었고, 그 값이 소유지분도(rev_holders)까지 오염시켰다.
+                    #   ⚠stock_knd 표기는 '보통주/우선주'가 아니라 **'의결권있는주식/의결권없는주식'**이다.
+                    #   → 지배력 기준인 의결권 있는 행을 쓰고, 종류 표기가 없을 때만 최대값 폴백.
                     rows = {}
                     for r in hy["list"]:
                         pctv = _num(r.get("trmend_posesn_stock_qota_rt"))
                         nm = (r.get("nm") or "").strip()
-                        if pctv and nm and nm != "계":
-                            rows[nm] = rows.get(nm, 0) + pctv
-                    top = sorted(rows.items(), key=lambda x: -x[1])[:6]
+                        if not (pctv and nm) or nm in ("계", "합계", "소계", "총계"):
+                            continue
+                        knd = str(r.get("stock_knd") or "").replace(" ", "")
+                        cur = rows.setdefault(nm, {"vote": None, "mx": 0.0})
+                        if "의결권있는" in knd or "보통" in knd:
+                            cur["vote"] = max(cur["vote"] or 0.0, pctv)
+                        cur["mx"] = max(cur["mx"], pctv)
+                    top = sorted(((n, v["vote"] if v["vote"] is not None else v["mx"])
+                                  for n, v in rows.items()), key=lambda x: -x[1])[:6]
                     if top:
                         cmap[k]["holders"] = [{"name": n, "pct": round(v, 2), "rel": "최대주주측"} for n, v in top]
                 time.sleep(0.25)
