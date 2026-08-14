@@ -150,6 +150,20 @@ def save_parquet(df: pd.DataFrame, path: Path) -> None:
     os.replace(tmp, path)
 
 
+def _limit_viol(df: pd.DataFrame, lim: float = 0.31,
+                start: str = "2015-06-15") -> int:
+    """KR 가격제한폭(±30%, 2015-06-15 시행)을 넘는 일간 변동 행 수.
+
+    실제로 제한폭을 넘을 수 있는 건 신규상장·거래재개·액면분할 기준일뿐이라 **정상 종목은 한 자릿수**다
+    (실측: 정상 61종목의 위반 합계가 76일, 최다 4일). 두 자릿수를 넘으면 조정 기준이 섞인 것이다.
+    """
+    try:
+        c = df.loc[df.index >= pd.Timestamp(start), "close"].astype("float64")
+        return int((c.pct_change().abs() > lim).sum())
+    except Exception:
+        return 0
+
+
 def save_merge(df: pd.DataFrame, path: Path) -> None:
     """기존 parquet과 **병합** 후 원자적 저장(겹치는 날짜는 새 수집이 이김).
 
@@ -162,8 +176,21 @@ def save_merge(df: pd.DataFrame, path: Path) -> None:
     if path.exists():
         try:
             old = pd.read_parquet(path)
-            df = pd.concat([old, df]).sort_index()
-            df = df[~df.index.duplicated(keep="last")]
+            merged = pd.concat([old, df]).sort_index()
+            merged = merged[~merged.index.duplicated(keep="last")]
+            # 🐞💀**병합이 조정 기준을 섞는다**(2026-08-14 실사고): 부분 수집이 반복되면 새 수집에 없는
+            #   날짜의 옛 행이 **옛 조정 기준 그대로** 살아남아, 한 파일 안에 액면분할 전/후 가격이
+            #   무작위로 섞인다(실측 16종목 · 동성제약은 3,005행 중 972행이 ±30% 제한폭 위반).
+            #   거래량은 정상이라 눈에 안 띄고, 이벤트 스터디의 **평균을 통째로 왜곡**했다
+            #   (KR 초과수익 +9% → +28%가 이 꼬리 때문이었다).
+            # → 병합본이 새 수집본보다 제한폭 위반이 많으면 **병합을 포기하고 새 수집만** 쓴다.
+            if path.name.startswith("kr_"):
+                v_new, v_mrg = _limit_viol(df), _limit_viol(merged)
+                if v_mrg > max(5, v_new + 5):
+                    print(f"  ⚠{path.name}: 병합 시 제한폭 위반 {v_new}→{v_mrg}일 — 조정 기준 혼입으로 보고 "
+                          f"병합 포기(새 수집 {len(df)}행만 사용)", file=sys.stderr)
+                    merged = df
+            df = merged
         except Exception as e:                      # 손상 파일이면 새 수집으로 대체(자가 치유)
             print(f"  기존 파일 병합 실패({path.name}: {e}) — 새 수집으로 대체", file=sys.stderr)
     save_parquet(df, path)
