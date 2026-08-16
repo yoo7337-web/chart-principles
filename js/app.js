@@ -15780,6 +15780,15 @@ function pfDiagnose(arr) {
   // ⚠`pct()`는 **증감률용이라 항상 부호를 붙인다** — 비중·승률 같은 '비율'에 쓰면 "+53%"가 된다.
   //   비율은 부호 없는 rat()로 쓴다(첫 구현에서 1위 비중·승률·레버리지 비중이 전부 +로 나왔다).
   const rat = (v, d = 0) => (v * 100).toFixed(d) + "%";
+  /* v414: 카드마다 미니 그래프(제보 "글로만 설명돼 눈에 안 들어온다").
+     ⚠SVG 텍스트 금지(v412 교훈: viewBox 배율로 폰트가 어긋난다) — 전부 HTML 막대 + 토큰 폰트. */
+  const hbar = (rows2, fmt) => {
+    const mx = Math.max(...rows2.map((r) => Math.abs(r.v))) || 1;
+    return `<div class="pfd-viz">${rows2.map((r) => `<div class="pfd-brow${r.hl ? " hl" : ""}">
+      <span>${r.nm}</span>
+      <span class="pfd-btrack"><i style="width:${(Math.abs(r.v) / mx * 100).toFixed(1)}%;background:${r.col}"></i></span>
+      <b class="${r.v >= 0 ? "pos" : "neg"}">${fmt(r.v)}</b></div>`).join("")}</div>`;
+  };
   const out = [];
   const tot = arr.reduce((s, h) => s + (h.val || 0), 0) || 1;
   const ts = pfTradeStats();
@@ -15796,7 +15805,8 @@ function pfDiagnose(arr) {
       const lines = [
         `기간 <b>${ts.from} ~ ${ts.to}</b> (${ts.months}개월) · 총 투입 ${won(ts.invested)}`,
         `내 성과 — 실현 <b class="${ts.total >= 0 ? "pos" : "neg"}">${won(ts.total, true)}</b> · 평가 <b class="${unreal >= 0 ? "pos" : "neg"}">${pct(unreal, 1)}</b>`,
-        `같은 기간 시장 — ${bench.map((b) => `${b.name} <b>${pct(b.ret, 1)}</b>`).join(" · ")}`,
+        hbar([{ nm: "내 성과(평가)", v: unreal, col: unreal >= 0 ? "var(--kup)" : "var(--kdn)", hl: 1 },
+              ...bench.map((b) => ({ nm: b.name, v: b.ret, col: "#8e97a6" }))], (v) => pct(v, 1)),
       ];
       out.push(gap < -0.15
         ? { lev: "bad", title: `시장을 크게 놓치고 있습니다 (${best.name} 대비 ${rat(gap, 0)}p)`, lines,
@@ -15815,16 +15825,24 @@ function pfDiagnose(arr) {
   arr.forEach((h) => { const s = pfCheck(h).sector; if (s) secW[s] = (secW[s] || 0) + (h.val || 0); });
   const topSec = Object.entries(secW).sort((a, b) => b[1] - a[1])[0];
   const top1 = arr.slice().sort((a, b) => (b.val || 0) - (a.val || 0))[0];
+  const PFD_COLS = ["#f5445a", "#4391ff", "#22c07a", "#f0b34c", "#a78bfa", "#38bdf8", "#fb923c", "#8e97a6"];
+  const stack = `<div class="pfd-stack">${arr.slice().sort((a, b) => (b.val || 0) - (a.val || 0))
+    .map((h, i) => {
+      const w2 = (h.val || 0) / tot * 100;
+      return `<i style="width:${w2.toFixed(2)}%;background:${PFD_COLS[Math.min(i, PFD_COLS.length - 1)]}"
+        title="${esc(h.name)} ${w2.toFixed(1)}%">${w2 >= 9 ? esc(h.name).slice(0, 7) : ""}</i>`;
+    }).join("")}</div>`;
   if (ws[0] > 0.3 || top3 > 0.6 || hhi > 0.2) {
     out.push({ lev: ws[0] > 0.4 || hhi > 0.25 ? "bad" : "warn",
       title: `집중도가 높습니다 — 1위 ${rat(ws[0], 0)}${top1 ? ` (${esc(top1.name)})` : ""}`,
       lines: [
+        stack,
         `상위 3종목 <b>${rat(top3, 0)}</b> · 허핀달지수 <b>${hhi.toFixed(3)}</b> <span class="sub-note">(0.2↑ 고집중 · 1/n 분산이면 ${(1 / arr.length).toFixed(3)})</span>`,
         topSec ? `최대 산업 <b>${esc(topSec[0])} ${rat(topSec[1] / tot, 0)}</b>` : "",
       ].filter(Boolean),
       advice: `한 종목의 실패가 포트폴리오 전체를 결정하는 상태입니다. 상위 종목 비중을 줄이거나, 같이 움직이지 않는 자산(다른 산업·국가·채권)을 채워 상관을 낮추는 것이 우선입니다.` });
   } else {
-    out.push({ lev: "good", title: `분산이 양호합니다 — 1위 ${rat(ws[0], 0)} · 허핀달 ${hhi.toFixed(3)}`, lines: [], advice: "" });
+    out.push({ lev: "good", title: `분산이 양호합니다 — 1위 ${rat(ws[0], 0)} · 허핀달 ${hhi.toFixed(3)}`, lines: [stack], advice: "" });
   }
 
   // ③ 레버리지·고위험 자산
@@ -15837,8 +15855,10 @@ function pfDiagnose(arr) {
       title: `레버리지·고위험 상품 ${rat(lv / tot, 0)} 보유`,
       lines: [
         `대상 ${lev.map((h) => `${esc(h.name)} <b class="${(h.plRate || 0) >= 0 ? "pos" : "neg"}">${pct(h.plRate || 0, 0)}</b>`).join(" · ")}`,
-        lpnl != null ? `이 그룹 실현손익 <b class="${lpnl >= 0 ? "pos" : "neg"}">${won(lpnl, true)}</b>` +
-          (rest != null ? ` · 나머지 전체 <b class="${rest >= 0 ? "pos" : "neg"}">${won(rest, true)}</b>` : "") : "",
+        lpnl != null && rest != null ? hbar([
+          { nm: "레버리지 실현", v: lpnl, col: lpnl >= 0 ? "var(--kup)" : "var(--kdn)", hl: 1 },
+          { nm: "나머지 실현", v: rest, col: rest >= 0 ? "var(--kup)" : "var(--kdn)" },
+        ], (v) => won(v, true)) : (lpnl != null ? `이 그룹 실현손익 <b class="${lpnl >= 0 ? "pos" : "neg"}">${won(lpnl, true)}</b>` : ""),
       ].filter(Boolean),
       advice: `레버리지 상품은 <b>일간 수익률을 배수로 추종</b>해서, 방향을 맞혀도 횡보 구간을 지나면 원금이 깎입니다(변동성 손실). 장기 보유 자산으로는 설계 자체가 맞지 않습니다.` });
   }
@@ -15849,9 +15869,13 @@ function pfDiagnose(arr) {
     out.push({ lev: ts.pf != null && ts.pf < 1 ? "warn" : good ? "good" : "warn",
       title: `매매 습관 — 승률 ${rat(ts.winRate, 0)} · 손익비 ${ts.pf != null ? ts.pf.toFixed(2) : "-"}`,
       lines: [
-        `청산 ${ts.n}건 — 이긴 거래 평균 <b class="pos">${pct(ts.avgWinRet, 1)}</b> · 진 거래 평균 <b class="neg">${pct(ts.avgLosRet, 1)}</b>`,
-        `보유기간 중앙 <b>${ts.medHold}일</b> — 이긴 거래 <b>${ts.medWinHold}일</b> / 진 거래 <b>${ts.medLosHold}일</b>` +
-          (good ? ` <span class="pos">← 이익은 길게, 손실은 짧게 (바람직)</span>` : ` <span class="neg">← 손실을 더 오래 들고 있습니다(처분효과)</span>`),
+        `청산 ${ts.n}건 · 승 ${ts.winN} / 패 ${ts.n - ts.winN}`,
+        hbar([{ nm: "이긴 거래 평균", v: ts.avgWinRet, col: "var(--kup)" },
+              { nm: "진 거래 평균", v: ts.avgLosRet, col: "var(--kdn)" }], (v) => pct(v, 1)),
+        hbar([{ nm: "이긴 보유기간", v: ts.medWinHold, col: "#22c07a" },
+              { nm: "진 보유기간", v: ts.medLosHold, col: "#f0b34c" }], (v) => v + "일") +
+          (good ? `<div class="sub-note pos">← 이익은 길게, 손실은 짧게 (바람직)</div>`
+                : `<div class="sub-note neg">← 손실을 더 오래 들고 있습니다(처분효과)</div>`),
         `물타기 ${ts.dn}회 vs 불타기 ${ts.up}회 · 월평균 ${ts.perMonth.toFixed(1)}건`,
       ],
       advice: ts.pf != null && ts.pf < 1

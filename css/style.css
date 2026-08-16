@@ -2869,3 +2869,18 @@ header h1 { margin-right: auto; }
 .tchart { padding: 6px 10px 2px; }
 .tchart-svg { width: 100%; height: 108px; display: block; }
 .tchart-lg { font-size: var(--fs-note); padding: 2px 0 4px; }
+
+/* 🩺 진단 카드 미니 그래프 (v414) — HTML 막대(토큰 폰트, SVG 텍스트 금지: v412 교훈) */
+.pfd-viz { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 4px; }
+.pfd-brow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 84px; gap: 8px; align-items: center; }
+.pfd-brow > span:first-child { font-size: var(--fs-sub); color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.pfd-brow.hl > span:first-child { color: var(--fg); font-weight: 600; }
+.pfd-btrack { height: 10px; background: rgba(255,255,255,.06); border-radius: 3px;
+  position: relative; overflow: hidden; }
+.pfd-btrack i { position: absolute; top: 1px; bottom: 1px; left: 0; border-radius: 3px; opacity: .85; }
+.pfd-brow.hl .pfd-btrack i { opacity: 1; }
+.pfd-brow > b { font-size: var(--fs-sub); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pfd-stack { display: flex; height: 20px; border-radius: 5px; overflow: hidden; margin: 2px 0; }
+.pfd-stack i { display: flex; align-items: center; justify-content: center; font-size: var(--fs-note);
+  color: rgba(255,255,255,.92); overflow: hidden; white-space: nowrap; opacity: .88; min-width: 0; }
