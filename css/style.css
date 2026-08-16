@@ -2813,8 +2813,14 @@ header h1 { margin-right: auto; }
 
 /* 🩺 투자 진단 리포트 (v409) — 경고 카드 → 근거 수치 → 개선 제안 */
 .pf-diag-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+/* v415: 카드 4개 = 2×2 그리드(사용자 요청). ⚠그리드 항목엔 min-width:0(v387 교훈 — 안의 표·막대가
+   트랙을 밀어 가로 스크롤을 만든다). advice(제안)를 카드 하단에 정렬해 행 높이가 달라도 가지런하게. */
+.pf-diag-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 860px) { .pf-diag-grid { grid-template-columns: 1fr; } }
 .pf-diag { border: 1px solid var(--line); border-left-width: 3px; border-radius: 10px;
-  background: var(--surface); padding: 10px 12px; margin-bottom: 8px; }
+  background: var(--surface); padding: 10px 12px; min-width: 0;
+  display: flex; flex-direction: column; }
+.pf-diag .pf-diag-a { margin-top: auto; padding-top: 8px; }
 .pf-diag.bad { border-left-color: var(--sell); }
 .pf-diag.warn { border-left-color: #f0b34c; }
 .pf-diag.good { border-left-color: #22c07a; }

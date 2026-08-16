@@ -15895,10 +15895,10 @@ function pfRenderDiag(arr) {
   host.innerHTML = `<div class="pf-diag-h"><b>🩺 투자 진단</b>
       <span class="sub-note">보유 비중·산업·체결내역을 시장 흐름과 대조한 결과입니다${
         ts ? ` · 체결 ${ts.orders.length}건 기준` : " · 체결내역을 가져오면 시장 대비 성과·매매 습관까지 진단합니다"}</span></div>
-    ${d.map((x) => `<div class="pf-diag ${x.lev}">
+    <div class="pf-diag-grid">${d.map((x) => `<div class="pf-diag ${x.lev}">
       <div class="pf-diag-t">${DIAG_LEV[x.lev][0]} ${x.title}</div>
       ${x.lines.map((l) => `<div class="pf-diag-l">${l}</div>`).join("")}
-      ${x.advice ? `<div class="pf-diag-a">${x.advice}</div>` : ""}</div>`).join("")}`;
+      ${x.advice ? `<div class="pf-diag-a">${x.advice}</div>` : ""}</div>`).join("")}</div>`;
 }
 
 /* 🧮 포트폴리오 통계 리스크(v394) — "내 종목들이 사실 같은 것 하나에 4번 베팅"인지 잡아낸다.
