@@ -15131,10 +15131,63 @@ function hldFineSector(h) {
    요약에 **실현손익·승률·매매횟수**를 바로 적고, 상세는 접어 둔다. */
 const HLD_TRADE_KO = { in: ["편입", "#22c07a"], add: ["증량", "#4391ff"],
                        trim: ["감량", "#f0b34c"], out: ["전량매도", "#f5445a"] };
-function renderHldTrades(host) {
+
+/* 카드 안 매매 시점 차트 — "언제 얼마에 샀고 팔았나"를 가격 위에 얹는다.
+   ⚠**시세가 없는 종목이 8/19다**(레버리지 ETF는 유니버스 밖이라 stocks/*.json이 없다).
+     그래서 시세가 있으면 종가선을, 없으면 **내 체결 단가를 이은 선**을 그린다 — 어느 쪽이든 그래프는 나온다.
+   마커: ▲매수(상승색) / ▼매도(하락색) · 크기는 체결 금액에 비례. */
+function tradeChartSvg(r) {
+  const list = r.list.slice().sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  const pts = list.filter((x) => x.price > 0);
+  if (pts.length < 1) return "";
+  const key = r.meta.mk + "_" + r.t;
+  // ⚠보유 탭은 `HLD_SERIES`, 점검 탭은 `pfStockCache`에 시계열을 담는다 — **둘 다** 본다.
+  const ser = ((pfStockCache.get(key)?.series || HLD_SERIES[key]) || []).filter((b) => b && b.c > 0);
+  const t0 = new Date(list[0].d).getTime() - 12 * 864e5;
+  const t1 = Date.now();
+  const line = ser.filter((b) => { const t = new Date(b.t).getTime(); return t >= t0 && t <= t1; });
+  const W = 560, H = 108, PL = 6, PR = 6, PT = 10, PB = 16;
+  const vals = line.length ? line.map((b) => b.c) : pts.map((x) => x.price);
+  const lo = Math.min(...vals, ...pts.map((x) => x.price));
+  const hi = Math.max(...vals, ...pts.map((x) => x.price));
+  const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.05 || 1;
+  const Y = (v) => PT + (H - PT - PB) * (1 - (v - (lo - pad)) / ((hi + pad) - (lo - pad)));
+  const X = (d) => PL + (W - PL - PR) * Math.min(1, Math.max(0, (new Date(d).getTime() - t0) / (t1 - t0)));
+  const path = line.length > 1
+    ? `<polyline points="${line.map((b) => `${X(b.t).toFixed(1)},${Y(b.c).toFixed(1)}`).join(" ")}"
+         fill="none" stroke="#8e97a6" stroke-width="1.3"/>`
+    : `<polyline points="${pts.map((x) => `${X(x.d).toFixed(1)},${Y(x.price).toFixed(1)}`).join(" ")}"
+         fill="none" stroke="#8e97a6" stroke-width="1.3" stroke-dasharray="3 3"/>`;
+  const maxAmt = Math.max(...pts.map((x) => x.price * x.qty)) || 1;
+  const marks = pts.map((x) => {
+    const cx = X(x.d), cy = Y(x.price);
+    const rr = 3 + 3.5 * Math.sqrt((x.price * x.qty) / maxAmt);
+    const buy = x.side === "BUY";
+    const col = buy ? "var(--kup)" : "var(--kdn)";
+    const tri = buy ? `${cx},${cy - rr} ${cx - rr},${cy + rr} ${cx + rr},${cy + rr}`
+                    : `${cx},${cy + rr} ${cx - rr},${cy - rr} ${cx + rr},${cy - rr}`;
+    return `<polygon points="${tri}" fill="${col}" stroke="var(--card)" stroke-width=".8">
+      <title>${x.d} · ${buy ? "매수" : "매도"} ${x.qty.toLocaleString()}주 @ ${x.price.toLocaleString()} → 보유 ${x.after.toLocaleString()}주</title></polygon>`;
+  }).join("");
+  return `<div class="tchart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="tchart-svg">
+      ${path}${marks}</svg>
+    <div class="tchart-lg sub-note">▲ 매수 · ▼ 매도 (크기 = 체결 금액) ·
+      ${line.length > 1 ? "회색선 = 실제 종가" : "점선 = 내 체결 단가(시세 미수집 종목)"} ·
+      ${list[0].d} ~ 오늘</div></div>`;
+}
+async function renderHldTrades(host) {
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const hist = pfHistDaily();
   const tr = hist.trades || [];
+  // 카드 차트에 쓸 실제 종가를 **그리기 전에** 받아 둔다(없으면 체결 단가 점선으로 자동 폴백).
+  //   ⚠렌더 후에 받아서 다시 그리면 펼쳐 둔 카드가 닫힌다.
+  await Promise.all([...new Set(tr.map((x) => x.t))].map((t) => {
+    const mk = hist.meta[t]?.mk || (/^\d{6}$/.test(t) ? "kr" : "us");
+    const key = mk + "_" + t;
+    if (HLD_SERIES[key] !== undefined || pfStockCache.has(key)) return null;
+    return fetch(`data/stocks/${key}.json` + _cb).then((r) => (r.ok ? r.json() : null)).then(normStock)
+      .then((st) => { HLD_SERIES[key] = st?.series || null; }).catch(() => { HLD_SERIES[key] = null; });
+  }));
   if (!tr.length) {
     host.innerHTML = `<p class="mini-note">체결 이력이 없습니다 — 토스 동기화 파일(체결내역 포함)을 가져오면
       매매가 종목별로 표시됩니다.</p>`;
@@ -15160,8 +15213,31 @@ function renderHldTrades(host) {
   }).sort((a, b) => (b.held > 0 ? 1 : 0) - (a.held > 0 ? 1 : 0)
       || Math.abs((b.r?.pnl) || 0) - Math.abs((a.r?.pnl) || 0));
   const span = `${hist.days[0]} ~ ${pfDay(new Date())}`;
+  /* ① 상단 요약 그래프 — 종목별 실현손익 발산 막대.
+     19종목을 한 화면에서 크기·부호로 비교할 수 있어야 "무엇이 성과를 갈랐나"가 바로 보인다. */
+  const pnlRows = rows.filter((r) => r.r).sort((a, b) => b.r.pnl - a.r.pnl);
+  let barSvg = "";
+  if (pnlRows.length) {
+    const mx = Math.max(...pnlRows.map((r) => Math.abs(r.r.pnl))) || 1;
+    const RH = 20, PAD = 4, LW = 108, W = 560, mid = LW + (W - LW) / 2;
+    const H = pnlRows.length * RH + PAD * 2 + 14;
+    barSvg = `<svg viewBox="0 0 ${W} ${H}" class="tbar-svg" preserveAspectRatio="xMidYMin meet">
+      <line x1="${mid}" y1="${PAD}" x2="${mid}" y2="${H - 14}" stroke="var(--line)"/>
+      ${pnlRows.map((r, i) => {
+        const y = PAD + i * RH, v = r.r.pnl;
+        const w = Math.abs(v) / mx * ((W - LW) / 2 - 46);
+        const x = v >= 0 ? mid : mid - w;
+        const col = v >= 0 ? "var(--kup)" : "var(--kdn)";
+        return `<text x="${LW - 6}" y="${y + RH / 2 + 4}" class="tbar-nm" text-anchor="end">${esc(r.meta.name).slice(0, 10)}</text>
+          <rect x="${x}" y="${y + 4}" width="${Math.max(w, 1)}" height="${RH - 9}" rx="2" fill="${col}" opacity=".85"/>
+          <text x="${v >= 0 ? mid + w + 5 : mid - w - 5}" y="${y + RH / 2 + 4}" class="tbar-v"
+            text-anchor="${v >= 0 ? "start" : "end"}" fill="${col}">${won(v, true)}</text>`;
+      }).join("")}
+      <text x="${mid}" y="${H - 3}" class="tbar-nm" text-anchor="middle">실현손익 (FIFO) — 매도한 것만</text></svg>`;
+  }
   host.innerHTML = `<div class="hld-tr-head sub-note">${span} · 체결 ${tr.length}건 · ${rows.length}종목
-      <span class="sub-note">— 카드를 누르면 개별 체결이 펼쳐집니다</span></div>
+      <span class="sub-note">— 카드를 누르면 매수·매도 시점 차트가 펼쳐집니다</span></div>
+    ${barSvg ? `<div class="tbar-wrap">${barSvg}</div>` : ""}
     <div class="tcard-wrap">${rows.map((r) => {
       const pnl = r.r?.pnl;
       const wr = r.r && r.r.n ? Math.round(r.r.win / r.r.n * 100) : null;
@@ -15175,6 +15251,7 @@ function renderHldTrades(host) {
           <span class="tcard-meta sub-note">매수 ${r.nBuy} · 매도 ${r.nSell}${
             wr != null ? ` · 승률 ${wr}%` : ""}${r.r ? ` · 평균 ${Math.round(r.r.days / r.r.n)}일` : ""}</span>
         </summary>
+        ${tradeChartSvg(r)}
         <table class="tcard-tb"><tbody>${r.list.map((x) => `<tr>
           <td>${x.d}</td>
           <td><b class="${x.side === "BUY" ? "t-buy" : "t-sell"}">${x.side === "BUY" ? "매수" : "매도"}</b></td>

@@ -2847,3 +2847,13 @@ header h1 { margin-right: auto; }
   .tcard > summary { grid-template-columns: 20px minmax(0, 1fr); }
   .tcard-pnl { grid-column: 2; text-align: left; }
 }
+
+/* 📊 종목별 매매 그래프 (v411) — 상단 실현손익 발산 막대 + 카드 내 매매 시점 차트 */
+.tbar-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 8px; margin-bottom: 10px; overflow-x: auto; }
+.tbar-svg { width: 100%; min-width: 460px; display: block; }
+.tbar-nm { font-size: 10.5px; fill: var(--muted); }
+.tbar-v { font-size: 10.5px; font-weight: 600; }
+.tchart { padding: 6px 10px 2px; }
+.tchart-svg { width: 100%; height: 108px; display: block; }
+.tchart-lg { font-size: var(--fs-note); padding: 2px 0 4px; }
