@@ -2919,3 +2919,6 @@ header h1 { margin-right: auto; }
 .ea-rk-tb td { padding: 3px 6px; font-size: var(--fs-sub); border-top: 1px solid var(--line); }
 .ea-rk-tb tbody tr { cursor: pointer; }
 .ea-rk-tb tbody tr:hover { background: rgba(255,255,255,.04); }
+
+/* 👁 그리기 전체 숨김 토글 (v423) */
+#draw-hide.active { border-color: #f0b34c; color: #f0b34c; background: rgba(240,179,76,.12); }

@@ -1691,28 +1691,38 @@ function drawLookupChart() {
       const bt = snap(x.d);
       if (!bt) return;
       const buy = x.side === "BUY";
-      /* ⚠v422(제보 "원이 너무 크고 글씨가 겹친다"): size 2는 캔들을 덮었다 → **기본 크기(1)**.
-         라벨은 아래에서 **간격이 충분한 마커에만** 남긴다(lightweight-charts는 라벨 충돌을 안 피해준다). */
+      /* v423: 모양=**삼각형**(매수 ▲belowBar / 매도 ▼aboveBar) · 매수색을 눈에 띄는 **마젠타**로
+         (파랑은 이평선·볼린저와 섞여 안 보였다 — 제보). 매도는 주황 유지. size는 기본(1). */
       myMarks.push({ time: bt, position: buy ? "belowBar" : "aboveBar",
-        color: buy ? "#4391ff" : "#f0b34c", shape: "circle", size: 1,
-        text: (buy ? "매수" : "매도") + (x.qty % 1 ? x.qty.toFixed(1) : x.qty) });
+        color: buy ? "#e879f9" : "#f0b34c", shape: buy ? "arrowUp" : "arrowDown", size: 1,
+        qty: x.qty, buy });
     });
-    /* 라벨 디클러터: 봉 인덱스 기준으로 앞선 '라벨 있는' 마커와 minGap 이상 떨어졌을 때만 글자를 남긴다.
-       위/아래(position)는 서로 안 겹치므로 따로 센다. 라벨을 지워도 원과 색은 그대로라 시점은 보인다. */
+    /* 라벨 정리 — ⚠**지우지 않는다**(제보): 가까이 붙은 같은 방향 마커는 **한 라벨에 수량을 합쳐**
+       대표 마커에만 표시한다. 정보가 사라지지 않으면서 글자끼리 겹치지 않는다.
+       (lightweight-charts는 마커 라벨 위치를 조정해주지 않으므로 이렇게 뭉치는 수밖에 없다.) */
     const idxOf = new Map(barTimes.map((t, i) => [t, i]));
-    const minGap = Math.max(5, Math.round(barTimes.length / 40));
-    const lastLab = {};
-    myMarks.sort((p1, p2) => (p1.time < p2.time ? -1 : p1.time > p2.time ? 1 : 0)).forEach((m) => {
+    const minGap = Math.max(4, Math.round(barTimes.length / 120));   // 라벨 폭(≈34px) 기준 최소 간격
+    const nQ = (v) => (v % 1 ? v.toFixed(1) : String(v));
+    myMarks.sort((p1, p2) => (p1.time < p2.time ? -1 : p1.time > p2.time ? 1 : 0));
+    const groups = {};      // position → [{lead, sum, n}]
+    myMarks.forEach((m) => {
       const i = idxOf.get(m.time);
-      if (i == null) return;
-      const prev = lastLab[m.position];
-      if (prev != null && i - prev < minGap) { m.text = ""; return; }
-      lastLab[m.position] = i;
+      if (i == null) { m.text = ""; return; }
+      const g = (groups[m.position] = groups[m.position] || []);
+      const last = g[g.length - 1];
+      if (last && i - last.i < minGap) {          // 앞 그룹에 합류 — 라벨은 대표에만
+        last.sum += m.qty; last.n++; last.i = i;
+        m.text = "";
+        last.lead.text = `${last.lead.buy ? "매수" : "매도"} ${nQ(last.sum)}${last.n > 1 ? `(${last.n}회)` : ""}`;
+      } else {
+        g.push({ lead: m, sum: m.qty, n: 1, i });
+        m.text = `${m.buy ? "매수" : "매도"} ${nQ(m.qty)}`;
+      }
     });
     if (myMarks.length) {
-      $("#lookup-info").innerHTML += ` · <span style="color:#4391ff">●</span> 내 매수 ${
-        myMarks.filter((m) => m.color === "#4391ff").length}회 <span style="color:#f0b34c">●</span> 매도 ${
-        myMarks.filter((m) => m.color === "#f0b34c").length}회 <span class="sub-note">(글자는 겹침 방지로 일부만 표시 · 끄기: 원칙 목록의 ● 내 매매)</span>`;
+      $("#lookup-info").innerHTML += ` · <span style="color:#e879f9">▲</span> 내 매수 ${
+        myMarks.filter((m) => m.buy).length}회 <span style="color:#f0b34c">▼</span> 매도 ${
+        myMarks.filter((m) => !m.buy).length}회 <span class="sub-note">(가까운 매매는 수량을 합쳐 한 라벨로 · 끄기: 원칙 목록의 ● 내 매매)</span>`;
     }
   }
   /* ⚠겹침 방지(제보 "표시와 글씨가 겹쳐 안 띈다"): 같은 봉·같은 위치에 내 마커와 신호가 함께 오면
@@ -1886,9 +1896,19 @@ function drawSaveAll(o) { localStorage.setItem(DRAW_KEY, JSON.stringify(o)); }
 function drawKey() { return LOOKUP_ST ? LOOKUP_ST.market + "_" + LOOKUP_ST.ticker : null; }
 
 // 저장 (시간·가격) → 현재 화면 좌표. 시간→논리인덱스→logicalToCoordinate(오프스크린도 연장), 가격→priceToCoordinate.
+/* v423: 그린 것 전체 숨기기 — **삭제가 아니라 표시만 끈다**(데이터는 localStorage에 그대로).
+   ⚠숨김 중에는 새로 그리는 것도 막는다(안 보이는 곳에 그림이 쌓이는 혼란 방지). */
+let drawHidden = localStorage.getItem("cp_draw_hidden") === "1";
+function drawHideSync() {
+  const b = document.getElementById("draw-hide");
+  if (b) { b.classList.toggle("active", drawHidden); b.textContent = drawHidden ? "🙈" : "👁"; }
+  const tools = document.getElementById("draw-mode");
+  if (tools) tools.style.opacity = drawHidden ? ".45" : "";
+}
 function redrawDrawings() {
   const svg = document.getElementById("lookup-draw"), el = document.getElementById("lookup-chart");
   if (!svg || !el || !lookupChart || !lookupCandles || !LOOKUP_ST) return;
+  if (drawHidden) { svg.innerHTML = svg.querySelector("defs")?.outerHTML || ""; return; }
   const w = el.clientWidth, h = el.clientHeight;
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.style.width = w + "px"; svg.style.height = h + "px";
@@ -2136,6 +2156,13 @@ const DRAW_HINT = {
 const DRAW_CLICK1 = new Set(["hline", "vline", "text", "callout"]);
 
 function setDrawMode(m) {
+  // ⚠숨김 상태에서 그리기 도구를 고르면 **자동으로 다시 보이게** 한다 —
+  //   안 보이는 캔버스에 그림이 쌓이면 사용자는 "안 그려진다"고 느낀다.
+  if (drawHidden && m) {
+    drawHidden = false;
+    localStorage.setItem("cp_draw_hidden", "0");
+    drawHideSync();
+  }
   drawMode = m;
   drawSel = null;
   const svg = document.getElementById("lookup-draw");
@@ -2176,6 +2203,18 @@ function bindDrawTools() {
     drawPush();
     const o = drawLoad(); delete o[drawKey()]; drawSaveAll(o); drawSel = null; redrawDrawings();
   };
+  const hideBtn = document.getElementById("draw-hide");
+  if (hideBtn) {
+    hideBtn.onclick = () => {
+      drawHidden = !drawHidden;
+      localStorage.setItem("cp_draw_hidden", drawHidden ? "1" : "0");
+      if (drawHidden) { drawMode = ""; drawSel = null; }   // 숨김 중엔 그리기 모드도 해제
+      document.querySelectorAll("#draw-mode button").forEach((b) => b.classList.toggle("active", !b.dataset.dm));
+      drawHideSync();
+      redrawDrawings();
+    };
+    drawHideSync();
+  }
   document.getElementById("draw-undo").onclick = drawUndo;
   document.getElementById("draw-del").onclick = () => drawDelete(drawSel);
   // 키보드: Delete=선택 삭제 · Ctrl+Z=되돌리기 · Esc=선택 해제 (입력 중일 땐 무시)
