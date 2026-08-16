@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=409">
+<link rel="stylesheet" href="css/style.css?v=410">
 <script src="firebase-config.js?v=405"></script>
 <script src="js/auth.js?v=405"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
@@ -827,6 +827,10 @@
     <div id="risk-gauge" class="card-flat risk-box"></div>
     <!-- v391: 💳 신용잔고(빚투) — 금융투자협회 일간(margin_debt.json, lazy). KR 전용이라 시장=미국이면 숨김 -->
     <div id="int-margin" class="card-flat" style="display:none"></div>
+    <!-- v410: 코스피·코스닥 투자자별 수급(개인·외국인·기관 20일 누적) + 국고채 장단기 스프레드.
+         포트폴리오 점검에 있던 것을 시장 화면으로 이동(사용자 요청) — **id는 그대로 두고 위치만 옮긴다**
+         (탭 흡수 규칙). 출처는 토스 동기화 스냅샷(localStorage)이라 스냅샷이 없으면 스스로 숨는다. -->
+    <div id="pf-market" style="display:none;margin-top:14px"></div>
     <div id="int-brief" class="commentary" style="display:none"></div>
     <div id="int-charts" class="int-grid"></div>
   </section>
@@ -1131,7 +1135,6 @@
     <!-- v394: 통계적 리스크 — 상관행렬·포트 베타·집중도("같은 것에 4번 베팅" 탐지). 기존 데이터만 사용 -->
     <div id="pf-diag" style="display:none;margin-top:14px"></div>
     <div id="pf-risk" class="card-flat" style="display:none;margin-top:14px"></div>
-    <div id="pf-market" style="display:none;margin-top:14px"></div>
     <div id="pf-list" style="margin-top:14px"></div>
   </section>
   <section id="tab-ownership" class="panel">
@@ -1356,7 +1359,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=409"></script>
+<script src="js/app.js?v=410"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

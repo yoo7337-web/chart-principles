@@ -10502,6 +10502,7 @@ function renderInternals() {
   if (!MPRO) { $("#int-context").textContent = "market_pro.json 없음 — python analysis\\market_pro.py 실행 필요"; return; }
   unpackBreadth(MPRO.breadth_hist);
   internalsRendered = true;
+  pfMarketRender();   // v410: 흡수한 수급 컨텍스트 — 스냅샷 없으면 스스로 숨는다(탭 흡수 규칙)
 
   if (MPRO.brief) {
     $("#int-brief").style.display = "";
@@ -10531,7 +10532,7 @@ function renderInternals() {
       </div>
     </div>`;
 
-  $("#int-mk").onchange = () => { drawInternals(); renderMargin(); };
+  $("#int-mk").onchange = () => { drawInternals(); renderMargin(); pfMarketRender(); };
   $("#int-range").querySelectorAll("button").forEach((b) => b.onclick = () => {
     intRange = +b.dataset.r;
     $("#int-range").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
@@ -15561,7 +15562,7 @@ function initPortfolio() {
 async function pfRender() {
   const arr = pfHoldingsLive();   // 점검 탭도 동일하게 최신 시세 기준
   const statsEl = $("#pf-stats"), listEl = $("#pf-list");
-  pfMarketRender();  // 수급 컨텍스트는 보유 여부와 무관(토스 스냅샷 존재 시)
+  // v410: 수급 컨텍스트(#pf-market)는 **시장 현황 → 증권** 탭으로 이동했다(renderInternals에서 호출).
   if (!arr.length) {
     statsEl.style.display = "none";
     const mx = $("#pf-matrix"); if (mx) mx.style.display = "none";
@@ -15864,6 +15865,10 @@ function pfRenderRisk(arr) {
 function pfMarketRender() {
   const host = $("#pf-market");
   if (!host) return;
+  // ⚠코스피·코스닥 수급이라 **시장=미국일 땐 숨긴다**(증권 탭의 int-margin과 같은 규칙).
+  //   증권 탭 밖(=셀렉트가 없는 화면)에서는 KR로 간주해 그대로 표시한다.
+  const mkSel = document.getElementById("int-mk");
+  if (mkSel && mkSel.value === "us") { host.style.display = "none"; host.innerHTML = ""; return; }
   const t = tossLoad();
   const inv = t?.market?.investor;
   const bonds = t?.market?.bonds;
