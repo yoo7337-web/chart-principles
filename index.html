@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>시장분석 — 시장·종목·트렌드 종합 분석</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="css/style.css?v=416">
+<link rel="stylesheet" href="css/style.css?v=417">
 <script src="firebase-config.js?v=405"></script>
 <script src="js/auth.js?v=405"></script>
 <!-- 기기 간 자동 동기화(Firestore) — auth.js보다 뒤여야 authuser 이벤트를 받는다 -->
@@ -64,7 +64,6 @@
 <nav class="tabs" data-group-tabs="journal" style="display:none">
   <button class="tab" data-tab="holdings">포트폴리오</button>
   <button class="tab" data-tab="diary">투자 다이어리</button>
-  <button class="tab" data-tab="memo">종목 메모</button>
 </nav>
 <nav class="tabs" data-group-tabs="market">
   <button class="tab active" data-tab="heatmap">홈</button>
@@ -1241,10 +1240,13 @@
     </div>
   </section>
 
-  <section id="tab-memo" class="panel">
-    <div class="criteria">🗒️ <b>종목 메모</b> — 종목 조회에서 종목별로 남긴 메모를 모아 봅니다. 모든 메모는
-      <b>이 브라우저에만</b> 저장(서버 전송 없음). 메모 클릭 = 해당 종목 조회로 이동.</div>
-    <div class="home-topbar" style="margin:12px 0 10px">
+  <!-- v417: 종목 메모 — '내 투자' 탭에서 빼고 헤더 📝 아이콘의 **팝업(dialog)**으로 전환(사용자 요청).
+       ⚠내부 id(memo-search/-export/-import/-import-file/-list)는 renderMemo가 그대로 찾으므로 보존. -->
+  <dialog id="memo-modal" class="memo-modal">
+    <div class="memo-modal-h">🗒️ <b>종목 메모</b>
+      <span class="sub-note">종목 조회에서 남긴 메모 모음 — 이 브라우저에만 저장(서버 전송 없음)</span>
+      <button type="button" id="memo-close" title="닫기">✕</button></div>
+    <div class="home-topbar" style="margin:10px 0">
       <input type="text" id="memo-search" placeholder="🔍 종목명·내용 검색" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--line);border-radius:8px">
       <span style="flex:1"></span>
       <button class="today-chart-btn" id="memo-export">⬇ 내보내기</button>
@@ -1252,7 +1254,7 @@
       <input type="file" id="memo-import-file" accept=".json" style="display:none">
     </div>
     <div id="memo-list"></div>
-  </section>
+  </dialog>
 
   <section id="tab-devlog" class="panel">
     <div class="dev-split">
@@ -1361,7 +1363,7 @@
 </footer>
 
 <script src="config.local.js" onerror="void 0"></script>
-<script src="js/app.js?v=416"></script>
+<script src="js/app.js?v=417"></script>
 <!-- 🤖 전역 AI 어시스턴트(v231) — 탭과 무관하게 항상 접근 -->
 <button id="ai-fab" title="AI 어시스턴트 (무엇이든 물어보세요)">🤖</button>
 <div id="ai-panel">

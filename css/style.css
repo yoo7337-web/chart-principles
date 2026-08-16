@@ -2894,3 +2894,10 @@ header h1 { margin-right: auto; }
 .pfd-stack { display: flex; height: 20px; border-radius: 5px; overflow: hidden; margin: 2px 0; }
 .pfd-stack i { display: flex; align-items: center; justify-content: center; font-size: var(--fs-note);
   color: rgba(255,255,255,.92); overflow: hidden; white-space: nowrap; opacity: .88; min-width: 0; }
+
+/* 🗒️ 종목 메모 팝업 (v417) — 탭에서 다이얼로그로 전환 */
+.memo-modal { width: min(760px, 92vw); max-height: 82vh; overflow-y: auto; }
+.memo-modal-h { display: flex; align-items: baseline; gap: 8px; }
+.memo-modal-h > button { margin-left: auto; border: 1px solid var(--line); background: var(--card);
+  border-radius: 7px; padding: 3px 9px; cursor: pointer; font-size: .85rem; }
+.memo-modal-h > button:hover { border-color: var(--accent); }

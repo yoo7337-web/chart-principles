@@ -197,7 +197,6 @@ function activateTab(tabId) {
   if (tabId === "ownership" && !ownRendered) initOwnership();
   if (tabId === "holdings" && !holdingsRendered) initHoldings();
   if (tabId === "portfolio" && !portfolioRendered) initPortfolio();
-  if (tabId === "memo") renderMemo();
   if (tabId === "devlog") renderDevlog();
   if (tabId === "secmet" && !secmetRendered) renderSecmetTab();
   if (tabId === "heatmap") { if (!heatmapRendered) renderHome(); else setTimeout(syncHomeHeights, 0); }  // 재진입 시 우측 높이 재동기화(숨김상태 offsetHeight=0 회피)
@@ -1229,9 +1228,15 @@ function initLookup() {
 async function initHeaderSearch() {
   const el = document.getElementById("hdr-q");
   if (!el) return;
-  // v416: 📝 종목 메모 바로가기(검색창 오른쪽 상시 아이콘) — 내 투자 → 종목 메모 탭으로
+  // v417: 📝 종목 메모 = **팝업(dialog)** — 탭이 아니라 어느 화면 위에서든 바로 뜬다(사용자 요청)
   const memoBtn = document.getElementById("hdr-memo");
-  if (memoBtn) memoBtn.onclick = () => gotoTabFull("memo");
+  const memoDlg = document.getElementById("memo-modal");
+  if (memoBtn && memoDlg) {
+    memoBtn.onclick = () => { renderMemo(); memoDlg.showModal(); };
+    document.getElementById("memo-close").onclick = () => memoDlg.close();
+    // 바깥(backdrop) 클릭으로 닫기 — showModal 다이얼로그는 여는 클릭과 경합이 없다(v385 팝오버와 다름)
+    memoDlg.onclick = (e) => { if (e.target === memoDlg) memoDlg.close(); };
+  }
   if (!LOOKUP_INDEX) await aiIndexReady();
   const dl = document.getElementById("lookup-list");
   if (dl && !dl.children.length && LOOKUP_INDEX)
@@ -5065,7 +5070,9 @@ function renderMemo() {
     </div>`;
   }).join("");
   host.querySelectorAll(".memo-goto").forEach((a) => a.onclick = (e) => {
-    e.preventDefault(); gotoTabFull("lookup");
+    e.preventDefault();
+    document.getElementById("memo-modal")?.close();   // ⚠팝업을 닫고 이동 — 안 닫으면 새 화면 위를 덮는다
+    gotoTabFull("lookup");
     if (!lookupRendered) initLookup();
     loadLookup(a.dataset.key);
   });
