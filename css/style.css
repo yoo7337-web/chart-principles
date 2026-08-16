@@ -2582,6 +2582,10 @@ header h1 { margin-right: auto; }
   border: 1px solid var(--line); border-radius: 999px; background: var(--card);
   color: var(--ink); outline: none; }
 .hdr-search input:focus { border-color: var(--accent); }
+/* v416: 📝 종목 메모 바로가기 — 검색창 오른쪽의 조그만 상시 아이콘 */
+.hdr-icon { padding: 5px 9px; font-size: .9rem; line-height: 1; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--card); cursor: pointer; }
+.hdr-icon:hover { border-color: var(--accent); }
 @media (max-width: 700px) { .hdr-search input { width: 100%; } }
 
 /* 종목조회 배치(v279) — 개요+투자지표 / 수급+컨센서스 각각 2열 */

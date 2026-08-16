@@ -1229,6 +1229,9 @@ function initLookup() {
 async function initHeaderSearch() {
   const el = document.getElementById("hdr-q");
   if (!el) return;
+  // v416: 📝 종목 메모 바로가기(검색창 오른쪽 상시 아이콘) — 내 투자 → 종목 메모 탭으로
+  const memoBtn = document.getElementById("hdr-memo");
+  if (memoBtn) memoBtn.onclick = () => gotoTabFull("memo");
   if (!LOOKUP_INDEX) await aiIndexReady();
   const dl = document.getElementById("lookup-list");
   if (dl && !dl.children.length && LOOKUP_INDEX)
