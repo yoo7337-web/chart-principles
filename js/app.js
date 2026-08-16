@@ -1722,11 +1722,25 @@ function drawLookupChart() {
     if (myMarks.length) {
       $("#lookup-info").innerHTML += ` · <span style="color:#e879f9">▲</span> 내 매수 ${
         myMarks.filter((m) => m.buy).length}회 <span style="color:#f0b34c">▼</span> 매도 ${
-        myMarks.filter((m) => !m.buy).length}회 <span class="sub-note">(가까운 매매는 수량을 합쳐 한 라벨로 · 끄기: 원칙 목록의 ● 내 매매)</span>`;
+        myMarks.filter((m) => !m.buy).length}회`;
     }
   }
   /* ⚠겹침 방지(제보 "표시와 글씨가 겹쳐 안 띈다"): 같은 봉·같은 위치에 내 마커와 신호가 함께 오면
      글자가 포개진다 → 그 봉의 **신호 라벨만 지운다**(화살표는 남아 신호 자체는 보인다). */
+  /* v424: 화살표가 **두 종류**(원칙 신호 / 내 매매)라 라벨 없는 마커가 뭔지 묻는 제보가 나왔다
+     → 차트 아래 범례를 상시 표시하고, 그룹 합산 라벨의 의미도 함께 적는다. */
+  const lg = $("#lookup-legend");
+  if (lg) {
+    const parts = [
+      `<span class="lk-lg"><i style="color:#22c07a">▲</i><i style="color:#f5445a">▼</i> 원칙 신호</span>`,
+      `<span class="lk-lg"><i style="color:#9ca3af">▲▼</i> 원칙 신호 <span class="sub-note">(지금 국면에선 비활성)</span></span>`,
+    ];
+    if (myMarks.length) parts.push(
+      `<span class="lk-lg"><i style="color:#e879f9">▲</i> 내 매수 <i style="color:#f0b34c">▼</i> 내 매도
+        <span class="sub-note">— 가까운 매매는 <b>대표 하나에 수량을 합쳐</b> 표시(나머지 화살표는 같은 그룹의 개별 체결)</span></span>`);
+    lg.innerHTML = parts.join("");
+    lg.style.display = "";
+  }
   const myAt = new Set(myMarks.map((m) => m.time + "|" + m.position));
   sigMarks.forEach((m) => { if (myAt.has(m.time + "|" + m.position)) m.text = ""; });
   candles.setMarkers([...sigMarks, ...myMarks].sort((a2, b2) => (a2.time < b2.time ? -1 : a2.time > b2.time ? 1 : 0)));

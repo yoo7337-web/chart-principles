@@ -2922,3 +2922,9 @@ header h1 { margin-right: auto; }
 
 /* 👁 그리기 전체 숨김 토글 (v423) */
 #draw-hide.active { border-color: #f0b34c; color: #f0b34c; background: rgba(240,179,76,.12); }
+
+/* 🏷 종목조회 차트 마커 범례 (v424) — 원칙 신호 vs 내 매매 구분 */
+.lk-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 6px 2px 0;
+  font-size: var(--fs-note); color: var(--muted); }
+.lk-lg { display: inline-flex; align-items: center; gap: 4px; }
+.lk-lg i { font-style: normal; font-size: .9rem; letter-spacing: -1px; }
