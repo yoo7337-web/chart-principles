@@ -2905,3 +2905,7 @@ header h1 { margin-right: auto; }
 .memo-modal-h > button { margin-left: auto; border: 1px solid var(--line); background: var(--card);
   border-radius: 7px; padding: 3px 9px; cursor: pointer; font-size: .85rem; }
 .memo-modal-h > button:hover { border-color: var(--accent); }
+
+/* 🎯 예측 실적 완료 표 (v420) — 2단 헤더: 그룹 헤더(매출/영업이익) 아래 컨센|실제|차이 */
+#ea-done th.ea-grp { text-align: center; border-bottom: 1px solid var(--line); }
+#ea-done thead tr:last-child th { font-weight: 400; color: var(--muted); font-size: var(--fs-note); }

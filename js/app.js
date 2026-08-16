@@ -8715,25 +8715,36 @@ function renderEarn() {
      −%는 '적자 확대'다(루닛 26Q2: 적자 65억 예상 → 154억, 서프라이즈 −136.5%). 라벨로 명시한다. */
   const lossNote = (op, v) => (op != null && op < 0 && v != null) ? `<span class="sub-note">${v >= 0 ? "적자 축소" : "적자 확대"}</span>` : "";
   $("#ea-done-n").textContent = `${done.length}종목 · ${eaQ} · 단위 억원`;
-  /* v419: '컨센 → 실제'를 한 칸에 병기 — 서프라이즈 %의 근거 숫자를 표에서 바로 확인(사용자 요청).
+  /* v420: 컨센/실제/차이를 **분리 열**로(사용자 요청 — v419의 한 칸 병기에서 재구성).
+     차이 = 실제 − 컨센(억원) + %. 영업이익 %는 서프라이즈(op_sup, est_last 기준)를 그대로 쓰고
+     매출 %는 여기서 계산한다. 전년동기는 열을 없애는 대신 '실제' 칸 아래 작은 글씨로.
      1주 주가 = 수집 시점 기준 최근 5거래일(w1, earnings_est.py가 parquet로 계산 — 매일 재생성). */
-  const estAct = (e, a) => e == null ? `<span class="sub-note">- →</span> ${eok(a)}`
-    : `<span class="sub-note">${eok(e)} →</span> <b>${eok(a)}</b>`;
+  const diffCell = (e, a, supPct, op) => {
+    if (e == null || a == null) return `<td class="num sub-note">컨센 없음</td>`;
+    const d = a - e;
+    const pctv = supPct != null ? supPct : (Math.abs(e) >= 10 ? Math.round(d / Math.abs(e) * 1000) / 10 : null);
+    const cls = pctv == null ? "" : pctv >= th ? "kup" : pctv <= -th ? "kdn" : "";
+    return `<td class="num"><b class="${cls}">${d >= 0 ? "+" : "−"}${eok(Math.abs(d))}</b>
+      ${pctv == null ? "" : `<span class="${cls}">(${pctv >= 0 ? "+" : ""}${pctv}%)</span>`} ${lossNote(op, pctv)}</td>`;
+  };
   const w1cell = (v) => v == null ? `<td class="num sub-note">-</td>`
     : `<td class="num"><b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${v}%</b></td>`;
-  host.innerHTML = `<thead><tr><th>회사</th><th class="num">매출 (컨센 → 실제)</th><th class="num">영업이익 (컨센 → 실제)</th>
-      <th class="num">영업이익 전년동기</th>
-      <th class="num">서프라이즈</th><th class="num">주가 1주</th><th>출처</th></tr></thead><tbody>`
+  host.innerHTML = `<thead>
+      <tr><th rowspan="2">회사</th><th colspan="3" class="ea-grp">매출</th>
+        <th colspan="3" class="ea-grp">영업이익</th><th rowspan="2" class="num">주가 1주</th><th rowspan="2">출처</th></tr>
+      <tr><th class="num">컨센</th><th class="num">실제</th><th class="num">차이</th>
+        <th class="num">컨센</th><th class="num">실제</th><th class="num">차이(서프라이즈)</th></tr></thead><tbody>`
     + (done.length ? done.map((r) => `<tr>
         ${nameCell(r)}
-        <td class="num">${estAct(r.est_rev, r.rev)}</td>
-        <td class="num">${estAct(r.est_op, r.op)}</td>
-        <td class="num">${eaPct(r.op_yoy)} ${lossNote(r.op, r.op_yoy)}</td>
-        <td class="num">${r.op_sup == null ? `<span class="sub-note">컨센 없음</span>`
-          : `<b class="${r.op_sup >= th ? "kup" : r.op_sup <= -th ? "kdn" : ""}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b> ${lossNote(r.op, r.op_sup)}`}</td>
+        <td class="num sub-note">${eok(r.est_rev)}</td>
+        <td class="num">${eok(r.rev)}</td>
+        ${diffCell(r.est_rev, r.rev, null, null)}
+        <td class="num sub-note">${eok(r.est_op)}</td>
+        <td class="num">${eok(r.op)}${r.op_yoy != null ? `<div class="sub-note">전년 ${eaPct(r.op_yoy)}</div>` : ""}</td>
+        ${diffCell(r.est_op, r.op, r.op_sup, r.op)}
         ${w1cell(r.w1)}
         <td class="sub-note">${r.src === "dart" ? "DART" : "네이버"}</td>
-      </tr>`).join("") : `<tr><td colspan="7" class="sub-note">조건에 맞는 종목이 없습니다.</td></tr>`) + `</tbody>`;
+      </tr>`).join("") : `<tr><td colspan="9" class="sub-note">조건에 맞는 종목이 없습니다.</td></tr>`) + `</tbody>`;
 
   // ── 발표 대기 표(컨센서스)
   const pend = (rk.pending || []).filter(filt);
@@ -8751,6 +8762,7 @@ function renderEarn() {
   $("#ea-note").innerHTML = `예측치=네이버 금융 컨센서스(증권사 추정 평균)를 <b>매일 동결 저장</b> · 실제치=DART 분기·반기보고서
     (없으면 네이버 확정치) · 갱신 ${EARN.generated}.
     서프라이즈 = (실제 − 발표 직전 컨센서스) ÷ |컨센서스|, 영업이익 ±${th}% 기준으로 상회/하회 판정.
+    <b>차이</b> = 실제 − 컨센(억원)과 그 비율 — 영업이익 차이의 %가 곧 서프라이즈입니다.
     <b>주가 1주</b>는 마지막 거래일 기준 최근 5거래일 등락(발표 반응 참고용 — 발표일 기준이 아닙니다).
     <b>컨센서스 변동</b>은 최초 동결값 대비 최근 컨센서스의 증감(상향/하향)입니다.
     ⚠적자↔흑자 전환은 %가 무의미해 판정에서 제외하고, 컨센서스 규모가 10억원 미만인 종목도 제외합니다.
