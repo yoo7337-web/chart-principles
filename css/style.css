@@ -2895,8 +2895,12 @@ header h1 { margin-right: auto; }
 .pfd-stack i { display: flex; align-items: center; justify-content: center; font-size: var(--fs-note);
   color: rgba(255,255,255,.92); overflow: hidden; white-space: nowrap; opacity: .88; min-width: 0; }
 
-/* 🗒️ 종목 메모 팝업 (v417) — 탭에서 다이얼로그로 전환 */
-.memo-modal { width: min(760px, 92vw); max-height: 82vh; overflow-y: auto; }
+/* 🗒️ 종목 메모 팝업 (v417 · v418 중앙 배치) — 탭에서 다이얼로그로 전환
+   ⚠전역 리셋 `* { margin: 0 }`이 UA 기본 `dialog { margin: auto }`(=중앙 배치)를 죽인다 —
+     margin: auto를 **명시 복원**해야 가운데 뜬다(좌상단에 붙던 원인). */
+.memo-modal { width: min(760px, 92vw); max-height: 82vh; overflow-y: auto;
+  margin: auto; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.memo-modal::backdrop { background: rgba(0, 0, 0, .55); }
 .memo-modal-h { display: flex; align-items: baseline; gap: 8px; }
 .memo-modal-h > button { margin-left: auto; border: 1px solid var(--line); background: var(--card);
   border-radius: 7px; padding: 3px 9px; cursor: pointer; font-size: .85rem; }
