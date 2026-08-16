@@ -8674,20 +8674,26 @@ function renderEarn() {
          직후에 수백 종목으로 늘어납니다. 그 전까지는 아래 <b>전년동기 대비</b>를 보세요.</p>` : "");
 
   // ── 서프라이즈 랭킹 2열
-  /* v419: 랭킹에도 '컨센 → 실제'(영업이익)를 병기 — 서프라이즈 %만으론 규모를 모른다 */
+  /* v419→v421: 랭킹도 완료 표와 같은 **2단 헤더 표**(회사 | 영업이익: 컨센·실제·차이(서프라이즈)) */
   const eokB = (v) => v == null ? "-" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString());
-  const estActOf = (k) => {
+  const opOf = (k) => {
     const c = EARN.stocks?.[k]?.q?.[eaQ];
-    if (!c) return null;
-    const e = (c.est_last || c.est || {}).op, a = (c.act || {}).op;
-    return e != null && a != null ? `컨센 ${eokB(e)} → 실제 ${eokB(a)}억` : null;
+    return { e: (c?.est_last || c?.est || {}).op ?? null, a: (c?.act || {}).op ?? null };
   };
   const rankCard = (title, list, cls, empty) => `<div class="card-flat cv-rank"><b>${title}</b>` +
-    (list?.length ? list.map((r) => `<div class="cv-rk" data-goto="${r.k}">
-        <span class="cv-rk-n">${diEsc(r.n)}</span>
-        <span class="sub-note">${estActOf(r.k) || (r.grp && IND_BY_KEY[r.grp] ? indLabel(r.grp) : "")}</span>
-        <b class="${cls}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b>
-      </div>`).join("") : `<p class="mini-note">${empty}</p>`) + `</div>`;
+    (list?.length ? `<table class="ea-rk-tb"><thead>
+        <tr><th rowspan="2">회사</th><th colspan="3" class="ea-grp">영업이익 (억원)</th></tr>
+        <tr><th class="num">컨센</th><th class="num">실제</th><th class="num">차이(서프라이즈)</th></tr></thead><tbody>`
+      + list.map((r) => {
+        const { e, a } = opOf(r.k);
+        const d = e != null && a != null ? a - e : null;
+        return `<tr data-goto="${r.k}">
+          <td><b>${diEsc(r.n)}</b>${r.grp && IND_BY_KEY[r.grp] ? ` <span class="sub-note">${indLabel(r.grp)}</span>` : ""}</td>
+          <td class="num sub-note">${eokB(e)}</td>
+          <td class="num">${eokB(a)}</td>
+          <td class="num"><b class="${cls}">${d == null ? "" : (d >= 0 ? "+" : "−") + eokB(Math.abs(d))}
+            (${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%)</b></td></tr>`;
+      }).join("") + `</tbody></table>` : `<p class="mini-note">${empty}</p>`) + `</div>`;
   $("#ea-ranks").innerHTML =
     rankCard(`🟢 컨센서스 상회 — 영업이익 +${th}% 초과`, rk.beat, "kup", "아직 없습니다.")
     + rankCard(`🔴 컨센서스 하회 — 영업이익 −${th}% 초과`, rk.miss, "kdn", "아직 없습니다.");
