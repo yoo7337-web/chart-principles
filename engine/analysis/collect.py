@@ -375,11 +375,18 @@ def load_research(min_rows: int = MIN_ROWS) -> dict:
     return {k: v for k, v in load_all().items() if len(v) >= min_rows}
 
 
-def _append_new(path: Path, new: pd.DataFrame) -> int:
+def _append_new(path: Path, new: pd.DataFrame, refetch=None) -> int:
     """캐시 parquet 병합 — 겹치는 날짜는 새 데이터로 갱신(잠정 장중 봉의 확정치 보정).
 
     ⚠append-only였을 때의 실사고(2026-07-17): 24시간 클라우드가 장중에 처음 잡은 봉이
     영구 동결됨(GOOGL 07-16 372.11 vs 실제 종가 354.46). 겹침 구간은 항상 새 fetch가 이김.
+
+    🐞💀**액면분할이 이 경로로 캐시를 오염시킨다**(2026-08-14 실사고): 증분은 마지막 날짜 근처
+      며칠만 받는데, 소스(pykrx)는 **조회 시점 기준으로 조정된** 가격을 준다. 분할 다음 날부터의
+      새 행은 분할 후 기준, 과거 행은 분할 전 기준으로 남아 **한 파일에 두 스케일이 섞인다**.
+      거래량은 정상이라 눈에 안 띄고, 이벤트 스터디의 평균을 통째로 왜곡했다(실측 16종목).
+    → 병합으로 가격제한폭 위반이 늘면 **그 종목만 전 기간 재수집**해 단일 기준으로 되돌린다
+      (`refetch`). 분할일에만 발동하므로 비용이 거의 없다.
     """
     if new.empty:
         return 0
@@ -387,6 +394,23 @@ def _append_new(path: Path, new: pd.DataFrame) -> int:
     kept = old[old.index < new.index.min()]
     merged = pd.concat([kept, new]).sort_index()
     merged = merged[~merged.index.duplicated(keep="last")]
+    if path.name.startswith("kr_"):
+        v_old, v_new = _limit_viol(old), _limit_viol(merged)
+        if v_new > max(5, v_old + 2):
+            full = None
+            if refetch is not None:
+                try:
+                    full = refetch()
+                except Exception as e:
+                    print(f"  ⚠{path.name}: 전 기간 재수집 실패({e})", file=sys.stderr)
+            if full is not None and not full.empty and _limit_viol(full) <= 5:
+                print(f"  ⚠{path.name}: 조정 기준 혼입 감지(위반 {v_old}→{v_new}일) — "
+                      f"전 기간 재수집으로 교체({len(merged)}→{len(full)}행)", file=sys.stderr)
+                merged = full
+            else:
+                print(f"  ⚠{path.name}: 조정 기준 혼입 감지(위반 {v_old}→{v_new}일) — "
+                      f"재수집 불가라 **갱신 보류**(기존 캐시 유지)", file=sys.stderr)
+                return 0
     changed = len(merged) - len(old)
     save_parquet(merged, path)
     return max(changed, 0)
@@ -430,7 +454,15 @@ def refresh_all() -> None:
                 continue
             raw = raw.rename(columns={"시가": "open", "고가": "high", "저가": "low",
                                       "종가": "close", "거래량": "volume"})
-            added += _append_new(p, norm_ohlcv(raw))
+
+            def _full(_t=t):        # 조정 기준 혼입 시에만 호출되는 전 기간 재수집
+                r = stock.get_market_ohlcv("20140101", today, _t)
+                if r is None or r.empty:
+                    return None
+                return norm_ohlcv(r.rename(columns={"시가": "open", "고가": "high", "저가": "low",
+                                                    "종가": "close", "거래량": "volume"}))
+
+            added += _append_new(p, norm_ohlcv(raw), refetch=_full)
         except Exception as e:
             fail += 1
             print(f"  [KR] {t} 갱신 실패: {e}", file=sys.stderr)
