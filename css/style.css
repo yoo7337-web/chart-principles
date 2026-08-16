@@ -150,9 +150,18 @@
 .cyc-badge.mid { background: rgba(255,255,255,.08); color: var(--muted); }
 .cyc-badge.low { background: rgba(67,145,255,.16); color: #7cb1ff; }
 .cyc-track { flex: 1; height: 6px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; }
-/* v404: 순환성 근거 행의 전 종목 백분위 미니바 */
+/* v404: 순환성 근거 행의 전 종목 백분위 미니바
+   🐞v409: flex + `b{min-width:74px}` 조합이라 값 문자열이 길어지면(±65.5% 등) 막대와 **겹쳐 보였다**
+     (사용자 제보). 값 길이에 상관없이 자리가 고정되도록 **순환성 카드에서만 4열 그리드**로 바꾼다.
+     ⚠`.ws-kv-row`는 관심종목 등과 공유하는 클래스다 — 반드시 `.cyc-wrap` 스코프 안에서만 재정의할 것. */
+.cyc-wrap .ws-kv-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 52px 20px;
+  align-items: center; column-gap: 8px; }
+.cyc-wrap .ws-kv-row > span:first-child { flex: none; }
+.cyc-wrap .ws-kv-row > b { min-width: 0; white-space: nowrap; }
+.cyc-wrap .ws-kv-row > .sub-note:last-child { text-align: right; }
 .cyc-axbar { flex: 0 0 52px; height: 4px; background: rgba(255,255,255,.07); border-radius: 2px;
   overflow: hidden; margin-left: auto; align-self: center; }
+.cyc-wrap .cyc-axbar { margin-left: 0; width: 52px; }
 .cyc-axbar i { display: block; height: 100%; background: #f0b34c; border-radius: 2px; }
 .cyc-fill { display: block; height: 100%; }
 .cyc-fill.vhigh { background: var(--sell); } .cyc-fill.high { background: #f0b34c; }

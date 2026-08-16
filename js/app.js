@@ -14905,22 +14905,11 @@ function initHoldings() {
         }
         alert(`가져오기 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (기준 ${d.synced})` : ""}${extraTxt}`);
         hldRefresh();
-        /* 체결내역 → 매매일지(v408 복원). ⚠이 호출이 빠져 있어 jrImportToss가 **정의만 있고 아무도
-           부르지 않는 죽은 코드**였다(전수 grep으로 확인) — 토스를 가져와도 일지가 비어 있던 원인. */
-        if (d.orders && d.orders.length) {
-          try {
-            if (confirm(`체결내역 ${d.orders.length}건을 매매일지에 반영할까요?\n`
-                      + `매수는 진행중 거래로, 매도는 오래된 매수부터 FIFO로 청산합니다.\n`
-                      + `(이미 반영된 체결은 건너뜁니다)`)) {
-              const r = jrImportToss(d.orders);
-              alert(`매매일지 반영 완료\n`
-                  + `신규 매수 ${r.added}건 · 청산 ${r.closed}건(부분청산 ${r.split})\n`
-                  + `짝 없는 매도 ${r.solo}건 · 이미 반영돼 건너뜀 ${r.dup}건`);
-            }
-          } catch (e2) {
-            alert("매매일지 반영 중 오류: " + e2.message);
-          }
-        }
+        /* ⚠체결내역은 여기서 **따로 반영하지 않는다**. `tossSave(d)`로 스냅샷에 들어가면
+           `pfBackfill()`이 그걸 읽어 보유 시계열·거래 내역을 만든다(단일 소비 경로).
+           🐞💀v408에서 `jrImportToss(d.orders)`를 부르도록 되살렸다가 라이브에서 터졌다 —
+             **매매일지(jr-) 탭은 투자 다이어리로 교체되며 마크업이 통째로 사라져** `$("#jr-stats")`가
+             null이었다(jr* 함수 전체가 호출자 없는 죽은 코드). 없어진 UI에 데이터를 넣지 말 것. */
       } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 {holdings:[...]} / [{ticker,qty,avg}] 배열)"); }
       e.target.value = "";
     });
