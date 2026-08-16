@@ -1653,7 +1653,7 @@ function drawLookupChart() {
     for (const bt of barTimes) if (bt >= t) return bt;
     return null;
   };
-  candles.setMarkers(shown.map((m) => {
+  const sigMarks = shown.map((m) => {
     const bt = snap(m.t);
     if (!bt) return null;
     const on = ruleActive(m.rule_id, st.market);
@@ -1663,7 +1663,34 @@ function drawLookupChart() {
       shape: m.side === "buy" ? "arrowUp" : "arrowDown",
       text: selSet.size === 1 ? m.name.replace(/\(.*\)/, "").slice(0, 8) : (RULE_ABBR[m.rule_id] || ""),
     };
-  }).filter(Boolean));
+  }).filter(Boolean);
+  /* v412: ● 내 매매 시점 — 토스 체결(localStorage)을 이 종목 차트에 얹는다(개인 데이터·표시 전용).
+     같은 날 여러 체결은 방향별 1개로 합치고, 원칙 신호(화살표)와 구분되게 **원형** 마커를 쓴다.
+     ⚠setMarkers는 **시간 오름차순**이어야 한다 — 합친 뒤 반드시 재정렬(안 하면 조용히 안 그려진다). */
+  const myMarks = [];
+  if (!isMin && !lookupHideSignals) {
+    const agg = {};
+    (tossLoad()?.orders || []).forEach((o) => {
+      if (String(o.ticker).toUpperCase() !== String(st.ticker).toUpperCase() || !(+o.qty > 0)) return;
+      const d = String(o.filledAt).slice(0, 10);
+      const k = d + "|" + o.side;
+      (agg[k] = agg[k] || { d, side: o.side, qty: 0 }).qty += +o.qty;
+    });
+    Object.values(agg).forEach((x) => {
+      const bt = snap(x.d);
+      if (!bt) return;
+      const buy = x.side === "BUY";
+      myMarks.push({ time: bt, position: buy ? "belowBar" : "aboveBar",
+        color: buy ? "#4391ff" : "#f0b34c", shape: "circle",
+        text: (buy ? "내 매수 " : "내 매도 ") + x.qty });
+    });
+    if (myMarks.length) {
+      $("#lookup-info").innerHTML += ` · <span style="color:#4391ff">●</span> 내 매수 ${
+        myMarks.filter((m) => m.color === "#4391ff").length}회 <span style="color:#f0b34c">●</span> 매도 ${
+        myMarks.filter((m) => m.color === "#f0b34c").length}회`;
+    }
+  }
+  candles.setMarkers([...sigMarks, ...myMarks].sort((a2, b2) => (a2.time < b2.time ? -1 : a2.time > b2.time ? 1 : 0)));
 
   // 보조지표 패널: 체크박스 복수 선택 우선, 미선택 시 선택 원칙 연동
   let legendExtra = "";
@@ -15214,26 +15241,21 @@ async function renderHldTrades(host) {
       || Math.abs((b.r?.pnl) || 0) - Math.abs((a.r?.pnl) || 0));
   const span = `${hist.days[0]} ~ ${pfDay(new Date())}`;
   /* ① 상단 요약 그래프 — 종목별 실현손익 발산 막대.
-     19종목을 한 화면에서 크기·부호로 비교할 수 있어야 "무엇이 성과를 갈랐나"가 바로 보인다. */
+     19종목을 한 화면에서 크기·부호로 비교할 수 있어야 "무엇이 성과를 갈랐나"가 바로 보인다.
+     ⚠v412: SVG 텍스트는 viewBox 배율에 따라 실표시 크기가 흔들려 주변 폰트와 어긋났다(제보)
+       → **HTML 행 + CSS 토큰 폰트**로 재작성(값=--fs-body·이름=--fs-sub, 주변과 동일). */
   const pnlRows = rows.filter((r) => r.r).sort((a, b) => b.r.pnl - a.r.pnl);
   let barSvg = "";
   if (pnlRows.length) {
     const mx = Math.max(...pnlRows.map((r) => Math.abs(r.r.pnl))) || 1;
-    const RH = 20, PAD = 4, LW = 108, W = 560, mid = LW + (W - LW) / 2;
-    const H = pnlRows.length * RH + PAD * 2 + 14;
-    barSvg = `<svg viewBox="0 0 ${W} ${H}" class="tbar-svg" preserveAspectRatio="xMidYMin meet">
-      <line x1="${mid}" y1="${PAD}" x2="${mid}" y2="${H - 14}" stroke="var(--line)"/>
-      ${pnlRows.map((r, i) => {
-        const y = PAD + i * RH, v = r.r.pnl;
-        const w = Math.abs(v) / mx * ((W - LW) / 2 - 46);
-        const x = v >= 0 ? mid : mid - w;
-        const col = v >= 0 ? "var(--kup)" : "var(--kdn)";
-        return `<text x="${LW - 6}" y="${y + RH / 2 + 4}" class="tbar-nm" text-anchor="end">${esc(r.meta.name).slice(0, 10)}</text>
-          <rect x="${x}" y="${y + 4}" width="${Math.max(w, 1)}" height="${RH - 9}" rx="2" fill="${col}" opacity=".85"/>
-          <text x="${v >= 0 ? mid + w + 5 : mid - w - 5}" y="${y + RH / 2 + 4}" class="tbar-v"
-            text-anchor="${v >= 0 ? "start" : "end"}" fill="${col}">${won(v, true)}</text>`;
-      }).join("")}
-      <text x="${mid}" y="${H - 3}" class="tbar-nm" text-anchor="middle">실현손익 (FIFO) — 매도한 것만</text></svg>`;
+    barSvg = `<div class="tbar-rows">${pnlRows.map((r) => {
+      const v = r.r.pnl, w = (Math.abs(v) / mx * 100).toFixed(1);
+      return `<div class="tbar-row">
+        <span class="tbar-nm2">${esc(r.meta.name)}</span>
+        <span class="tbar-track"><i class="l">${v < 0 ? `<u style="width:${w}%"></u>` : ""}</i><i class="r">${v >= 0 ? `<u style="width:${w}%"></u>` : ""}</i></span>
+        <b class="tbar-v2 ${v >= 0 ? "pos" : "neg"}">${won(v, true)}</b></div>`;
+    }).join("")}
+    <div class="sub-note" style="text-align:center;margin-top:2px">실현손익 (FIFO) — 매도한 것만</div></div>`;
   }
   host.innerHTML = `<div class="hld-tr-head sub-note">${span} · 체결 ${tr.length}건 · ${rows.length}종목
       <span class="sub-note">— 카드를 누르면 매수·매도 시점 차트가 펼쳐집니다</span></div>

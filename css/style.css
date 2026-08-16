@@ -2848,12 +2848,22 @@ header h1 { margin-right: auto; }
   .tcard-pnl { grid-column: 2; text-align: left; }
 }
 
-/* 📊 종목별 매매 그래프 (v411) — 상단 실현손익 발산 막대 + 카드 내 매매 시점 차트 */
+/* 📊 종목별 매매 그래프 (v411 · v412에서 막대를 SVG→HTML로) — 상단 실현손익 발산 막대 + 카드 내 매매 시점 차트
+   ⚠막대를 SVG 텍스트로 그리면 viewBox 배율 때문에 실표시 폰트가 주변과 어긋난다(제보) →
+     HTML 행 + 토큰 폰트(--fs-sub/--fs-body)로 주변과 동일하게. */
 .tbar-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-  padding: 6px 8px; margin-bottom: 10px; overflow-x: auto; }
-.tbar-svg { width: 100%; min-width: 460px; display: block; }
-.tbar-nm { font-size: 10.5px; fill: var(--muted); }
-.tbar-v { font-size: 10.5px; font-weight: 600; }
+  padding: 8px 10px; margin-bottom: 10px; }
+.tbar-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 112px; gap: 8px;
+  align-items: center; padding: 1.5px 0; }
+.tbar-nm2 { font-size: var(--fs-sub); color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.tbar-track { display: flex; height: 10px; }
+.tbar-track i { flex: 1; position: relative; display: block; }
+.tbar-track i.l { border-right: 1px solid var(--line); }
+.tbar-track u { position: absolute; top: 1px; bottom: 1px; display: block; border-radius: 2px; }
+.tbar-track i.l u { right: 0; background: var(--kdn); opacity: .85; }
+.tbar-track i.r u { left: 0; background: var(--kup); opacity: .85; }
+.tbar-v2 { font-size: var(--fs-body); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tchart { padding: 6px 10px 2px; }
 .tchart-svg { width: 100%; height: 108px; display: block; }
 .tchart-lg { font-size: var(--fs-note); padding: 2px 0 4px; }
