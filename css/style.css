@@ -2909,3 +2909,13 @@ header h1 { margin-right: auto; }
 /* 🎯 예측 실적 완료 표 (v420) — 2단 헤더: 그룹 헤더(매출/영업이익) 아래 컨센|실제|차이 */
 #ea-done th.ea-grp { text-align: center; border-bottom: 1px solid var(--line); }
 #ea-done thead tr:last-child th { font-weight: 400; color: var(--muted); font-size: var(--fs-note); }
+
+/* 🎯 상회/하회 랭킹 = 2단 헤더 표 (v421) — 완료 표와 같은 형식 */
+.ea-rk-tb { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.ea-rk-tb th { font-weight: 400; color: var(--muted); font-size: var(--fs-note);
+  padding: 3px 6px; text-align: left; }
+.ea-rk-tb th.num, .ea-rk-tb td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ea-rk-tb th.ea-grp { text-align: center; border-bottom: 1px solid var(--line); }
+.ea-rk-tb td { padding: 3px 6px; font-size: var(--fs-sub); border-top: 1px solid var(--line); }
+.ea-rk-tb tbody tr { cursor: pointer; }
+.ea-rk-tb tbody tr:hover { background: rgba(255,255,255,.04); }
