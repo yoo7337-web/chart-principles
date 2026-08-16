@@ -14675,15 +14675,24 @@ function jrRenderList() {
 // 토스 체결내역(FILLED) → 매매일지 자동 기록.
 // BUY=신규 진행중 거래 / SELL=동일 종목·동일 수량의 가장 오래된 진행중 매수를 청산(FIFO),
 // 짝이 없으면 손익 0의 단독 기록으로 보존. dedup은 주문 id("toss_…") 기준 — 재가져오기 시 0건.
+/* 토스 체결내역 → 매매일지. BUY는 진행중 거래로, SELL은 같은 종목의 미청산 매수를 **FIFO로 소진**한다.
+   ⚠🐞**dedup id에 oid를 자르면 안 된다**(2026-08-16 실측): 토스 orderId는 앞부분이 공통이라
+     앞 16자로는 **104건이 32개로 뭉친다**(한 id에 최대 20건). 90일치일 땐 안 드러났지만 2년치를
+     넣으면 **69%가 '중복'으로 조용히 버려진다**. → 전체 oid를 쓰되, 옛 기록과의 충돌을 피하려고
+     **옛 16자 id도 함께 조회**한다(이미 들어간 기록을 두 번 넣지 않기 위해).
+   ⚠🐞**'동일 수량' 매칭도 안 된다**: 분할 매수·매도가 일반적이라 매도 27건 중 같은 수량의 매수가
+     있는 건 9건뿐이었다. 수량이 다르면 전부 '짝 없음'으로 손익 0 기록이 돼 일지가 무의미해진다.
+     → **수량 무관 FIFO + 부분청산 시 로트 분할**(남은 수량은 진행중으로 유지). */
 function jrImportToss(orders) {
   const arr = jrLoad();
   const ids = new Set(arr.flatMap((r) => [r.id, r.tossExit].filter(Boolean)));
-  let added = 0, closed = 0, solo = 0, dup = 0;
+  let added = 0, closed = 0, solo = 0, dup = 0, split = 0;
   const sorted = [...orders].sort((a, b) => (a.filledAt || "").localeCompare(b.filledAt || ""));
   sorted.forEach((o) => {
     if (!o.oid || !o.ticker || !(o.qty > 0)) return;
-    const id = "toss_" + String(o.oid).slice(0, 16);
-    if (ids.has(id)) { dup++; return; }
+    const oid = String(o.oid);
+    const id = "toss_" + oid;
+    if (ids.has(id) || ids.has("toss_" + oid.slice(0, 16))) { dup++; return; }
     ids.add(id);
     const tk = String(o.ticker);
     const hit = LOOKUP_INDEX?.find((x) => x.ticker.toUpperCase() === tk.toUpperCase());
@@ -14695,25 +14704,40 @@ function jrImportToss(orders) {
         exit: null, etime: t16, xtime: null,
         reason: `[토스 자동기록] 매수 체결 · ${feeTxt}`, emotion: "", note: "" });
       added++;
-    } else {  // SELL
-      const tgt = arr.filter((r) => r.ticker === tk && r.side === "buy" && r.exit == null && r.qty === o.qty)
-        .sort((a, b) => (a.etime || "").localeCompare(b.etime || ""))[0];
-      if (tgt) {
-        tgt.exit = o.price; tgt.xtime = t16; tgt.tossExit = id;
-        tgt.note = ((tgt.note || "") + `\n[토스 자동기록] 매도 체결 · ${feeTxt}`).trim();
+      return;
+    }
+    // SELL — 오래된 매수부터 소진
+    let rest = o.qty;
+    const lots = arr.filter((r) => r.ticker === tk && r.side === "buy" && r.exit == null && r.qty > 0)
+      .sort((a, b) => (a.etime || "").localeCompare(b.etime || ""));
+    for (const lot of lots) {
+      if (rest <= 0) break;
+      if (lot.qty <= rest) {                      // 이 로트 전량 청산
+        rest -= lot.qty;
+        lot.exit = o.price; lot.xtime = t16; lot.tossExit = id;
+        lot.note = ((lot.note || "") + `\n[토스 자동기록] 매도 체결 · ${feeTxt}`).trim();
         closed++;
-      } else {
-        arr.unshift({ id, ticker: tk, name, side: "buy", qty: o.qty, entry: o.price,
-          exit: o.price, etime: t16, xtime: t16,
-          reason: `[토스 자동기록] 매도 단독 체결 · ${feeTxt}`, emotion: "",
-          note: "짝이 되는 매수 기록이 없어 손익 0으로 보존(진입가는 수기 보정)" });
-        solo++;
+      } else {                                    // 부분 청산 — 판 만큼만 떼어 낸다
+        lot.qty -= rest;
+        arr.unshift({ id: id + ":" + lot.id, ticker: tk, name, side: "buy", qty: rest,
+          entry: lot.entry, exit: o.price, etime: lot.etime, xtime: t16, tossExit: id,
+          reason: `[토스 자동기록] 부분 매도 체결 · ${feeTxt}`, emotion: "",
+          note: `분할 매도 — 매수 ${lot.qty + rest}주 중 ${rest}주 청산(나머지 ${lot.qty}주는 진행중)` });
+        rest = 0;
+        closed++; split++;
       }
+    }
+    if (rest > 0) {                               // 짝이 없는 매도(이전 기간 매수분 등)
+      arr.unshift({ id, ticker: tk, name, side: "buy", qty: rest, entry: o.price,
+        exit: o.price, etime: t16, xtime: t16,
+        reason: `[토스 자동기록] 매도 단독 체결 · ${feeTxt}`, emotion: "",
+        note: "짝이 되는 매수 기록이 없어 손익 0으로 보존(진입가는 수기 보정)" });
+      solo++;
     }
   });
   jrSave(arr);
   jrRender();
-  return { added, closed, solo, dup };
+  return { added, closed, solo, dup, split };
 }
 
 /* ---------- 포트폴리오 점검 (localStorage — 서버 전송 없음) ---------- */
@@ -14881,6 +14905,22 @@ function initHoldings() {
         }
         alert(`가져오기 완료 — 신규 ${added} · 갱신 ${updated}종목${d.synced ? ` (기준 ${d.synced})` : ""}${extraTxt}`);
         hldRefresh();
+        /* 체결내역 → 매매일지(v408 복원). ⚠이 호출이 빠져 있어 jrImportToss가 **정의만 있고 아무도
+           부르지 않는 죽은 코드**였다(전수 grep으로 확인) — 토스를 가져와도 일지가 비어 있던 원인. */
+        if (d.orders && d.orders.length) {
+          try {
+            if (confirm(`체결내역 ${d.orders.length}건을 매매일지에 반영할까요?\n`
+                      + `매수는 진행중 거래로, 매도는 오래된 매수부터 FIFO로 청산합니다.\n`
+                      + `(이미 반영된 체결은 건너뜁니다)`)) {
+              const r = jrImportToss(d.orders);
+              alert(`매매일지 반영 완료\n`
+                  + `신규 매수 ${r.added}건 · 청산 ${r.closed}건(부분청산 ${r.split})\n`
+                  + `짝 없는 매도 ${r.solo}건 · 이미 반영돼 건너뜀 ${r.dup}건`);
+            }
+          } catch (e2) {
+            alert("매매일지 반영 중 오류: " + e2.message);
+          }
+        }
       } catch (err) { alert("JSON 형식이 올바르지 않습니다 (toss_sync.py 생성 파일 또는 {holdings:[...]} / [{ticker,qty,avg}] 배열)"); }
       e.target.value = "";
     });
