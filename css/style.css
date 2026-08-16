@@ -2808,3 +2808,42 @@ header h1 { margin-right: auto; }
 .short-strip { display: flex; align-items: center; gap: 10px; font-size: var(--fs-body);
   border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; flex-wrap: wrap; }
 .short-spark { width: 150px; height: 30px; flex: 0 0 auto; opacity: .9; }
+
+/* 🩺 투자 진단 리포트 (v409) — 경고 카드 → 근거 수치 → 개선 제안 */
+.pf-diag-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pf-diag { border: 1px solid var(--line); border-left-width: 3px; border-radius: 10px;
+  background: var(--surface); padding: 10px 12px; margin-bottom: 8px; }
+.pf-diag.bad { border-left-color: var(--sell); }
+.pf-diag.warn { border-left-color: #f0b34c; }
+.pf-diag.good { border-left-color: #22c07a; }
+.pf-diag.info { border-left-color: var(--muted); }
+.pf-diag-t { font-size: var(--fs-h); font-weight: 600; margin-bottom: 4px; }
+.pf-diag-l { font-size: var(--fs-sub); color: var(--muted); line-height: 1.65; }
+.pf-diag-l b { color: var(--fg); }
+.pf-diag-a { font-size: var(--fs-sub); line-height: 1.6; margin-top: 6px; padding-top: 6px;
+  border-top: 1px dashed var(--line); color: var(--fg); }
+.pf-diag-a::before { content: "→ "; color: var(--muted); }
+
+/* 🧾 종목별 매매 카드 (v409) — 계단 스파크라인을 대체한 접힘 카드 */
+.tcard-wrap { display: flex; flex-direction: column; gap: 6px; }
+.tcard { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.tcard.gone { opacity: .72; }
+.tcard > summary { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; padding: 8px 10px; cursor: pointer; list-style: none; }
+.tcard > summary::-webkit-details-marker { display: none; }
+.tcard > summary:hover { background: rgba(255,255,255,.03); }
+.tcard > summary > img { width: 20px; height: 20px; border-radius: 5px; object-fit: contain; }
+.tcard-nm { font-size: var(--fs-body); font-weight: 600; display: flex; gap: 6px;
+  align-items: baseline; min-width: 0; }
+.tcard-nm .sub-note { font-weight: 400; white-space: nowrap; }
+.tcard-pnl { font-size: var(--fs-num); font-weight: 600; text-align: right; white-space: nowrap; }
+.tcard-meta { grid-column: 2 / -1; font-size: var(--fs-note); }
+.tcard-tb { width: 100%; border-collapse: collapse; margin: 0 0 2px; }
+.tcard-tb td { padding: 3px 10px; font-size: var(--fs-sub); border-top: 1px solid var(--line); }
+.tcard-tb td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tcard-tb .t-buy { color: var(--kup); } .tcard-tb .t-sell { color: var(--kdn); }
+.tcard-go { padding: 4px 10px 8px; }
+@media (max-width: 560px) {
+  .tcard > summary { grid-template-columns: 20px minmax(0, 1fr); }
+  .tcard-pnl { grid-column: 2; text-align: left; }
+}

@@ -14957,11 +14957,13 @@ function pfBackfill() {
     const type = o.side === "BUY" ? (before > 0 ? "add" : "in") : (after > 0 ? "trim" : "out");
     if (type === "in") events.push({ d: day, t, type: "in", name: meta[t].name });
     if (type === "out") events.push({ d: day, t, type: "out", name: meta[t].name });
-    trades.push({ d: day, t, name: meta[t].name, mk: meta[t].mk, side: o.side,
+    // ⚠**날짜(day)만으로 정렬하면 같은 날 여러 체결의 순서가 뒤섞인다** — 실측 TSLA는 2026-07-28에
+    //   01:46:02·01:46:56 두 건이 있어 계단 수량이 28주/14주로 뒤집혔다. 전체 타임스탬프를 함께 싣는다.
+    trades.push({ d: day, ts: o.filledAt, t, name: meta[t].name, mk: meta[t].mk, side: o.side,
                   qty: +o.qty, price: +o.price || null, before, after, type });
     states.push({ d: day, q: { ...q } });      // 그날 거래 직전 상태
   });
-  trades.sort((a, b) => a.d.localeCompare(b.d));
+  trades.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
   return { states, events, trades, meta, from: states[states.length - 1]?.d };
 }
 // 날짜별 보유 수량 — 스냅샷(정확) 우선, 없으면 역산 상태를 계단식으로 채움
@@ -15122,62 +15124,72 @@ function hldFineSector(h) {
 }
 
 /* 📅 보유 비중 변화 — 100% 누적 영역(종목별/산업별) + 편입▲·제외▼ 마커 */
-/* 🧾 종목별 매매 추이 — 계단형 보유 수량 + 매매 마커(편입·증량·감량·전량매도) */
+/* 🧾 종목별 매매 — **접힘 카드**(v409). 요약 한 줄 → 누르면 체결 상세.
+   ⚠옛 형식(34px 계단 스파크라인 + 호버 툴팁)은 제보로 폐기했다: ①수량 축이 행마다 따로 정규화돼
+     서로 비교가 안 되고 ②마우스를 올려야만 숫자가 보이며 ③2년치가 들어오자 가로로 뭉갰다.
+   요약에 **실현손익·승률·매매횟수**를 바로 적고, 상세는 접어 둔다. */
 const HLD_TRADE_KO = { in: ["편입", "#22c07a"], add: ["증량", "#4391ff"],
                        trim: ["감량", "#f0b34c"], out: ["전량매도", "#f5445a"] };
 function renderHldTrades(host) {
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const hist = pfHistDaily();
   const tr = hist.trades || [];
   if (!tr.length) {
     host.innerHTML = `<p class="mini-note">체결 이력이 없습니다 — 토스 동기화 파일(체결내역 포함)을 가져오면
-      최근 90일 매매가 종목별로 표시됩니다.</p>`;
+      매매가 종목별로 표시됩니다.</p>`;
     return;
   }
-  const start = hist.days[0], end = pfDay(new Date());
-  const dayN = Math.max(1, (new Date(end) - new Date(start)) / 864e5);
-  const X = (d) => (new Date(d) - new Date(start)) / 864e5 / dayN;   // 0~1
-  // 종목별 수량 변화 경로 만들기(거래 시점마다 계단)
+  const ts = pfTradeStats();
+  const realBy = {};
+  (ts?.real || []).forEach((r) => {
+    const a = (realBy[r.t] = realBy[r.t] || { pnl: 0, n: 0, win: 0, days: 0 });
+    a.pnl += r.pnl; a.n++; a.days += r.days; if (r.pnl > 0) a.win++;
+  });
+  const cur = {};
+  pfHoldings().forEach((h) => { cur[h.ticker] = { qty: +h.qty || 0, name: h.name, mk: h.mk, val: h.val }; });
   const byT = {};
   tr.forEach((t) => (byT[t.t] = byT[t.t] || []).push(t));
-  const cur = {};
-  pfHoldings().forEach((h) => { cur[h.ticker] = +h.qty || 0; });
-  const rows = Object.entries(byT).map(([t, ts]) => {
-    const pts = [{ x: 0, q: ts[0].before }];
-    ts.forEach((x) => { pts.push({ x: X(x.d), q: x.before }); pts.push({ x: X(x.d), q: x.after }); });
-    pts.push({ x: 1, q: cur[t] != null ? cur[t] : ts[ts.length - 1].after });
-    const mx = Math.max(...pts.map((p) => p.q), 1);
-    return { t, ts, pts, mx, meta: hist.meta[t] || { mk: "kr", name: t },
-             now: pts[pts.length - 1].q, first: ts[0].d };
-  }).sort((a, b) => (b.now > 0 ? 1 : 0) - (a.now > 0 ? 1 : 0) || a.first.localeCompare(b.first));
-  const W = 560, H = 34;
-  host.innerHTML = `<div class="hld-tr-head sub-note">${start} ~ ${end} · 선 높이 = 그 종목의 보유 수량
-      · ${Object.entries(HLD_TRADE_KO).map(([k, [ko, c]]) => `<i style="background:${c}"></i>${ko}`).join(" ")}</div>
-    <div class="hld-trs">${rows.map((r) => {
-      const Y = (q) => 4 + (H - 8) * (1 - q / r.mx);
-      const line = r.pts.map((p, i) => `${(p.x * W).toFixed(1)},${Y(p.q).toFixed(1)}`).join(" ");
-      const marks = r.ts.map((x) => {
-        const [ko, c] = HLD_TRADE_KO[x.type];
-        return `<g><circle cx="${(X(x.d) * W).toFixed(1)}" cy="${Y(x.after).toFixed(1)}" r="4" fill="${c}"
-          stroke="var(--card)" stroke-width="1.2"/><title>${x.d} · ${ko} ${x.qty.toLocaleString()}주${
-          x.price ? ` @ ${x.price.toLocaleString()}` : ""} → 보유 ${x.after.toLocaleString()}주</title></g>`;
-      }).join("");
-      const last = r.ts[r.ts.length - 1];
-      return `<button class="hld-tr" data-key="${r.meta.mk}_${r.t}">
-        <img src="${logoUrl(r.meta.mk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-        <span class="hld-tr-nm">${r.meta.name}</span>
-        <svg viewBox="0 0 ${W} ${H}" class="hld-tr-svg" preserveAspectRatio="none">
-          <line x1="0" y1="${H - 4}" x2="${W}" y2="${H - 4}" stroke="var(--line)"/>
-          <polyline points="${line}" fill="none" stroke="#8b8b93" stroke-width="1.6"/>${marks}</svg>
-        <span class="hld-tr-now ${r.now > 0 ? "" : "gone"}">${r.now > 0
-          ? r.now.toLocaleString() + "주" : "전량매도"}</span>
-        <span class="hld-tr-last sub-note">${last.d.slice(5)} ${HLD_TRADE_KO[last.type][0]}</span>
-      </button>`;
+  const rows = Object.entries(byT).map(([t, list]) => {
+    const meta = cur[t] || hist.meta[t] || { mk: /^\d{6}$/.test(t) ? "kr" : "us", name: t };
+    const r = realBy[t];
+    return { t, meta, list: list.slice().sort((a, b) => String(b.ts).localeCompare(String(a.ts))),
+      held: cur[t]?.qty || 0, r,
+      nBuy: list.filter((x) => x.side === "BUY").length,
+      nSell: list.filter((x) => x.side === "SELL").length, last: list[list.length - 1] };
+  }).sort((a, b) => (b.held > 0 ? 1 : 0) - (a.held > 0 ? 1 : 0)
+      || Math.abs((b.r?.pnl) || 0) - Math.abs((a.r?.pnl) || 0));
+  const span = `${hist.days[0]} ~ ${pfDay(new Date())}`;
+  host.innerHTML = `<div class="hld-tr-head sub-note">${span} · 체결 ${tr.length}건 · ${rows.length}종목
+      <span class="sub-note">— 카드를 누르면 개별 체결이 펼쳐집니다</span></div>
+    <div class="tcard-wrap">${rows.map((r) => {
+      const pnl = r.r?.pnl;
+      const wr = r.r && r.r.n ? Math.round(r.r.win / r.r.n * 100) : null;
+      return `<details class="tcard${r.held > 0 ? "" : " gone"}">
+        <summary>
+          <img src="${logoUrl(r.meta.mk, r.t)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+          <span class="tcard-nm">${esc(r.meta.name)}
+            <span class="sub-note">${r.held > 0 ? `보유 ${r.held.toLocaleString()}주` : "전량매도"}</span></span>
+          <span class="tcard-pnl ${pnl == null ? "" : pnl >= 0 ? "pos" : "neg"}">${
+            pnl == null ? `<span class="sub-note">미실현</span>` : won(pnl, true)}</span>
+          <span class="tcard-meta sub-note">매수 ${r.nBuy} · 매도 ${r.nSell}${
+            wr != null ? ` · 승률 ${wr}%` : ""}${r.r ? ` · 평균 ${Math.round(r.r.days / r.r.n)}일` : ""}</span>
+        </summary>
+        <table class="tcard-tb"><tbody>${r.list.map((x) => `<tr>
+          <td>${x.d}</td>
+          <td><b class="${x.side === "BUY" ? "t-buy" : "t-sell"}">${x.side === "BUY" ? "매수" : "매도"}</b></td>
+          <td class="num">${x.qty.toLocaleString()}주</td>
+          <td class="num">${x.price != null ? x.price.toLocaleString() : "-"}</td>
+          <td class="num sub-note">→ ${x.after.toLocaleString()}주</td>
+          <td class="sub-note">${HLD_TRADE_KO[x.type][0]}</td></tr>`).join("")}</tbody></table>
+        <div class="tcard-go"><button class="today-chart-btn" data-key="${r.meta.mk}_${r.t}">종목조회에서 보기 →</button></div>
+      </details>`;
     }).join("")}</div>
-    <p class="mini-note">⚠ ${start} 이전 매매는 토스가 체결내역을 90일까지만 제공해 복원할 수 없습니다.
-      점에 마우스를 올리면 수량·단가가 나오고, 행을 누르면 종목조회로 이동합니다.</p>`;
-  host.querySelectorAll(".hld-tr").forEach((b) => b.onclick = () => {
-    gotoLookup(b.dataset.key);
+    <p class="mini-note">⚠ ${hist.days[0]} 이전 매매는 계좌 개설 전이거나 API 조회 범위 밖이라 복원할 수 없습니다.
+      실현손익은 FIFO(먼저 산 것부터 판 것으로 계산) 기준입니다.</p>`;
+  host.querySelectorAll(".tcard-go button").forEach((b) => b.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation(); gotoLookup(b.dataset.key);
   });
+  return;
 }
 
 /* 종목/산업 비중을 각각 독립 카드에 그린다(토글 → 3영역 분리, v194).
@@ -15567,9 +15579,185 @@ async function pfRender() {
       .then((j) => pfStockCache.set(key, j));
   }));
   pfRenderStats(arr);
+  pfRenderDiag(arr);     // v409: 진단 리포트(시장 대비·집중도·레버리지·매매 습관)
   pfRenderMatrix(arr);   // 판정 근거 도표(매트릭스·점수 막대)
   pfRenderRisk(arr);     // v394: 상관·베타·집중도(통계적 리스크)
   pfRenderList(arr);
+}
+
+/* ═══ 🩺 투자 진단 리포트 (v409) ═══════════════════════════════════════════
+   "지금 잘 가고 있나"를 종목 하나하나가 아니라 **포트폴리오 전체 습관** 관점에서 본다.
+   근거는 전부 이미 있는 데이터다 — 보유(pfHoldings) · 체결내역(tossLoad().orders) ·
+   지수 주봉(MARKET.macro의 w5/w5d) · 산업 분류(pfCheck의 sector).
+   ⚠판정 점수(pfCheck)에는 넣지 않는다. 이건 별도의 '습관 진단'이다. */
+const DIAG_LEV = { bad: ["🔴", "심각"], warn: ["🟡", "주의"], good: ["🟢", "잘하는 것"], info: ["⚪", "참고"] };
+// 레버리지·인버스 ETF 판별 — 이름/티커 규칙(유니버스 밖이라 섹터 분류가 없다)
+const LEV_RE = /(\d+X|BULL|BEAR|ULTRA|LEVERAGED|인버스|레버리지)/i;
+const LEV_TICKERS = new Set(["TSLL", "TSLQ", "NVDX", "NVDU", "NVDD", "AMDL", "AMDS", "SNXX", "LINT",
+  "SOXL", "SOXS", "TQQQ", "SQQQ", "UPRO", "SPXU", "LABU", "LABD", "FNGU", "BULZ", "CONL", "MSTX", "MSTU"]);
+const pfIsLev = (h) => LEV_TICKERS.has(String(h.ticker).toUpperCase()) || LEV_RE.test(h.name || "");
+
+/* 지수 주봉에서 [from, to] 수익률 — MARKET.macro의 w5(값)/w5d(날짜) 사용 */
+function pfBenchRet(id, from, to) {
+  const m = (MARKET?.macro || []).find((x) => x.id === id);
+  if (!m || !m.w5 || !m.w5d) return null;
+  let i0 = -1, i1 = -1;
+  m.w5d.forEach((d, i) => {
+    if (d <= from) i0 = i;
+    if (d <= to) i1 = i;
+  });
+  if (i0 < 0) i0 = 0;
+  if (i1 <= i0) return null;
+  const a = m.w5[i0], b = m.w5[i1];
+  return a > 0 && b > 0 ? { ret: b / a - 1, name: m.name, from: m.w5d[i0], to: m.w5d[i1] } : null;
+}
+
+/* 체결내역 → FIFO 실현손익·습관 지표. orders가 없으면 null */
+function pfTradeStats() {
+  const orders = (tossLoad()?.orders || []).filter((o) => o.filledAt && o.ticker && +o.qty > 0)
+    .slice().sort((a, b) => String(a.filledAt).localeCompare(String(b.filledAt)));
+  if (orders.length < 5) return null;
+  const fx = pfFxRate() || 1;
+  const K = (v, cur) => v * (cur === "USD" ? fx : 1);
+  const lots = {}, real = [];
+  orders.forEach((o) => {
+    const t = o.ticker;
+    (lots[t] = lots[t] || []);
+    if (o.side === "BUY") { lots[t].push({ q: +o.qty, p: +o.price, d: String(o.filledAt).slice(0, 10) }); return; }
+    let rest = +o.qty;
+    while (rest > 1e-9 && lots[t].length) {
+      const L = lots[t][0], take = Math.min(L.q, rest);
+      real.push({ t, pnl: K((o.price - L.p) * take, o.cur), ret: L.p ? o.price / L.p - 1 : 0,
+        days: Math.round((new Date(String(o.filledAt).slice(0, 10)) - new Date(L.d)) / 864e5) });
+      L.q -= take; rest -= take;
+      if (L.q <= 1e-9) lots[t].shift();
+    }
+  });
+  if (!real.length) return null;
+  const win = real.filter((r) => r.pnl > 0), los = real.filter((r) => r.pnl <= 0);
+  const sum = (a) => a.reduce((s, r) => s + r.pnl, 0);
+  const med = (a) => (a.length ? a.slice().sort((x, y) => x - y)[a.length >> 1] : 0);
+  const buys = orders.filter((o) => o.side === "BUY");
+  let dn = 0, up = 0; const last = {};
+  buys.forEach((o) => {
+    if (last[o.ticker] != null) (o.price < last[o.ticker] ? dn++ : up++);
+    last[o.ticker] = o.price;
+  });
+  const months = new Set(orders.map((o) => String(o.filledAt).slice(0, 7))).size || 1;
+  return { orders, real, from: String(orders[0].filledAt).slice(0, 10), to: String(orders[orders.length - 1].filledAt).slice(0, 10),
+    n: real.length, winN: win.length, winRate: win.length / real.length,
+    profit: sum(win), loss: sum(los), total: sum(real),
+    pf: sum(los) ? sum(win) / Math.abs(sum(los)) : null,
+    avgWinRet: win.length ? win.reduce((s, r) => s + r.ret, 0) / win.length : 0,
+    avgLosRet: los.length ? los.reduce((s, r) => s + r.ret, 0) / los.length : 0,
+    medHold: med(real.map((r) => r.days)), medWinHold: med(win.map((r) => r.days)), medLosHold: med(los.map((r) => r.days)),
+    dn, up, perMonth: orders.length / months, months,
+    invested: buys.reduce((s, o) => s + K(+o.amount || 0, o.cur), 0) };
+}
+
+/* 진단 4종 판정 → [{lev, title, lines[], advice}] */
+function pfDiagnose(arr) {
+  // ⚠`esc`는 이 파일에서 **전역이 아니다** — 함수마다 지역 정의를 두는 관례라 여기서도 선언한다
+  //   (전역인 줄 알고 쓰면 ReferenceError로 진단 카드가 통째로 사라진다).
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // ⚠`pct()`는 **증감률용이라 항상 부호를 붙인다** — 비중·승률 같은 '비율'에 쓰면 "+53%"가 된다.
+  //   비율은 부호 없는 rat()로 쓴다(첫 구현에서 1위 비중·승률·레버리지 비중이 전부 +로 나왔다).
+  const rat = (v, d = 0) => (v * 100).toFixed(d) + "%";
+  const out = [];
+  const tot = arr.reduce((s, h) => s + (h.val || 0), 0) || 1;
+  const ts = pfTradeStats();
+
+  // ① 시장 대비 성과 — 체결내역이 있어야 기간을 특정할 수 있다
+  if (ts) {
+    const bench = [["^KS11", 0.14], ["^GSPC", 0], ["^IXIC", 0]]
+      .map(([id]) => pfBenchRet(id, ts.from, ts.to)).filter(Boolean);
+    const cost = arr.reduce((s, h) => s + (h.cost != null ? h.cost : (h.avg || 0) * h.qty), 0);
+    const unreal = cost ? (tot - cost) / cost : 0;
+    const best = bench.length ? bench.reduce((a, b) => (b.ret > a.ret ? b : a)) : null;
+    if (best) {
+      const gap = unreal - best.ret;
+      const lines = [
+        `기간 <b>${ts.from} ~ ${ts.to}</b> (${ts.months}개월) · 총 투입 ${won(ts.invested)}`,
+        `내 성과 — 실현 <b class="${ts.total >= 0 ? "pos" : "neg"}">${won(ts.total, true)}</b> · 평가 <b class="${unreal >= 0 ? "pos" : "neg"}">${pct(unreal, 1)}</b>`,
+        `같은 기간 시장 — ${bench.map((b) => `${b.name} <b>${pct(b.ret, 1)}</b>`).join(" · ")}`,
+      ];
+      out.push(gap < -0.15
+        ? { lev: "bad", title: `시장을 크게 놓치고 있습니다 (${best.name} 대비 ${rat(gap, 0)}p)`, lines,
+            advice: `지수를 그냥 보유했을 때보다 <b>${rat(-gap, 0)}p</b> 뒤처집니다. 개별 종목 선택이 지수를 이기지 못하고 있다면, 일부를 지수(ETF)로 옮겨 기준선을 확보하는 편이 낫습니다.` }
+        : gap < 0
+          ? { lev: "warn", title: `시장을 소폭 밑돕니다 (${best.name} 대비 ${rat(gap, 0)}p)`, lines, advice: "" }
+          : { lev: "good", title: `시장을 앞서고 있습니다 (${best.name} 대비 +${rat(gap, 0)}p)`, lines, advice: "" });
+    }
+  }
+
+  // ② 집중도·산업 편중
+  const ws = arr.map((h) => (h.val || 0) / tot).sort((a, b) => b - a);
+  const hhi = ws.reduce((s, w) => s + w * w, 0);
+  const top3 = ws.slice(0, 3).reduce((s, w) => s + w, 0);
+  const secW = {};
+  arr.forEach((h) => { const s = pfCheck(h).sector; if (s) secW[s] = (secW[s] || 0) + (h.val || 0); });
+  const topSec = Object.entries(secW).sort((a, b) => b[1] - a[1])[0];
+  const top1 = arr.slice().sort((a, b) => (b.val || 0) - (a.val || 0))[0];
+  if (ws[0] > 0.3 || top3 > 0.6 || hhi > 0.2) {
+    out.push({ lev: ws[0] > 0.4 || hhi > 0.25 ? "bad" : "warn",
+      title: `집중도가 높습니다 — 1위 ${rat(ws[0], 0)}${top1 ? ` (${esc(top1.name)})` : ""}`,
+      lines: [
+        `상위 3종목 <b>${rat(top3, 0)}</b> · 허핀달지수 <b>${hhi.toFixed(3)}</b> <span class="sub-note">(0.2↑ 고집중 · 1/n 분산이면 ${(1 / arr.length).toFixed(3)})</span>`,
+        topSec ? `최대 산업 <b>${esc(topSec[0])} ${rat(topSec[1] / tot, 0)}</b>` : "",
+      ].filter(Boolean),
+      advice: `한 종목의 실패가 포트폴리오 전체를 결정하는 상태입니다. 상위 종목 비중을 줄이거나, 같이 움직이지 않는 자산(다른 산업·국가·채권)을 채워 상관을 낮추는 것이 우선입니다.` });
+  } else {
+    out.push({ lev: "good", title: `분산이 양호합니다 — 1위 ${rat(ws[0], 0)} · 허핀달 ${hhi.toFixed(3)}`, lines: [], advice: "" });
+  }
+
+  // ③ 레버리지·고위험 자산
+  const lev = arr.filter(pfIsLev);
+  if (lev.length) {
+    const lv = lev.reduce((s, h) => s + (h.val || 0), 0);
+    const lpnl = ts ? ts.real.filter((r) => LEV_TICKERS.has(r.t.toUpperCase())).reduce((s, r) => s + r.pnl, 0) : null;
+    const rest = ts && lpnl != null ? ts.total - lpnl : null;
+    out.push({ lev: lv / tot > 0.15 || (lpnl != null && lpnl < 0) ? "bad" : "warn",
+      title: `레버리지·고위험 상품 ${rat(lv / tot, 0)} 보유`,
+      lines: [
+        `대상 ${lev.map((h) => `${esc(h.name)} <b class="${(h.plRate || 0) >= 0 ? "pos" : "neg"}">${pct(h.plRate || 0, 0)}</b>`).join(" · ")}`,
+        lpnl != null ? `이 그룹 실현손익 <b class="${lpnl >= 0 ? "pos" : "neg"}">${won(lpnl, true)}</b>` +
+          (rest != null ? ` · 나머지 전체 <b class="${rest >= 0 ? "pos" : "neg"}">${won(rest, true)}</b>` : "") : "",
+      ].filter(Boolean),
+      advice: `레버리지 상품은 <b>일간 수익률을 배수로 추종</b>해서, 방향을 맞혀도 횡보 구간을 지나면 원금이 깎입니다(변동성 손실). 장기 보유 자산으로는 설계 자체가 맞지 않습니다.` });
+  }
+
+  // ④ 매매 습관
+  if (ts) {
+    const good = ts.medWinHold > ts.medLosHold;   // 이익은 길게·손실은 짧게 = 처분효과의 반대(바람직)
+    out.push({ lev: ts.pf != null && ts.pf < 1 ? "warn" : good ? "good" : "warn",
+      title: `매매 습관 — 승률 ${rat(ts.winRate, 0)} · 손익비 ${ts.pf != null ? ts.pf.toFixed(2) : "-"}`,
+      lines: [
+        `청산 ${ts.n}건 — 이긴 거래 평균 <b class="pos">${pct(ts.avgWinRet, 1)}</b> · 진 거래 평균 <b class="neg">${pct(ts.avgLosRet, 1)}</b>`,
+        `보유기간 중앙 <b>${ts.medHold}일</b> — 이긴 거래 <b>${ts.medWinHold}일</b> / 진 거래 <b>${ts.medLosHold}일</b>` +
+          (good ? ` <span class="pos">← 이익은 길게, 손실은 짧게 (바람직)</span>` : ` <span class="neg">← 손실을 더 오래 들고 있습니다(처분효과)</span>`),
+        `물타기 ${ts.dn}회 vs 불타기 ${ts.up}회 · 월평균 ${ts.perMonth.toFixed(1)}건`,
+      ],
+      advice: ts.pf != null && ts.pf < 1
+        ? `이익 합이 손실 합을 못 넘습니다. 승률보다 <b>한 번의 큰 손실</b>이 결과를 지배하고 있는지 보세요 — 종목당 최대 손실 한도를 정하는 것이 가장 효과가 큽니다.`
+        : "" });
+  }
+  return out;
+}
+
+function pfRenderDiag(arr) {
+  const host = $("#pf-diag");
+  if (!host) return;
+  const d = pfDiagnose(arr);
+  if (!d.length) { host.style.display = "none"; return; }
+  host.style.display = "";
+  const ts = pfTradeStats();
+  host.innerHTML = `<div class="pf-diag-h"><b>🩺 투자 진단</b>
+      <span class="sub-note">보유 비중·산업·체결내역을 시장 흐름과 대조한 결과입니다${
+        ts ? ` · 체결 ${ts.orders.length}건 기준` : " · 체결내역을 가져오면 시장 대비 성과·매매 습관까지 진단합니다"}</span></div>
+    ${d.map((x) => `<div class="pf-diag ${x.lev}">
+      <div class="pf-diag-t">${DIAG_LEV[x.lev][0]} ${x.title}</div>
+      ${x.lines.map((l) => `<div class="pf-diag-l">${l}</div>`).join("")}
+      ${x.advice ? `<div class="pf-diag-a">${x.advice}</div>` : ""}</div>`).join("")}`;
 }
 
 /* 🧮 포트폴리오 통계 리스크(v394) — "내 종목들이 사실 같은 것 하나에 4번 베팅"인지 잡아낸다.
