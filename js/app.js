@@ -89,13 +89,14 @@ const SUB_PILLS = {   // 부모탭(nav에 남는 쪽) → [자식탭, 라벨][]
   // rotation(산업 진단)은 v163에서 nav 최상위로 승격 — 소탭에서 제외했다가
   // v364에서 secmet(산업 지표)과 한 쌍이 됐다(둘 다 산업 단위 분석 — 사용자 요청으로 종목 찾기 하위로 이동).
   rotation:  [["rotation", "산업수익률"], ["secmet", "🏭 산업 지표"]],   // 상단 탭은 "산업", 소탭은 내용을 구체적으로
-  news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["earn", "🎯 예측 vs 실적"], ["econcal", "경제지표"]],
+  // v419: earn(예측 vs 실적)은 종목 찾기 그룹의 최상위 탭으로 승격(사용자 요청) — 소탭에서 제거
+  news:      [["news", "뉴스·딜"], ["calendar", "실적발표"], ["econcal", "경제지표"]],
   rank:      [["rank", "원칙"], ["chart", "사례 차트"]],
   holdings:  [["holdings", "보유 현황"], ["portfolio", "포트폴리오 점검"]],
   // v392~393: 공시 스캐너 아래에 자본 이벤트(환원/희석)·내부자 매매 — 셋 다 DART 공시가 원천
   disc:      [["disc", "공시 스캐너"], ["capev", "💰 자본 이벤트"], ["insider", "👔 내부자 매매"]],
 };
-const PILL_PARENT = { calendar: "news", econcal: "news", earn: "news", chart: "rank", portfolio: "holdings",
+const PILL_PARENT = { calendar: "news", econcal: "news", chart: "rank", portfolio: "holdings",
   secmet: "rotation", capev: "disc", insider: "disc" };
 const navIdOf = (tabId) => PILL_PARENT[tabId] || tabId;
 
@@ -8673,10 +8674,18 @@ function renderEarn() {
          직후에 수백 종목으로 늘어납니다. 그 전까지는 아래 <b>전년동기 대비</b>를 보세요.</p>` : "");
 
   // ── 서프라이즈 랭킹 2열
+  /* v419: 랭킹에도 '컨센 → 실제'(영업이익)를 병기 — 서프라이즈 %만으론 규모를 모른다 */
+  const eokB = (v) => v == null ? "-" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString());
+  const estActOf = (k) => {
+    const c = EARN.stocks?.[k]?.q?.[eaQ];
+    if (!c) return null;
+    const e = (c.est_last || c.est || {}).op, a = (c.act || {}).op;
+    return e != null && a != null ? `컨센 ${eokB(e)} → 실제 ${eokB(a)}억` : null;
+  };
   const rankCard = (title, list, cls, empty) => `<div class="card-flat cv-rank"><b>${title}</b>` +
     (list?.length ? list.map((r) => `<div class="cv-rk" data-goto="${r.k}">
         <span class="cv-rk-n">${diEsc(r.n)}</span>
-        <span class="sub-note">${r.grp && IND_BY_KEY[r.grp] ? indLabel(r.grp) : ""}</span>
+        <span class="sub-note">${estActOf(r.k) || (r.grp && IND_BY_KEY[r.grp] ? indLabel(r.grp) : "")}</span>
         <b class="${cls}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b>
       </div>`).join("") : `<p class="mini-note">${empty}</p>`) + `</div>`;
   $("#ea-ranks").innerHTML =
@@ -8706,16 +8715,23 @@ function renderEarn() {
      −%는 '적자 확대'다(루닛 26Q2: 적자 65억 예상 → 154억, 서프라이즈 −136.5%). 라벨로 명시한다. */
   const lossNote = (op, v) => (op != null && op < 0 && v != null) ? `<span class="sub-note">${v >= 0 ? "적자 축소" : "적자 확대"}</span>` : "";
   $("#ea-done-n").textContent = `${done.length}종목 · ${eaQ} · 단위 억원`;
-  host.innerHTML = `<thead><tr><th>회사</th><th class="num">매출</th><th class="num">영업이익</th>
-      <th class="num">매출 전년동기</th><th class="num">영업이익 전년동기</th>
-      <th class="num">영업이익 서프라이즈</th><th>출처</th></tr></thead><tbody>`
+  /* v419: '컨센 → 실제'를 한 칸에 병기 — 서프라이즈 %의 근거 숫자를 표에서 바로 확인(사용자 요청).
+     1주 주가 = 수집 시점 기준 최근 5거래일(w1, earnings_est.py가 parquet로 계산 — 매일 재생성). */
+  const estAct = (e, a) => e == null ? `<span class="sub-note">- →</span> ${eok(a)}`
+    : `<span class="sub-note">${eok(e)} →</span> <b>${eok(a)}</b>`;
+  const w1cell = (v) => v == null ? `<td class="num sub-note">-</td>`
+    : `<td class="num"><b class="${v >= 0 ? "kup" : "kdn"}">${v >= 0 ? "+" : ""}${v}%</b></td>`;
+  host.innerHTML = `<thead><tr><th>회사</th><th class="num">매출 (컨센 → 실제)</th><th class="num">영업이익 (컨센 → 실제)</th>
+      <th class="num">영업이익 전년동기</th>
+      <th class="num">서프라이즈</th><th class="num">주가 1주</th><th>출처</th></tr></thead><tbody>`
     + (done.length ? done.map((r) => `<tr>
         ${nameCell(r)}
-        <td class="num">${eok(r.rev)}</td><td class="num">${eok(r.op)}</td>
-        <td class="num">${eaPct(r.rev_yoy)}</td>
+        <td class="num">${estAct(r.est_rev, r.rev)}</td>
+        <td class="num">${estAct(r.est_op, r.op)}</td>
         <td class="num">${eaPct(r.op_yoy)} ${lossNote(r.op, r.op_yoy)}</td>
-        <td class="num">${r.op_sup == null ? `<span class="sub-note">컨센서스 없음</span>`
+        <td class="num">${r.op_sup == null ? `<span class="sub-note">컨센 없음</span>`
           : `<b class="${r.op_sup >= th ? "kup" : r.op_sup <= -th ? "kdn" : ""}">${r.op_sup >= 0 ? "+" : ""}${r.op_sup}%</b> ${lossNote(r.op, r.op_sup)}`}</td>
+        ${w1cell(r.w1)}
         <td class="sub-note">${r.src === "dart" ? "DART" : "네이버"}</td>
       </tr>`).join("") : `<tr><td colspan="7" class="sub-note">조건에 맞는 종목이 없습니다.</td></tr>`) + `</tbody>`;
 
@@ -8735,6 +8751,7 @@ function renderEarn() {
   $("#ea-note").innerHTML = `예측치=네이버 금융 컨센서스(증권사 추정 평균)를 <b>매일 동결 저장</b> · 실제치=DART 분기·반기보고서
     (없으면 네이버 확정치) · 갱신 ${EARN.generated}.
     서프라이즈 = (실제 − 발표 직전 컨센서스) ÷ |컨센서스|, 영업이익 ±${th}% 기준으로 상회/하회 판정.
+    <b>주가 1주</b>는 마지막 거래일 기준 최근 5거래일 등락(발표 반응 참고용 — 발표일 기준이 아닙니다).
     <b>컨센서스 변동</b>은 최초 동결값 대비 최근 컨센서스의 증감(상향/하향)입니다.
     ⚠적자↔흑자 전환은 %가 무의미해 판정에서 제외하고, 컨센서스 규모가 10억원 미만인 종목도 제외합니다.
     ⚠컨센서스가 없는 종목(애널리스트 미커버)은 서프라이즈를 계산할 수 없어 <b>전년동기 대비</b>만 표시합니다.`;
