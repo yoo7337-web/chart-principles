@@ -1408,6 +1408,8 @@ if (!window._railResizeBound) {   // 리사이즈 시 재정렬(1회 바인딩)
 let lookupTf = "d";   // 1m/일/주/월봉
 let lookupOscs = [];   // 수동 선택 오실레이터 배열([] = 원칙 연동)
 let lookupHideSignals = false;   // '전체 해제' — 신호 마커 전부 숨김(캔들만 보기)
+// v413: ● 내 매매 표시 토글 — 기본 켬, 선택은 localStorage에 기억
+let lookupShowMy = localStorage.getItem("lk_show_my") !== "0";
 const TF_KO = { "1m": "당일 1분", "5m": "5분(60일)", "60m": "60분(2년)", d: "일봉", w: "주봉", m: "월봉" };
 /* v379: 차트 기간이 종목마다 다르다(US 최고 1962년~ · KR은 소스 상한 3,000행 ≈ 2014년~) →
    "최근 10년" 고정 문구 대신 **실제 보유 구간**을 쓴다. 먼 과거가 주봉으로 압축된 종목은 그 경계도 밝힌다
@@ -1668,7 +1670,7 @@ function drawLookupChart() {
      같은 날 여러 체결은 방향별 1개로 합치고, 원칙 신호(화살표)와 구분되게 **원형** 마커를 쓴다.
      ⚠setMarkers는 **시간 오름차순**이어야 한다 — 합친 뒤 반드시 재정렬(안 하면 조용히 안 그려진다). */
   const myMarks = [];
-  if (!isMin && !lookupHideSignals) {
+  if (!isMin && lookupShowMy) {
     const agg = {};
     (tossLoad()?.orders || []).forEach((o) => {
       if (String(o.ticker).toUpperCase() !== String(st.ticker).toUpperCase() || !(+o.qty > 0)) return;
@@ -1680,16 +1682,22 @@ function drawLookupChart() {
       const bt = snap(x.d);
       if (!bt) return;
       const buy = x.side === "BUY";
+      /* ⚠가시성(제보): 기본 크기 원은 캔들·거래량 사이에 묻힌다 → **size 2**로 키우고
+         라벨은 "매수N"으로 짧게(원칙 축약 라벨과 길이를 맞춰 겹침 최소화). */
       myMarks.push({ time: bt, position: buy ? "belowBar" : "aboveBar",
-        color: buy ? "#4391ff" : "#f0b34c", shape: "circle",
-        text: (buy ? "내 매수 " : "내 매도 ") + x.qty });
+        color: buy ? "#4391ff" : "#f0b34c", shape: "circle", size: 2,
+        text: (buy ? "매수" : "매도") + (x.qty % 1 ? x.qty.toFixed(1) : x.qty) });
     });
     if (myMarks.length) {
       $("#lookup-info").innerHTML += ` · <span style="color:#4391ff">●</span> 내 매수 ${
         myMarks.filter((m) => m.color === "#4391ff").length}회 <span style="color:#f0b34c">●</span> 매도 ${
-        myMarks.filter((m) => m.color === "#f0b34c").length}회`;
+        myMarks.filter((m) => m.color === "#f0b34c").length}회 <span class="sub-note">(끄기: 원칙 목록의 ● 내 매매)</span>`;
     }
   }
+  /* ⚠겹침 방지(제보 "표시와 글씨가 겹쳐 안 띈다"): 같은 봉·같은 위치에 내 마커와 신호가 함께 오면
+     글자가 포개진다 → 그 봉의 **신호 라벨만 지운다**(화살표는 남아 신호 자체는 보인다). */
+  const myAt = new Set(myMarks.map((m) => m.time + "|" + m.position));
+  sigMarks.forEach((m) => { if (myAt.has(m.time + "|" + m.position)) m.text = ""; });
   candles.setMarkers([...sigMarks, ...myMarks].sort((a2, b2) => (a2.time < b2.time ? -1 : a2.time > b2.time ? 1 : 0)));
 
   // 보조지표 패널: 체크박스 복수 선택 우선, 미선택 시 선택 원칙 연동
@@ -11924,6 +11932,8 @@ function buildSigChips(st) {
       <span class="rl-bar-n" id="rl-count"></span>
       <button class="rl-bar-btn" id="rl-all">전체 선택</button>
       <button class="rl-bar-btn" id="rl-none">전체 해제</button>
+      ${(tossLoad()?.orders || []).length ? `<button class="rl-bar-btn my${lookupShowMy ? " active" : ""}" id="rl-my"
+        title="토스 체결내역(브라우저에만 저장)을 차트에 ●로 표시">● 내 매매</button>` : ""}
     </div>`;
   host.innerHTML = legend ? bar + `<div class="rule-legend-wrap">${legend}</div>` : "";
   const mark = () => {
@@ -11950,6 +11960,13 @@ function buildSigChips(st) {
   if (all) all.onclick = () => { lookupHideSignals = false; allRids.forEach((r) => lookupRuleSet.add(r)); mark(); drawLookupChart(); };
   const none = document.getElementById("rl-none");
   if (none) none.onclick = () => { lookupHideSignals = true; lookupRuleSet.clear(); mark(); drawLookupChart(); };
+  const my = document.getElementById("rl-my");
+  if (my) my.onclick = () => {
+    lookupShowMy = !lookupShowMy;
+    localStorage.setItem("lk_show_my", lookupShowMy ? "1" : "0");
+    my.classList.toggle("active", lookupShowMy);
+    drawLookupChart();
+  };
 }
 
 /* ---------- 종목 조회: TradingView 위젯 + 재무 카드 ---------- */

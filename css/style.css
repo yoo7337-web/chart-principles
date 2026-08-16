@@ -2615,6 +2615,8 @@ header h1 { margin-right: auto; }
 .rl-bar-btn { padding: 3px 10px; font-size: var(--fs-sub); border: 1px solid var(--line);
   border-radius: 999px; background: var(--card); color: var(--ink); cursor: pointer; }
 .rl-bar-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* v413: ● 내 매매 토글 — 켜짐 상태를 파랑(내 매수 마커색)으로 명시 */
+.rl-bar-btn.my.active { border-color: #4391ff; color: #7cb1ff; background: rgba(67,145,255,.12); }
 
 /* 밸류에이션 배수 추이(v315) */
 .vt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
