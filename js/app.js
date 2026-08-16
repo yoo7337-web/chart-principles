@@ -1691,16 +1691,28 @@ function drawLookupChart() {
       const bt = snap(x.d);
       if (!bt) return;
       const buy = x.side === "BUY";
-      /* ⚠가시성(제보): 기본 크기 원은 캔들·거래량 사이에 묻힌다 → **size 2**로 키우고
-         라벨은 "매수N"으로 짧게(원칙 축약 라벨과 길이를 맞춰 겹침 최소화). */
+      /* ⚠v422(제보 "원이 너무 크고 글씨가 겹친다"): size 2는 캔들을 덮었다 → **기본 크기(1)**.
+         라벨은 아래에서 **간격이 충분한 마커에만** 남긴다(lightweight-charts는 라벨 충돌을 안 피해준다). */
       myMarks.push({ time: bt, position: buy ? "belowBar" : "aboveBar",
-        color: buy ? "#4391ff" : "#f0b34c", shape: "circle", size: 2,
+        color: buy ? "#4391ff" : "#f0b34c", shape: "circle", size: 1,
         text: (buy ? "매수" : "매도") + (x.qty % 1 ? x.qty.toFixed(1) : x.qty) });
+    });
+    /* 라벨 디클러터: 봉 인덱스 기준으로 앞선 '라벨 있는' 마커와 minGap 이상 떨어졌을 때만 글자를 남긴다.
+       위/아래(position)는 서로 안 겹치므로 따로 센다. 라벨을 지워도 원과 색은 그대로라 시점은 보인다. */
+    const idxOf = new Map(barTimes.map((t, i) => [t, i]));
+    const minGap = Math.max(5, Math.round(barTimes.length / 40));
+    const lastLab = {};
+    myMarks.sort((p1, p2) => (p1.time < p2.time ? -1 : p1.time > p2.time ? 1 : 0)).forEach((m) => {
+      const i = idxOf.get(m.time);
+      if (i == null) return;
+      const prev = lastLab[m.position];
+      if (prev != null && i - prev < minGap) { m.text = ""; return; }
+      lastLab[m.position] = i;
     });
     if (myMarks.length) {
       $("#lookup-info").innerHTML += ` · <span style="color:#4391ff">●</span> 내 매수 ${
         myMarks.filter((m) => m.color === "#4391ff").length}회 <span style="color:#f0b34c">●</span> 매도 ${
-        myMarks.filter((m) => m.color === "#f0b34c").length}회 <span class="sub-note">(끄기: 원칙 목록의 ● 내 매매)</span>`;
+        myMarks.filter((m) => m.color === "#f0b34c").length}회 <span class="sub-note">(글자는 겹침 방지로 일부만 표시 · 끄기: 원칙 목록의 ● 내 매매)</span>`;
     }
   }
   /* ⚠겹침 방지(제보 "표시와 글씨가 겹쳐 안 띈다"): 같은 봉·같은 위치에 내 마커와 신호가 함께 오면
