@@ -1,0 +1,1 @@
+{"name": "한컴위드", "code": "054920", "at": "2026-10-06", "year": 2025, "nodes": [{"id": "한컴위드", "name": "한컴위드", "lvl": 0, "listed": true, "ticker": "054920"}, {"id": "한컴", "name": "한컴", "lvl": 1, "listed": true, "ticker": "030520"}], "edges": [{"f": "한컴위드", "t": "한컴", "rate": 26.73, "via": "holder"}]}

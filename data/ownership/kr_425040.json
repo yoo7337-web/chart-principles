@@ -1,0 +1,1 @@
+{"name": "티이엠씨", "code": "425040", "at": "2026-10-06", "year": 2025, "nodes": [{"id": "티이엠씨", "name": "티이엠씨", "lvl": 0, "listed": true, "ticker": "425040"}, {"id": "티이엠씨씨엔에스", "name": "티이엠씨씨엔에스", "lvl": 1, "listed": true, "ticker": "241790"}], "edges": [{"f": "티이엠씨", "t": "티이엠씨씨엔에스", "rate": 33.4, "via": "holder"}]}

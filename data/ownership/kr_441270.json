@@ -1,0 +1,1 @@
+{"name": "파인엠텍", "code": "441270", "at": "2026-10-06", "year": 2025, "nodes": [{"id": "파인엠텍", "name": "파인엠텍", "lvl": 0, "listed": true, "ticker": "441270"}, {"id": "파인디앤씨", "name": "파인디앤씨", "lvl": 1, "listed": true, "ticker": "049120"}], "edges": [{"f": "파인엠텍", "t": "파인디앤씨", "rate": 21.75, "via": "holder"}]}
