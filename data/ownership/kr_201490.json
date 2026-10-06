@@ -1,0 +1,1 @@
+{"name": "미투온", "code": "201490", "at": "2026-10-06", "year": 2025, "nodes": [{"id": "미투온", "name": "미투온", "lvl": 0, "listed": true, "ticker": "201490"}, {"id": "고스트스튜디오", "name": "고스트스튜디오", "lvl": 1, "listed": true, "ticker": "950190"}], "edges": [{"f": "미투온", "t": "고스트스튜디오", "rate": 44.01, "via": "holder"}]}
